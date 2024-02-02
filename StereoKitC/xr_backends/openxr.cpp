@@ -142,10 +142,10 @@ bool openxr_get_stage_bounds(vec2 *out_size, pose_t *out_pose, XrTime time) {
 			out_size->x, out_size->y,
 			out_pose->position   .x, out_pose->position   .y, out_pose->position   .z,
 			out_pose->orientation.x, out_pose->orientation.y, out_pose->orientation.z, out_pose->orientation.w);
+		return true;
 	}
 
-
-	return true;
+	return false;
 }
 
 ///////////////////////////////////////////
