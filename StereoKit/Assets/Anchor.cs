@@ -26,7 +26,7 @@ namespace StereoKit {
 		internal IntPtr _inst;
 
 		/// <summary>Gets or sets the unique identifier of this asset resource!
-		/// This can be helpful for debugging, managine your assets, or finding
+		/// This can be helpful for debugging, managing your assets, or finding
 		/// them later on! This is StereoKit's asset ID, and not the system's
 		/// unique Name for the anchor.</summary>
 		public string Id
@@ -91,6 +91,12 @@ namespace StereoKit {
 		/// across sessions.</param>
 		/// <returns>Success or failure of setting persistence.</returns>
 		public bool TrySetPersistent(bool persistent) => NativeAPI.anchor_try_set_persistent(_inst, persistent);
+
+		/// <inheritdoc />
+		public override bool Equals(object obj) => obj is Anchor anchor && anchor._inst == _inst;
+
+		/// <inheritdoc />
+		public override int GetHashCode() => _inst.GetHashCode();
 
 		/// <summary>This creates a new Anchor from a world space pose.</summary>
 		/// <param name="pose">A world space pose for the new Anchor.</param>
