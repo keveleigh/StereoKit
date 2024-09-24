@@ -145,6 +145,7 @@ namespace sk {
 	_(MSFT_secondary_view_configuration, true) \
 	_(MSFT_first_person_observer,        true) \
 	_(MSFT_scene_understanding,          true) \
+	_(MSFT_controller_model,             true) \
 	_(BD_controller_interaction,         true) \
 	_(EXT_hp_mixed_reality_controller,   true) \
 	_(EXTX_overlay,                      true)
@@ -197,6 +198,10 @@ namespace sk {
 	_(xrLocateHandJointsEXT)                     \
 	_(xrCreateHandMeshSpaceMSFT)                 \
 	_(xrUpdateHandMeshMSFT)                      \
+	_(xrGetControllerModelKeyMSFT)               \
+	_(xrLoadControllerModelMSFT)                 \
+	_(xrGetControllerModelPropertiesMSFT)        \
+	_(xrGetControllerModelStateMSFT)             \
 	_(xrEnumerateColorSpacesFB)                  \
 	_(xrSetColorSpaceFB)                         \
 	_(xrCreateSpatialGraphNodeSpaceMSFT)         \
@@ -315,7 +320,7 @@ inline bool openxr_list_extensions(array_t<const char*> extra_exts, array_t<cons
 		}
 		if (found) continue;
 
-		// We're only interested required extensions if we're using minimum
+		// We're only interested in required extensions if we're using minimum
 		// extension mode
 		if (minimum_exts) continue;
 
