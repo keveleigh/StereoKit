@@ -541,6 +541,7 @@ SK_API quat     matrix_transform_quat     (matrix transform, quat rotation);
 SK_API pose_t   matrix_transform_pose     (matrix transform, pose_t pose);
 SK_API matrix   matrix_transpose          (matrix transform);
 SK_API vec3     matrix_to_angles          (const sk_ref(matrix) transform);
+SK_API matrix   matrix_from_angles        (float pitch_x_deg, float yaw_y_deg, float roll_z_deg);
 SK_API matrix   matrix_trs                (const sk_ref(vec3) position, const sk_ref(quat) orientation sk_default({0,0,0,1}), const sk_ref(vec3) scale sk_default({1,1,1}));
 SK_API matrix   matrix_t                  (vec3 position);
 SK_API matrix   matrix_r                  (quat orientation);

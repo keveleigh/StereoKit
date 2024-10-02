@@ -330,6 +330,10 @@ vec3 matrix_to_angles(const matrix &transform) {
 	return result * rad2deg;
 }
 
+matrix matrix_from_angles(float pitch_x_deg, float yaw_y_deg, float roll_z_deg) {
+	return matrix_r(quat_from_angles(pitch_x_deg, yaw_y_deg, roll_z_deg));
+}
+
 ///////////////////////////////////////////
 
 matrix matrix_trs(const vec3 &position, const quat &orientation, const vec3 &scale) {

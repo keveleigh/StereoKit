@@ -13,6 +13,9 @@
 #include "../xr_backends/openxr.h"
 #include "../xr_backends/openxr_extensions.h"
 #include "../systems/defaults.h"
+#include "../asset_types/model.h"
+
+#include <string>
 
 namespace sk {
 
@@ -30,6 +33,7 @@ struct input_render_state_t {
 	hand_mesh_t        hand_articulated_mesh[2];
 	material_t         hand_material        [2];
 	model_t            controller_model     [2];
+	bool               model_is_fallback    = false;
 };
 static input_render_state_t local = {};
 
@@ -134,6 +138,10 @@ void input_render_step_late() {
 		} else if (source == hand_source_simulated) {
 			const controller_t* control = input_controller((handed_)i);
 			if ((control->tracked & button_state_active) != 0 && local.controller_model[i] != nullptr) {
+				// If we're using a fallback model from the system, it may need updating
+				if (local.model_is_fallback) {
+					input_controller_model_set((handed_)i, nullptr);
+				}
 				render_add_model(local.controller_model[i], matrix_trs(control->pose.position, control->pose.orientation));
 			}
 		} else if (source == hand_source_overridden) {
@@ -178,15 +186,64 @@ void input_controller_model_set(handed_ hand, model_t model) {
 		return;
 	}
 
-	// If the model is null, set it to the default controller model, later on
-	// this may tap into some OpenXR extensions. TODO
-	if (model == nullptr)
-		model = hand == handed_left ? sk_default_controller_l : sk_default_controller_r;
+	// If the model is null, check if a model is available via XR_MSFT_controller_model.
+	// Otherwise, set it to the default controller model.
+	if (model == nullptr) {
+		if (xr_ext.MSFT_controller_model == xr_ext_active) {
+			XrPath hand_path;
+			xrStringToPath(xr_instance, hand == handed_left ? "/user/hand/left" : "/user/hand/right", &hand_path);
+			XrControllerModelKeyStateMSFT key_state = {XR_TYPE_CONTROLLER_MODEL_KEY_STATE_MSFT};
+			if (XR_SUCCEEDED(xr_extensions.xrGetControllerModelKeyMSFT(xr_session, hand_path, &key_state)) &&
+				key_state.modelKey != XR_NULL_CONTROLLER_MODEL_KEY_MSFT) {
+				std::string key_str = std::to_string(key_state.modelKey);
+				model = model_find(key_str.c_str());
+				if (model == nullptr)
+				{
+					uint32_t buffer_capacity_input;
+					uint32_t buffer_count_output;
+					if (XR_SUCCEEDED(xr_extensions.xrLoadControllerModelMSFT(xr_session, key_state.modelKey, 0, &buffer_capacity_input, nullptr))) {
+						array_t<uint8_t> model_buffer = array_t<uint8_t>::make(buffer_capacity_input);
+						if (XR_SUCCEEDED(xr_extensions.xrLoadControllerModelMSFT(xr_session, key_state.modelKey, buffer_capacity_input, &buffer_count_output, model_buffer.data))) {
+							model = model_create_mem(
+								hand == handed_left ? ("msft/controller_l_" + key_str + ".glb").c_str() : ("msft/controller_r_" + key_str + ".glb").c_str(),
+								model_buffer.data, buffer_count_output, sk_default_shader);
+							// Models need to be rotated 180° to align with the user holding them
+							sk::model_node_id root_node = model_node_get_root(model);
+							model_node_set_transform_local(model, root_node, model_node_get_transform_local(model, root_node) * matrix_from_angles(0, 180, 0));
+							model_set_id(model, key_str.c_str());
+							model->nodes_used = buffer_capacity_input;
+						}
+					}
+				}
+				else {
+					//array_t<XrControllerModelNodePropertiesMSFT> node_properties = array_t<XrControllerModelNodePropertiesMSFT>::make(buffer_capacity_input);
+					//XrControllerModelPropertiesMSFT model_properties = {XR_TYPE_CONTROLLER_MODEL_PROPERTIES_MSFT};
+					//model_properties.nodeCapacityInput = buffer_capacity_input;
+					//model_properties.nodeProperties = node_properties.data;
+					//xr_extensions.xrGetControllerModelPropertiesMSFT(xr_session, key_state.modelKey, &model_properties);
+				}
+			}
 
-	model_addref(model);
-	model_release(local.controller_model[hand]);
+			if (model == nullptr) {
+				model = hand == handed_left ? sk_default_controller_l : sk_default_controller_r;
+			}
+		}
+		else {
+			model = hand == handed_left ? sk_default_controller_l : sk_default_controller_r;
+		}
 
-	local.controller_model[hand] = model;
+		local.model_is_fallback = true;
+	}
+	else {
+		local.model_is_fallback = false;
+	}
+
+	if (model != local.controller_model[hand]) {
+		model_addref(model);
+		model_release(local.controller_model[hand]);
+
+		local.controller_model[hand] = model;
+	}
 }
 
 ///////////////////////////////////////////
