@@ -207,7 +207,7 @@ void input_controller_model_set(handed_ hand, model_t model) {
 							model = model_create_mem(
 								hand == handed_left ? ("msft/controller_l_" + key_str + ".glb").c_str() : ("msft/controller_r_" + key_str + ".glb").c_str(),
 								model_buffer.data, buffer_count_output, sk_default_shader);
-							// Models need to be rotated 180° to align with the user holding them
+							// Models need to be rotated 180 degrees to align with the user holding them
 							sk::model_node_id root_node = model_node_get_root(model);
 							model_node_set_transform_local(model, root_node, model_node_get_transform_local(model, root_node) * matrix_from_angles(0, 180, 0));
 							model_set_id(model, key_str.c_str());
