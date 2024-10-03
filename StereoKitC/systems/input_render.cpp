@@ -211,16 +211,8 @@ void input_controller_model_set(handed_ hand, model_t model) {
 							sk::model_node_id root_node = model_node_get_root(model);
 							model_node_set_transform_local(model, root_node, model_node_get_transform_local(model, root_node) * matrix_from_angles(0, 180, 0));
 							model_set_id(model, key_str.c_str());
-							model->nodes_used = buffer_capacity_input;
 						}
 					}
-				}
-				else {
-					//array_t<XrControllerModelNodePropertiesMSFT> node_properties = array_t<XrControllerModelNodePropertiesMSFT>::make(buffer_capacity_input);
-					//XrControllerModelPropertiesMSFT model_properties = {XR_TYPE_CONTROLLER_MODEL_PROPERTIES_MSFT};
-					//model_properties.nodeCapacityInput = buffer_capacity_input;
-					//model_properties.nodeProperties = node_properties.data;
-					//xr_extensions.xrGetControllerModelPropertiesMSFT(xr_session, key_state.modelKey, &model_properties);
 				}
 			}
 
