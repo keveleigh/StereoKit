@@ -33,7 +33,7 @@ struct input_render_state_t {
 	hand_mesh_t        hand_articulated_mesh[2];
 	material_t         hand_material        [2];
 	model_t            controller_model     [2];
-	bool               model_is_fallback    = false;
+	bool               model_is_overridden  = false;
 };
 static input_render_state_t local = {};
 
@@ -138,8 +138,9 @@ void input_render_step_late() {
 		} else if (source == hand_source_simulated) {
 			const controller_t* control = input_controller((handed_)i);
 			if ((control->tracked & button_state_active) != 0 && local.controller_model[i] != nullptr) {
-				// If we're using a fallback model from the system, it may need updating
-				if (local.model_is_fallback) {
+				// If we're using a model from the system, it may need updating.
+				// Calling the method with nullptr will re-query the system, if needed.
+				if (!local.model_is_overridden) {
 					input_controller_model_set((handed_)i, nullptr);
 				}
 				render_add_model(local.controller_model[i], matrix_trs(control->pose.position, control->pose.orientation));
@@ -186,11 +187,11 @@ void input_controller_model_set(handed_ hand, model_t model) {
 		return;
 	}
 
-	local.model_is_fallback = model == nullptr;
+	local.model_is_overridden = model != nullptr;
 
 	// If the model is null, check if a model is available via XR_MSFT_controller_model.
 	// Otherwise, set it to the default controller model.
-	if (local.model_is_fallback) {
+	if (!local.model_is_overridden) {
 		if (xr_ext.MSFT_controller_model == xr_ext_active) {
 			XrPath hand_path;
 			xrStringToPath(xr_instance, hand == handed_left ? "/user/hand/left" : "/user/hand/right", &hand_path);
@@ -209,7 +210,7 @@ void input_controller_model_set(handed_ hand, model_t model) {
 							model = model_create_mem(
 								hand == handed_left ? ("msft/controller_l_" + key_str + ".glb").c_str() : ("msft/controller_r_" + key_str + ".glb").c_str(),
 								model_buffer.data, buffer_count_output, sk_default_shader);
-							// Models need to be rotated 180 degrees to align with the user holding them
+							// Models need to be rotated 180 degrees to align with the user holding them.
 							sk::model_node_id root_node = model_node_get_root(model);
 							model_node_set_transform_local(model, root_node, model_node_get_transform_local(model, root_node) * matrix_from_angles(0, 180, 0));
 							model_set_id(model, key_str.c_str());
