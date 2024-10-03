@@ -200,8 +200,6 @@ namespace sk {
 	_(xrUpdateHandMeshMSFT)                      \
 	_(xrGetControllerModelKeyMSFT)               \
 	_(xrLoadControllerModelMSFT)                 \
-	_(xrGetControllerModelPropertiesMSFT)        \
-	_(xrGetControllerModelStateMSFT)             \
 	_(xrEnumerateColorSpacesFB)                  \
 	_(xrSetColorSpaceFB)                         \
 	_(xrCreateSpatialGraphNodeSpaceMSFT)         \
