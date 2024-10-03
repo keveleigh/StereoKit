@@ -186,9 +186,11 @@ void input_controller_model_set(handed_ hand, model_t model) {
 		return;
 	}
 
+	local.model_is_fallback = model == nullptr;
+
 	// If the model is null, check if a model is available via XR_MSFT_controller_model.
 	// Otherwise, set it to the default controller model.
-	if (model == nullptr) {
+	if (local.model_is_fallback) {
 		if (xr_ext.MSFT_controller_model == xr_ext_active) {
 			XrPath hand_path;
 			xrStringToPath(xr_instance, hand == handed_left ? "/user/hand/left" : "/user/hand/right", &hand_path);
@@ -223,11 +225,6 @@ void input_controller_model_set(handed_ hand, model_t model) {
 		else {
 			model = hand == handed_left ? sk_default_controller_l : sk_default_controller_r;
 		}
-
-		local.model_is_fallback = true;
-	}
-	else {
-		local.model_is_fallback = false;
 	}
 
 	if (model != local.controller_model[hand]) {
