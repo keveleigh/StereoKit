@@ -10,7 +10,6 @@
 // NOTE! openxr_view.cpp has part of the implementation for this extension!!!
 
 #include "ext_management.h"
-#include "msft_observer.h"
 #include "../openxr_view.h"
 
 ///////////////////////////////////////////
