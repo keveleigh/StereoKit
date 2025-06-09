@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
  * Copyright (c) 2025 Nick Klingensmith
- * Copyright (c) 2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2025-2026 Qualcomm Technologies, Inc.
  */
 
 #include "../openxr.h"
@@ -29,6 +29,7 @@
 #include "input_profiles.h"
 #include "loader_init.h"
 #include "palm_pose.h"
+#include "visibility_mask.h"
 #include "android_create_instance.h"
 #include "android_thread.h"
 #include "overlay.h"
@@ -72,6 +73,7 @@ bool ext_registration() {
 	xr_ext_interaction_render_model_register();
 	xr_ext_render_model_register();
 	xr_fb_render_model_register();
+	xr_ext_visibility_mask_register();
 
 	// Input extensions all must go before the oxri/input system
 	xr_ext_palm_pose_register                    ();

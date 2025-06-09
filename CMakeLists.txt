@@ -2,8 +2,8 @@
 # Copyright 2021, Collabora, Ltd.
 # Copyright Moses Turner, 2021.
 # Copyright (c) 2021-2025 Nick Klingensmith
-# Copyright (c) 2023-2025 Qualcomm Technologies, Inc.
-# Many thanks to Ryan Pavlik for showing the way
+# Copyright (c) 2023-2026 Qualcomm Technologies, Inc.
+# Many thanks to Rylie Pavlik for showing the way
 
 cmake_minimum_required(VERSION 3.19)
 
@@ -542,6 +542,8 @@ target_sources(StereoKitC PRIVATE
   StereoKitC/xr_backends/extensions/loader_init.cpp
   StereoKitC/xr_backends/extensions/palm_pose.h
   StereoKitC/xr_backends/extensions/palm_pose.cpp
+  StereoKitC/xr_backends/extensions/visibility_mask.h
+  StereoKitC/xr_backends/extensions/visibility_mask.cpp
   StereoKitC/xr_backends/extensions/android_create_instance.h
   StereoKitC/xr_backends/extensions/android_create_instance.cpp
   StereoKitC/xr_backends/extensions/android_thread.h
