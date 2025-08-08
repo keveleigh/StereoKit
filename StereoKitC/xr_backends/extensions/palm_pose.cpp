@@ -4,8 +4,9 @@
  * Copyright (c) 2025 Qualcomm Technologies, Inc.
  */
 
-// This implements XR_EXT_palm_pose
+// This implements XR_EXT_palm_pose and XR_KHR_maintenance1
 // https://registry.khronos.org/OpenXR/specs/1.0/html/xrspec.html#XR_EXT_palm_pose
+// https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_KHR_maintenance1
 
 #include "palm_pose.h"
 #include "ext_management.h"
@@ -15,6 +16,13 @@
 ///////////////////////////////////////////
 
 namespace sk {
+
+///////////////////////////////////////////
+
+typedef struct xr_ext_palm_pose_state_t {
+	bool khr_maintenance1_available;
+} xr_ext_palm_pose_state_t;
+static xr_ext_palm_pose_state_t local = { };
 
 ///////////////////////////////////////////
 
@@ -36,7 +44,8 @@ void xr_ext_palm_pose_register() {
 
 xr_system_ xr_ext_palm_pose_initialize(void*) {
 	// Check if we got at least one of our extensions
-	if (!backend_openxr_ext_enabled(XR_KHR_MAINTENANCE1_EXTENSION_NAME) && !backend_openxr_ext_enabled(XR_EXT_PALM_POSE_EXTENSION_NAME))
+	local.khr_maintenance1_available = backend_openxr_ext_enabled(XR_KHR_MAINTENANCE1_EXTENSION_NAME);
+	if (!local.khr_maintenance1_available && !backend_openxr_ext_enabled(XR_EXT_PALM_POSE_EXTENSION_NAME))
 		return xr_system_fail;
 
 	// Snapdragon Spaces advertises the palm pose extension, but provides bad
