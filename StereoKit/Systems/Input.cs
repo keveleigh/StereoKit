@@ -546,6 +546,49 @@ namespace StereoKit
 		/// whether or not the key was pressed or released this frame.</returns>
 		public static BtnState Key(Key key)
 			=> NativeAPI.input_key(key);
+
+		/// <summary>Gets a tracked pose from the input system by type. These
+		/// are spatial poses provided by the XR runtime, such as hand or
+		/// controller positions and orientations.</summary>
+		/// <param name="poseType">The type of pose to retrieve.</param>
+		/// <returns>The most recent pose of the given type.</returns>
+		public static Pose Pose(InputPose poseType)
+			=> NativeAPI.input_pose(poseType);
+		/// <summary>Gets the tracking state of a tracked pose. This tells
+		/// you whether the position and rotation components are actively
+		/// being tracked by the XR system, and at what quality.</summary>
+		/// <param name="poseType">The type of pose to check tracking state
+		/// for.</param>
+		/// <returns>A PoseState flags value indicating which components are
+		/// tracked and whether they are inferred or known.</returns>
+		public static PoseState PoseState(InputPose poseType)
+			=> NativeAPI.input_pose_state(poseType);
+		/// <summary>Gets an analog float input value from the input system.
+		/// These are inputs like controller triggers and grip buttons that
+		/// range from 0 to 1.</summary>
+		/// <param name="floatType">The type of float input to retrieve.
+		/// </param>
+		/// <returns>A value from 0 to 1 representing how far the input is
+		/// pressed.</returns>
+		public static float Float(InputFloat floatType)
+			=> NativeAPI.input_float(floatType);
+		/// <summary>Gets a binary button state from the input system. These
+		/// are on/off inputs like controller face buttons and thumbstick
+		/// clicks.</summary>
+		/// <param name="buttonType">The type of button input to retrieve.
+		/// </param>
+		/// <returns>A BtnState describing whether the button is active,
+		/// just became active, or just became inactive this frame.</returns>
+		public static BtnState Button(InputButton buttonType)
+			=> NativeAPI.input_button(buttonType);
+		/// <summary>Gets a 2D axis input from the input system, like a
+		/// controller thumbstick. X is left/right, and Y is
+		/// forward/back, each ranging from -1 to 1.</summary>
+		/// <param name="xyType">The type of XY input to retrieve.</param>
+		/// <returns>A Vec2 representing the current stick position.</returns>
+		public static Vec2 XY(InputXY xyType)
+			=> NativeAPI.input_xy(xyType);
+
 		/// <summary>This will inject a key press event into StereoKit's input
 		/// event queue. It will be processed at the start of the next frame,
 		/// and will be indistinguishable from a physical key press. Remember

@@ -310,6 +310,15 @@ namespace StereoKit
 		}
 	}
 
+	public static class PoseStateExtensions
+	{
+		public static bool IsTracked    (this PoseState state) => (state & PoseState.Any        ) > 0;
+		public static bool IsPosInferred(this PoseState state) => (state & PoseState.PosInferred) > 0;
+		public static bool IsPosKnown   (this PoseState state) => (state & PoseState.PosKnown   ) > 0;
+		public static bool IsRotInferred(this PoseState state) => (state & PoseState.RotInferred) > 0;
+		public static bool IsRotKnown   (this PoseState state) => (state & PoseState.RotKnown   ) > 0;
+	}
+
 	public partial struct Pointer
 	{
 		/// <summary>Convenience property that turns ray.position and orientation

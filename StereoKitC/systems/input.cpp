@@ -182,13 +182,9 @@ void input_pose_info_update() {
 	input_pose_ poses_grip[2]{ input_pose_l_grip, input_pose_r_grip };
 	for (int32_t i = 0; i < 2; i++) {
 		// Check if the palm is _not_ tracked, but the grip is.
-		track_state_ palm_pos_tracked, palm_rot_tracked;
-		track_state_ grip_pos_tracked, grip_rot_tracked;
-		input_pose_get_state(poses_palm[i], &palm_pos_tracked, &palm_rot_tracked);
-		input_pose_get_state(poses_grip[i], &grip_pos_tracked, &grip_rot_tracked);
-		if (palm_pos_tracked == track_state_lost &&
-			palm_rot_tracked == track_state_lost &&
-			grip_rot_tracked != track_state_lost) {
+		pose_state_ palm_state = input_pose_state(poses_palm[i]);
+		pose_state_ grip_state = input_pose_state(poses_grip[i]);
+		if (palm_state == pose_state_lost && grip_state != pose_state_lost) {
 
 			// Make sure we have room in our input array for the pose
 			if (poses_palm[i] >= local.curr_poses.count)
@@ -200,8 +196,8 @@ void input_pose_info_update() {
 				grip_pose.position + grip_pose.orientation * local.palm_offset[i].position,
 				local.palm_offset[i].orientation * grip_pose.orientation };
 			local.curr_poses[poses_palm[i]]             = new_pose;
-			local.curr_poses[poses_palm[i]].pos_tracked = grip_pos_tracked;
-			local.curr_poses[poses_palm[i]].rot_tracked = grip_rot_tracked;
+			local.curr_poses[poses_palm[i]].pos_tracked = (grip_state & pose_state_pos_known) > 0 ? track_state_known : (grip_state & pose_state_pos_inferred) > 0 ? track_state_inferred : track_state_lost;
+			local.curr_poses[poses_palm[i]].rot_tracked = (grip_state & pose_state_rot_known) > 0 ? track_state_known : (grip_state & pose_state_rot_inferred) > 0 ? track_state_inferred : track_state_lost;
 		}
 	}
 }
@@ -287,55 +283,53 @@ void input_step() {
 	track_state_ pos_tracked, rot_tracked;
 
 	// Left
-	local.controllers[handed_left].aim          = input_pose_get_world(input_pose_l_aim);
-	local.controllers[handed_left].palm         = input_pose_get_world(input_pose_l_palm);
-	local.controllers[handed_left].pose         = input_pose_get_world(input_pose_l_grip);
-	local.controllers[handed_left].grip         = input_float_get     (input_float_l_grip);
-	local.controllers[handed_left].trigger      = input_float_get     (input_float_l_trigger);
-	local.controllers[handed_left].stick_click  = input_button_get    (input_button_l_stick);
-	local.controllers[handed_left].x1           = input_button_get    (input_button_l_x1);
-	local.controllers[handed_left].x2           = input_button_get    (input_button_l_x2);
-	local.controllers[handed_left].stick        = input_xy_get        (input_xy_l_stick);
+	local.controllers[handed_left].aim          = input_pose  (input_pose_l_aim);
+	local.controllers[handed_left].palm         = input_pose  (input_pose_l_palm);
+	local.controllers[handed_left].pose         = input_pose  (input_pose_l_grip);
+	local.controllers[handed_left].grip         = input_float (input_float_l_grip);
+	local.controllers[handed_left].trigger      = input_float (input_float_l_trigger);
+	local.controllers[handed_left].stick_click  = input_button(input_button_l_stick);
+	local.controllers[handed_left].x1           = input_button(input_button_l_x1);
+	local.controllers[handed_left].x2           = input_button(input_button_l_x2);
+	local.controllers[handed_left].stick        = input_xy    (input_xy_l_stick);
 
-	input_pose_get_state(input_pose_l_grip, &pos_tracked, &rot_tracked);
+	pose_state_ l_grip_state = input_pose_state(input_pose_l_grip);
 	local.controllers[handed_left].tracked      = button_make_state((local.controllers[handed_left].tracked & button_state_active) > 0, pos_tracked != track_state_lost || rot_tracked != track_state_lost);
-	local.controllers[handed_left].tracked_pos  = pos_tracked;
-	local.controllers[handed_left].tracked_rot  = rot_tracked;
+	local.controllers[handed_left].tracked_pos  = (l_grip_state & pose_state_pos_known) > 0 ? track_state_known : (l_grip_state & pose_state_pos_inferred) > 0 ? track_state_inferred : track_state_lost;
+	local.controllers[handed_left].tracked_rot  = (l_grip_state & pose_state_rot_known) > 0 ? track_state_known : (l_grip_state & pose_state_rot_inferred) > 0 ? track_state_inferred : track_state_lost;
 
 	// Right
-	local.controllers[handed_right].aim         = input_pose_get_world(input_pose_r_aim);
-	local.controllers[handed_right].palm        = input_pose_get_world(input_pose_r_palm);
-	local.controllers[handed_right].pose        = input_pose_get_world(input_pose_r_grip);
-	local.controllers[handed_right].grip        = input_float_get     (input_float_r_grip);
-	local.controllers[handed_right].trigger     = input_float_get     (input_float_r_trigger);
-	local.controllers[handed_right].stick_click = input_button_get    (input_button_r_stick);
-	local.controllers[handed_right].x1          = input_button_get    (input_button_r_x1);
-	local.controllers[handed_right].x2          = input_button_get    (input_button_r_x2);
-	local.controllers[handed_right].stick       = input_xy_get        (input_xy_r_stick);
+	local.controllers[handed_right].aim         = input_pose  (input_pose_r_aim);
+	local.controllers[handed_right].palm        = input_pose  (input_pose_r_palm);
+	local.controllers[handed_right].pose        = input_pose  (input_pose_r_grip);
+	local.controllers[handed_right].grip        = input_float (input_float_r_grip);
+	local.controllers[handed_right].trigger     = input_float (input_float_r_trigger);
+	local.controllers[handed_right].stick_click = input_button(input_button_r_stick);
+	local.controllers[handed_right].x1          = input_button(input_button_r_x1);
+	local.controllers[handed_right].x2          = input_button(input_button_r_x2);
+	local.controllers[handed_right].stick       = input_xy    (input_xy_r_stick);
 
-	input_pose_get_state(input_pose_r_grip, &pos_tracked, &rot_tracked);
+	pose_state_ r_grip_state = input_pose_state(input_pose_r_grip);
 	local.controllers[handed_right].tracked     = button_make_state((local.controllers[handed_right].tracked & button_state_active) > 0, pos_tracked != track_state_lost);
-	local.controllers[handed_right].tracked_pos = pos_tracked;
-	local.controllers[handed_right].tracked_rot = rot_tracked;
+	local.controllers[handed_right].tracked_pos = (r_grip_state & pose_state_pos_known) > 0 ? track_state_known : (r_grip_state & pose_state_pos_inferred) > 0 ? track_state_inferred : track_state_lost;
+	local.controllers[handed_right].tracked_rot = (r_grip_state & pose_state_rot_known) > 0 ? track_state_known : (r_grip_state & pose_state_rot_inferred) > 0 ? track_state_inferred : track_state_lost;
 
 	// Both
 	local.controller_menubtn = button_make_state(
 		(local.controller_menubtn & button_state_active) != 0,
-		(input_button_get(input_button_l_menu) & button_state_active) != 0 ||
-		(input_button_get(input_button_r_menu) & button_state_active) != 0);
+		(input_button(input_button_l_menu) & button_state_active) != 0 ||
+		(input_button(input_button_r_menu) & button_state_active) != 0);
 
 	///////////////////////////////////////////
 	// Make eyes from our inputs
 	///////////////////////////////////////////
 
 	if (device_has_eye_gaze()) {
-		track_state_ eye_pos_tracked, eye_rot_tracked;
-		input_pose_get_state(input_pose_eyes, &eye_pos_tracked, &eye_rot_tracked);
+		pose_state_ state = input_pose_state(input_pose_eyes);
 		local.eyes_pose_local  = input_pose_get_local(input_pose_eyes);
 		local.eyes_track_state = button_make_state(
 			(local.eyes_track_state & button_state_active) != 0,
-			eye_pos_tracked != track_state_lost ||
-			eye_rot_tracked != track_state_lost);
+			state != pose_state_lost);
 	}
 
 	///////////////////////////////////////////
@@ -516,10 +510,10 @@ void input_scroll_inject(float scroll_delta)                     { ska_scroll_ac
 ///////////////////////////////////////////
 
 pose_t        input_pose_get_local(input_pose_   pose_type)   { return pose_type   >= 0 && pose_type   < local.curr_poses  .count ? local.curr_poses[pose_type].pose : pose_identity; }
-pose_t        input_pose_get_world(input_pose_   pose_type)   { return pose_type   >= 0 && pose_type   < local.curr_poses  .count ? render_cam_final_transform(local.curr_poses[pose_type].pose) : pose_identity; }
-float         input_float_get     (input_float_  float_type)  { return float_type  >= 0 && float_type  < local.curr_floats .count ? local.curr_floats [float_type]     : 0; }
-button_state_ input_button_get    (input_button_ button_type) { return button_type >= 0 && button_type < local.curr_buttons.count ? local.curr_buttons[button_type]    : button_state_inactive; }
-vec2          input_xy_get        (input_xy_     xy_type)     { return xy_type     >= 0 && xy_type     < local.curr_xys    .count ? local.curr_xys    [xy_type]        : vec2_zero; }
+pose_t        input_pose          (input_pose_   pose_type)   { return pose_type   >= 0 && pose_type   < local.curr_poses  .count ? render_cam_final_transform(local.curr_poses[pose_type].pose) : pose_identity; }
+float         input_float         (input_float_  float_type)  { return float_type  >= 0 && float_type  < local.curr_floats .count ? local.curr_floats [float_type]     : 0; }
+button_state_ input_button        (input_button_ button_type) { return button_type >= 0 && button_type < local.curr_buttons.count ? local.curr_buttons[button_type]    : button_state_inactive; }
+vec2          input_xy            (input_xy_     xy_type)     { return xy_type     >= 0 && xy_type     < local.curr_xys    .count ? local.curr_xys    [xy_type]        : vec2_zero; }
 
 ///////////////////////////////////////////
 
@@ -569,15 +563,17 @@ void input_set_palm_offset(handed_ hand, pose_t offset) {
 
 ///////////////////////////////////////////
 
-void input_pose_get_state(input_pose_ pose_type, track_state_* out_pos_tracked, track_state_* out_rot_tracked) {
-	if (pose_type >= 0 && pose_type < local.curr_poses.count) {
-		pose_info_t info = local.curr_poses[pose_type];
-		if (out_pos_tracked) *out_pos_tracked = info.pos_tracked;
-		if (out_rot_tracked) *out_rot_tracked = info.rot_tracked;
-	} else {
-		if (out_pos_tracked) *out_pos_tracked = track_state_lost;
-		if (out_rot_tracked) *out_rot_tracked = track_state_lost;
-	}
+pose_state_ input_pose_state(input_pose_ pose_type) {
+	if (pose_type < 0 || pose_type >= local.curr_poses.count)
+		return pose_state_lost;
+
+	pose_info_t info   = local.curr_poses[pose_type];
+	pose_state_ result = pose_state_lost;
+	if (info.pos_tracked == track_state_inferred) result = (pose_state_)(result | pose_state_pos_inferred);
+	if (info.pos_tracked == track_state_known   ) result = (pose_state_)(result | pose_state_pos_known);
+	if (info.rot_tracked == track_state_inferred) result = (pose_state_)(result | pose_state_rot_inferred);
+	if (info.rot_tracked == track_state_known   ) result = (pose_state_)(result | pose_state_rot_known);
+	return result;
 }
 
 ///////////////////////////////////////////

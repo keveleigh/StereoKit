@@ -768,8 +768,6 @@ namespace StereoKit
 
 		///////////////////////////////////////////
 
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          input_pointer_count(InputSource filter);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pointer      input_pointer(int index, InputSource filter);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       input_hand(Handed hand);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_hand_override(Handed hand, [In] HandJoint[] in_arr_hand_joints);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern HandSource   input_hand_source(Handed hand);
@@ -781,7 +779,6 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pose         input_eyes();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_eyes_tracked();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       input_mouse();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_key(Key key);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_key_inject_press(Key key);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_key_inject_release(Key key);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern uint         input_text_consume();
@@ -794,9 +791,17 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         input_get_finger_glow();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_set_finger_glow([MarshalAs(UnmanagedType.Bool)] bool visible);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pose         input_pose(InputPose pose_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern PoseState    input_pose_state(InputPose pose_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        input_float(InputFloat float_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_button(InputButton button_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec2         input_xy(InputXY xy_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_key(Key key);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern HandSimId    input_hand_sim_pose_add([In] Pose[] in_arr_palm_relative_hand_joints_25, ControllerKey button1, ControllerKey and_button2, Key or_hotkey1, Key and_hotkey2);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_hand_sim_pose_remove(HandSimId id);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_hand_sim_pose_clear();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          input_pointer_count(InputSource filter);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pointer      input_pointer(int index, InputSource filter);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_subscribe(InputSource source, BtnState input_event, [MarshalAs(UnmanagedType.FunctionPtr)] InputEventCallback input_event_callback);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_unsubscribe(InputSource source, BtnState input_event, [MarshalAs(UnmanagedType.FunctionPtr)] InputEventCallback input_event_callback);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_fire_event(InputSource source, BtnState input_event, in Pointer pointer);
