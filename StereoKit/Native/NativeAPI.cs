@@ -375,6 +375,10 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         material_set_texture(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr value);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         material_set_texture_id(IntPtr material, IdHash id, IntPtr value);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         material_set_storage(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         material_set_constant(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        material_get_float(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec2         material_get_vector2(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         material_get_vector3(IntPtr material, [MarshalAs(UnmanagedType.LPUTF8Str)] string name);
@@ -447,7 +451,9 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         compute_set_texture(IntPtr compute, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr texture);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         compute_set_buffer(IntPtr compute, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         compute_set_storage(IntPtr compute, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         compute_set_constant(IntPtr compute, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_dispatch(IntPtr compute, uint group_count_x, uint group_count_y, uint group_count_z);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          compute_get_param_count(IntPtr compute);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_get_param_info(IntPtr compute, int index, out IntPtr out_name, out MaterialParam out_type);

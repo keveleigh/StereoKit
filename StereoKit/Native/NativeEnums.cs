@@ -1185,12 +1185,12 @@ namespace StereoKit
 		/// source. This provides aim, pinch, and poke interactors for hands, and
 		/// aim rays for controllers.</summary>
 		All,
-		/// <summary>Always use the hand interactors, using simulated hands when
+		/// <summary>Always use the default hand interactors, using simulated hands when
 		/// articulated hand tracking is not available.</summary>
 		Hands,
-		/// <summary>Always use the controller interactors.</summary>
+		/// <summary>Always use the default controller interactors.</summary>
 		Controllers,
-		/// <summary>Always use the mouse interactor.</summary>
+		/// <summary>Always use the default mouse interactor.</summary>
 		Mouse,
 	}
 

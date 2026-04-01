@@ -3,6 +3,7 @@
 #include "../libraries/stref.h"
 #include "compute.h"
 #include "compute_buffer.h"
+#include "material.h"
 #include "shader.h"
 #include "texture.h"
 #include "assets.h"
@@ -236,7 +237,7 @@ bool32_t compute_set_texture(compute_t compute, const char *name, tex_t texture)
 
 ///////////////////////////////////////////
 
-bool32_t compute_set_buffer(compute_t compute, const char *name, compute_buffer_t buffer) {
+bool32_t compute_set_storage(compute_t compute, const char *name, compute_buffer_t buffer) {
 	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
 
 	// Find which buffer tracking slot this resource maps to
@@ -264,6 +265,27 @@ bool32_t compute_set_buffer(compute_t compute, const char *name, compute_buffer_
 	// Always forward to sk_renderer
 	skr_compute_set_buffer(&compute->gpu_compute, name, buffer ? &buffer->gpu_buffer : nullptr);
 	return true;
+}
+
+///////////////////////////////////////////
+
+bool32_t compute_set_constant(compute_t compute, const char *name, material_buffer_t buffer) {
+	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
+	id_hash_t hash = hash_string(name);
+
+	for (uint32_t i = 0; i < meta->buffer_count; i++) {
+		if (meta->buffers[i].name_hash != hash) continue;
+
+		skr_register_ reg = (skr_register_)meta->buffers[i].bind.register_type;
+		if (reg != skr_register_constant) {
+			log_warnf("'%s' is not a constant buffer.", name);
+			return false;
+		}
+
+		skr_compute_set_buffer(&compute->gpu_compute, name, buffer ? &buffer->buffer : nullptr);
+		return true;
+	}
+	return false;
 }
 
 ///////////////////////////////////////////

@@ -1570,6 +1570,8 @@ SK_API void              material_set_uint4       (material_t material, const ch
 SK_API void              material_set_matrix      (material_t material, const char *name, matrix   value);
 SK_API bool32_t          material_set_texture     (material_t material, const char *name, tex_t    value);
 SK_API bool32_t          material_set_texture_id  (material_t material, id_hash_t   id,   tex_t    value);
+SK_API bool32_t          material_set_storage     (material_t material, const char *name, compute_buffer_t  buffer);
+SK_API bool32_t          material_set_constant    (material_t material, const char *name, material_buffer_t buffer);
 SK_API float             material_get_float       (material_t material, const char *name);
 SK_API vec2              material_get_vector2     (material_t material, const char *name);
 SK_API vec3              material_get_vector3     (material_t material, const char *name);
@@ -1633,7 +1635,8 @@ SK_API bool32_t         compute_get_bool         (compute_t compute, const char 
 SK_API color128         compute_get_color        (compute_t compute, const char *name);
 SK_API matrix           compute_get_matrix       (compute_t compute, const char *name);
 SK_API bool32_t         compute_set_texture      (compute_t compute, const char *name, tex_t texture);
-SK_API bool32_t         compute_set_buffer       (compute_t compute, const char *name, compute_buffer_t buffer);
+SK_API bool32_t         compute_set_storage      (compute_t compute, const char *name, compute_buffer_t  buffer);
+SK_API bool32_t         compute_set_constant     (compute_t compute, const char *name, material_buffer_t buffer);
 SK_API void             compute_dispatch         (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
 SK_API int32_t          compute_get_param_count  (compute_t compute);
 SK_API void             compute_get_param_info   (compute_t compute, int32_t index, char **out_name, material_param_ *out_type);

@@ -68,7 +68,6 @@ model_t      sk_default_controller_r;
 static shader_t shader_default_load(const char *name, const void *builtin_zip, size_t builtin_zip_size) {
 	char *path = string_append(nullptr, 3, "Override/shader_", name, ".hlsl.sks");
 
-	log_warnf("Checking override %s", path);
 	if (platform_asset_exists(path)) {
 		shader_t result = shader_create_file(path);
 		sk_free(path);
