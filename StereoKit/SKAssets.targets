@@ -19,7 +19,7 @@
 		</ItemGroup>
 		<ItemGroup Condition="'$(SKBuildPlatform)'=='Android'">
 			<AndroidAsset Include="%(SKContent.Identity)">
-				<Link>$(SKAssetDestination)/%(SKContent.RecursiveDir)%(SKContent.Filename)%(SKContent.Extension)</Link>
+				<Link>%(SKContent.RecursiveDir)%(SKContent.Filename)%(SKContent.Extension)</Link>
 			</AndroidAsset>
 		</ItemGroup>
 	</Target>
