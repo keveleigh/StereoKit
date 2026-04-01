@@ -1,6 +1,7 @@
 #include "material.h"
 #include "shader.h"
 #include "texture.h"
+#include "compute_buffer.h"
 #include "../libraries/stref.h"
 #include "../libraries/array.h"
 #include "../libraries/atomic_util.h"
@@ -99,13 +100,22 @@ inline size_t material_param_size(material_param_ type) {
 
 ///////////////////////////////////////////
 
-void material_alloc_textures(material_t material) {
+void material_alloc_resources(material_t material) {
 	const sksc_shader_meta_t *meta = material->shader->gpu_shader.meta;
-	material->texture_count       = (int32_t)meta->resource_count;
-	material->textures            = material->texture_count > 0 ? sk_malloc_t(tex_t,    material->texture_count) : nullptr;
-	material->texture_meta_hashes = material->texture_count > 0 ? sk_malloc_t(uint64_t, material->texture_count) : nullptr;
-	memset(material->textures,            0, sizeof(tex_t)    * material->texture_count);
-	memset(material->texture_meta_hashes, 0, sizeof(uint64_t) * material->texture_count);
+	int32_t count = (int32_t)meta->resource_count;
+	material->resource_count = count;
+
+	if (count > 0) {
+		size_t size = count * (sizeof(*material->textures) + sizeof(*material->texture_meta_hashes) + sizeof(*material->buffers));
+		material->textures            = (tex_t*)           sk_malloc(size);
+		material->texture_meta_hashes = (uint64_t*)        (material->textures + count);
+		material->buffers             = (compute_buffer_t*)(material->texture_meta_hashes + count);
+		memset(material->textures, 0, size);
+	} else {
+		material->textures            = nullptr;
+		material->texture_meta_hashes = nullptr;
+		material->buffers             = nullptr;
+	}
 }
 
 ///////////////////////////////////////////
@@ -159,7 +169,7 @@ material_t material_create(shader_t shader) {
 		log_err("Failed to create GPU material");
 	}
 
-	material_alloc_textures      (result);
+	material_alloc_resources      (result);
 	material_set_default_textures(result);
 
 	if (shader == nullptr) {
@@ -198,7 +208,7 @@ material_t material_copy(material_t material) {
 	}
 
 	// Allocate texture array for result
-	material_alloc_textures(result);
+	material_alloc_resources(result);
 
 	// Copy parameter values from source material
 	const sksc_shader_meta_t   *meta      = material->shader->gpu_shader.meta;
@@ -217,7 +227,7 @@ material_t material_copy(material_t material) {
 	}
 
 	// Copy texture bindings from source material
-	for (int32_t i = 0; i < material->texture_count; i++) {
+	for (int32_t i = 0; i < material->resource_count; i++) {
 		if (material->textures[i] != nullptr) {
 			tex_addref(material->textures[i]);
 			result->textures[i] = material->textures[i];
@@ -264,13 +274,12 @@ void material_destroy(material_t material) {
 	}
 	if (material->chain) material_release(material->chain);
 
-	// Release all texture references
-	for (int32_t i = 0; i < material->texture_count; i++) {
-		if (material->textures[i] != nullptr)
-			tex_release(material->textures[i]);
+	// Release all resource references
+	for (int32_t i = 0; i < material->resource_count; i++) {
+		if (material->textures[i] != nullptr) tex_release           (material->textures[i]);
+		if (material->buffers [i] != nullptr) compute_buffer_release(material->buffers [i]);
 	}
 	sk_free(material->textures);
-	sk_free(material->texture_meta_hashes);
 
 	skr_material_destroy(&material->gpu_mat);
 
@@ -321,7 +330,7 @@ void material_set_shader(material_t material, shader_t shader) {
 	// Store old textures with their name hashes (keep refs for now)
 	struct tex_copy_t { id_hash_t name_hash; tex_t tex; };
 	tex_copy_t *old_textures  = nullptr;
-	int32_t     old_tex_count = material->texture_count;
+	int32_t     old_tex_count = material->resource_count;
 	if (old_meta && old_tex_count > 0) {
 		old_textures = sk_malloc_t(tex_copy_t, old_tex_count);
 		for (int32_t i = 0; i < old_tex_count; i++) {
@@ -330,19 +339,23 @@ void material_set_shader(material_t material, shader_t shader) {
 		}
 	}
 
-	// Free arrays (refs transferred to old_textures)
+	// Release buffer refs (texture refs transferred to old_textures above)
+	for (int32_t i = 0; i < material->resource_count; i++) {
+		if (material->buffers[i] != nullptr)
+			compute_buffer_release(material->buffers[i]);
+	}
 	sk_free(material->textures);
-	sk_free(material->texture_meta_hashes);
 	material->textures            = nullptr;
 	material->texture_meta_hashes = nullptr;
-	material->texture_count       = 0;
+	material->buffers             = nullptr;
+	material->resource_count      = 0;
 
 	// Update shader and recreate gpu material
 	material->shader = shader;
 	material_recreate_gpu(material);
 
 	// Allocate new texture array and set defaults
-	material_alloc_textures      (material);
+	material_alloc_resources      (material);
 	material_set_default_textures(material);
 
 	// Re-bind matching textures from old shader
@@ -719,6 +732,53 @@ bool32_t material_set_texture(material_t material, const char *name, tex_t value
 
 ///////////////////////////////////////////
 
+bool32_t material_set_storage(material_t material, const char *name, compute_buffer_t buffer) {
+	const sksc_shader_meta_t *meta = material->shader->gpu_shader.meta;
+	id_hash_t hash = hash_string(name);
+
+	for (uint32_t i = 0; i < meta->resource_count; i++) {
+		if (meta->resources[i].name_hash != hash) continue;
+
+		skr_register_ reg = (skr_register_)meta->resources[i].bind.register_type;
+		if (reg != skr_register_read_buffer && reg != skr_register_readwrite) {
+			log_warnf("'%s' is not a storage buffer.", name);
+			return false;
+		}
+
+		if (material->buffers[i] != buffer) {
+			if (buffer != nullptr) compute_buffer_addref (buffer);
+			if (material->buffers[i] != nullptr) compute_buffer_release(material->buffers[i]);
+			material->buffers[i] = buffer;
+		}
+		skr_material_set_buffer(&material->gpu_mat, name, buffer ? &buffer->gpu_buffer : nullptr);
+		return true;
+	}
+	return false;
+}
+
+///////////////////////////////////////////
+
+bool32_t material_set_constant(material_t material, const char *name, material_buffer_t buffer) {
+	const sksc_shader_meta_t *meta = material->shader->gpu_shader.meta;
+	id_hash_t hash = hash_string(name);
+
+	for (uint32_t i = 0; i < meta->buffer_count; i++) {
+		if (meta->buffers[i].name_hash != hash) continue;
+
+		skr_register_ reg = (skr_register_)meta->buffers[i].bind.register_type;
+		if (reg != skr_register_constant) {
+			log_warnf("'%s' is not a constant buffer.", name);
+			return false;
+		}
+
+		skr_material_set_buffer(&material->gpu_mat, name, buffer ? &buffer->buffer : nullptr);
+		return true;
+	}
+	return false;
+}
+
+///////////////////////////////////////////
+
 float material_get_float(material_t material, const char* name) {
 	float result = 0.0f;
 	skr_material_get_param(&material->gpu_mat, name, sksc_shader_var_float, 1, &result);
@@ -982,7 +1042,7 @@ void material_check_dirty(material_t material) {
 	// we're making sure that stays in sync here.
 	const sksc_shader_meta_t *meta = material->shader->gpu_shader.meta;
 
-	for (int32_t i = 0; i < material->texture_count; i++) {
+	for (int32_t i = 0; i < material->resource_count; i++) {
 		tex_t tex = material->textures[i];
 		if (tex == nullptr) continue;
 

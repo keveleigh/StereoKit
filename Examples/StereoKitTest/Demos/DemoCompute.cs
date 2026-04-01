@@ -43,13 +43,13 @@ class DemoCompute : ITest
 		output.SetSize(SimSize, SimSize);
 
 		// Ping: read A -> write B
-		computePing.SetBuffer ("input",   bufferA);
-		computePing.SetBuffer ("output",  bufferB);
+		computePing.SetStorage("input",   bufferA);
+		computePing.SetStorage("output",  bufferB);
 		computePing.SetTexture("out_tex", output);
 
 		// Pong: read B -> write A
-		computePong.SetBuffer ("input",   bufferB);
-		computePong.SetBuffer ("output",  bufferA);
+		computePong.SetStorage("input",   bufferB);
+		computePong.SetStorage("output",  bufferA);
 		computePong.SetTexture("out_tex", output);
 
 		UpdateSimParams();
