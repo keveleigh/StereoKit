@@ -61,7 +61,7 @@ void render_pipeline_draw() {
 		skr_vec4_t clear_color = { s->clear_color.r, s->clear_color.g, s->clear_color.b, s->clear_color.a };
 		skr_clear_ clear_flags = (skr_clear_)(skr_clear_color | skr_clear_depth | skr_clear_stencil);
 
-		render_draw_queue(list, s->view_matrices, s->proj_matrices, 0, s->array_count, s->layer, 0);
+		render_draw_queue(list, s->view_matrices, s->proj_matrices, 0, s->array_count, s->layer, 0, width, height);
 
 		skr_pass_t pass = {};
 		pass.color            = &s->tex->gpu_tex;

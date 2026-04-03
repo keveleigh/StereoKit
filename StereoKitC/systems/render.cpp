@@ -60,6 +60,7 @@ struct render_global_buffer_t {
 	vec4     camera_dir[2];
 	vec4     fingertip[2];
 	vec4     cubemap_i;
+	vec4     screen_size; // {width, height, 1/width, 1/height}
 	float    time;
 	uint32_t view_count;
 	uint32_t eye_offset;
@@ -739,7 +740,7 @@ void render_add_model(model_t model, const matrix &transform, color128 color_lin
 
 ///////////////////////////////////////////
 
-void render_draw_queue(render_list_t list, const matrix *views, const matrix *projections, int32_t eye_offset, int32_t view_count, render_layer_ filter, int32_t material_variant) {
+void render_draw_queue(render_list_t list, const matrix *views, const matrix *projections, int32_t eye_offset, int32_t view_count, render_layer_ filter, int32_t material_variant, int32_t surface_width, int32_t surface_height) {
 	// A temporary fix for multiview trying to render to mono rendertargets
 	if (view_count == 1) {
 		memset(&local.global_buffer.view      [1], 0, sizeof(local.global_buffer.view      [1]));
@@ -772,9 +773,12 @@ void render_draw_queue(render_list_t list, const matrix *views, const matrix *pr
 
 	// Copy in the other global shader variables
 	memcpy(local.global_buffer.lighting, lighting_get_lighting(), sizeof(vec4) * 7);
-	local.global_buffer.time       = time_totalf();
-	local.global_buffer.view_count = view_count;
-	local.global_buffer.eye_offset = eye_offset;
+	local.global_buffer.time        = time_totalf();
+	local.global_buffer.view_count  = view_count;
+	local.global_buffer.eye_offset  = eye_offset;
+	local.global_buffer.screen_size = {
+		(float)surface_width,  (float)surface_height,
+		1.0f / surface_width,  1.0f / surface_height };
 	for (int32_t i = 0; i < handed_max; i++) {
 		const hand_t* hand = input_hand((handed_)i);
 		vec3 tip = (hand->tracked_state & button_state_active) != 0 && input_get_finger_glow()
@@ -894,7 +898,7 @@ void render_check_screenshots() {
 
 		// Render!
 		skr_vec4_t clear_color = { local.clear_col.r, local.clear_col.g, local.clear_col.b, local.clear_col.a };
-		render_draw_queue(local.list_primary, &local.screenshot_list[i].camera, &local.screenshot_list[i].projection, 0, 1, local.screenshot_list[i].layer_filter, 0);
+		render_draw_queue(local.list_primary, &local.screenshot_list[i].camera, &local.screenshot_list[i].projection, 0, 1, local.screenshot_list[i].layer_filter, 0, w, h);
 
 		skr_pass_t pass = {};
 		pass.color       = &color_surface->gpu_tex;
@@ -969,7 +973,7 @@ void render_draw_viewpoint(render_action_viewpoint_t* vp) {
 
 	// Render!
 	skr_vec4_t clear_color = { local.clear_col.r, local.clear_col.g, local.clear_col.b, local.clear_col.a };
-	render_draw_queue(local.list_primary, &vp->camera, &vp->projection, 0, 1, vp->layer_filter, vp->material_variant);
+	render_draw_queue(local.list_primary, &vp->camera, &vp->projection, 0, 1, vp->layer_filter, vp->material_variant, w, h);
 
 	skr_pass_t pass = {};
 	pass.color       = color_tex;
@@ -1375,7 +1379,7 @@ void render_list_draw_now(render_list_t list, tex_t to_rendertarget, matrix came
 
 	// Render!
 	skr_vec4_t skr_clear_color = { clear_color.r, clear_color.g, clear_color.b, clear_color.a };
-	render_draw_queue(list, &camera, &projection, 0, 1, layer_filter, material_variant);
+	render_draw_queue(list, &camera, &projection, 0, 1, layer_filter, material_variant, w, h);
 
 	skr_pass_t pass = {};
 	pass.color       = &to_rendertarget->gpu_tex;
