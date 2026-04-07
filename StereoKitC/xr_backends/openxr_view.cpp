@@ -276,17 +276,12 @@ bool openxr_views_create() {
 		switch (types[t]) {
 		case XR_PRIMARY_CONFIG: {
 			// A primary display surface, this is what the user will be seeing
-			// in headset.
+			// in headset. Swapchain creation is deferred to
+			// openxr_views_create_swapchains so that extensions like depth
+			// composition are available.
 			device_display_t display = {};
 			if (!openxr_display_create(types[t], &display))
 				return false;
-
-			// Create the swapchains for this display right away, secondary
-			// displays will be created on demand.
-			if (!openxr_display_swapchain_update(&display)) {
-				log_fail_reason(80, log_error, "Couldn't create OpenXR display swapchains!");
-				return false;
-			}
 
 			int32_t display_idx = xr_displays.add(display);
 			if (xr_display_primary_idx == -1)
@@ -327,6 +322,20 @@ bool openxr_views_create() {
 	case XR_ENVIRONMENT_BLEND_MODE_ALPHA_BLEND: device_data.display_blend = display_blend_blend;    break;
 	default:                                    device_data.display_blend = display_blend_none;     break;
 	}
+
+	return true;
+}
+
+///////////////////////////////////////////
+
+bool openxr_views_create_swapchains() {
+	for (int32_t i = 0; i < xr_displays.count; i++) {
+		if (!openxr_display_swapchain_update(&xr_displays[i])) {
+			log_fail_reason(80, log_error, "Couldn't create OpenXR display swapchains!");
+			return false;
+		}
+	}
+
 	device_data.display_width  = xr_displays[xr_display_primary_idx].swapchain_color.width;
 	device_data.display_height = xr_displays[xr_display_primary_idx].swapchain_color.height;
 
@@ -450,34 +459,39 @@ bool openxr_display_swapchain_update(device_display_t *display) {
 	// Only recreate swapchains if dimensions changed. MSAA is handled
 	// entirely through intermediate render pipeline surfaces, so
 	// multisample changes don't require swapchain recreation.
+	bool has_depth_sc = xr_ext_composition_depth_available();
 	if (w != sc_color->width || h != sc_color->height) {
-		if (!openxr_create_swapchain(sc_color, display->type, true,  array_count, xr_preferred_color_format, w, h)) return false;
-		if (!openxr_create_swapchain(sc_depth, display->type, false, array_count, xr_preferred_depth_format, w, h)) return false;
+
+		if (!openxr_create_swapchain(sc_color, display->type, true, array_count, xr_preferred_color_format, w, h)) return false;
+		if (has_depth_sc) {
+			if (!openxr_create_swapchain(sc_depth, display->type, false, array_count, xr_preferred_depth_format, w, h)) return false;
+		}
 
 		log_diagf("Set swapchain to %d<~BLK>x<~clr>%d for <~grn>%s<~clr>", w, h, openxr_view_name(display->type));
 
 		// Create texture objects if we don't have 'em
 		if (sc_color->textures == nullptr) {
 			sc_color->textures = sk_malloc_t(tex_t, (size_t)sc_color->backbuffer_count);
-			sc_depth->textures = sk_malloc_t(tex_t, (size_t)sc_depth->backbuffer_count);
 			memset(sc_color->textures, 0, sizeof(tex_t) * sc_color->backbuffer_count);
-			memset(sc_depth->textures, 0, sizeof(tex_t) * sc_depth->backbuffer_count);
+			if (has_depth_sc) {
+				sc_depth->textures = sk_malloc_t(tex_t, (size_t)sc_depth->backbuffer_count);
+				memset(sc_depth->textures, 0, sizeof(tex_t) * sc_depth->backbuffer_count);
+			}
 
 			for (uint32_t i = 0; i < sc_color->backbuffer_count; i++) {
 				sc_color->textures[i] = tex_create(tex_type_rendertarget, tex_get_tex_format(xr_preferred_color_format));
-				// Use readable depth (tex_type_depth) only when depth composition
-				// is active — the runtime needs to read it. Otherwise use write-only
-				// (tex_type_zbuffer) to avoid storing depth to main memory on tilers.
-				tex_type_ depth_type = xr_ext_composition_depth_available() ? tex_type_depth : tex_type_zbuffer;
-				sc_depth->textures[i] = tex_create(depth_type, tex_get_tex_format(xr_preferred_depth_format));
 
 				char           name[64];
 				static int32_t target_index = 0;
 				target_index++;
 				snprintf(name, sizeof(name), "sk/render/colortarget_%d", target_index);
 				tex_set_id(sc_color->textures[i], name);
-				snprintf(name, sizeof(name), "sk/render/depthtarget_%d", target_index);
-				tex_set_id(sc_depth->textures[i], name);
+
+				if (has_depth_sc) {
+					sc_depth->textures[i] = tex_create(tex_type_zbuffer, tex_get_tex_format(xr_preferred_depth_format));
+					snprintf(name, sizeof(name), "sk/render/depthtarget_%d", target_index);
+					tex_set_id(sc_depth->textures[i], name);
+				}
 			}
 		}
 
@@ -486,12 +500,19 @@ bool openxr_display_swapchain_update(device_display_t *display) {
 			// OpenXR swapchain images are owned by the runtime, not the
 			// application - they get destroyed when xrDestroySwapchain is
 			// called, so we pass owned=false here.
-			void *native_surface_col   = (void*)sc_color->backbuffers[back].image;
-			void *native_surface_depth = (void*)sc_depth->backbuffers[back].image;
-			tex_type_ depth_type = xr_ext_composition_depth_available() ? tex_type_depth : tex_type_zbuffer;
-			tex_set_surface(sc_color->textures[back], native_surface_col,   tex_type_rendertarget, xr_preferred_color_format, sc_color->width, sc_color->height, array_count, 1, false);
-			tex_set_surface(sc_depth->textures[back], native_surface_depth, depth_type,            xr_preferred_depth_format, sc_depth->width, sc_depth->height, array_count, 1, false);
-			tex_set_zbuffer(sc_color->textures[back], sc_depth->textures[back]);
+			void *native_surface_col = (void*)sc_color->backbuffers[back].image;
+			tex_set_surface(sc_color->textures[back], native_surface_col, tex_type_rendertarget, xr_preferred_color_format, sc_color->width, sc_color->height, array_count, 1, false);
+
+			if (has_depth_sc) {
+				void *native_surface_depth = (void*)sc_depth->backbuffers[back].image;
+				tex_set_surface(sc_depth->textures[back], native_surface_depth, tex_type_zbuffer, xr_preferred_depth_format, sc_depth->width, sc_depth->height, array_count, 1, false);
+				tex_set_zbuffer(sc_color->textures[back], sc_depth->textures[back]);
+			} else {
+				// Provide a write-only depth buffer for z-testing when
+				// there's no XR depth swapchain. MSAA paths create their
+				// own depth through the pipeline surface.
+				tex_add_zbuffer(sc_color->textures[back], tex_get_tex_format(xr_preferred_depth_format));
+			}
 		}
 
 		if (display->type == XR_PRIMARY_CONFIG) {
@@ -989,19 +1010,24 @@ bool openxr_display_locate(device_display_t* display, XrTime at_time) {
 bool openxr_display_swapchain_acquire(device_display_t* display, color128 color, render_layer_ render_filter) {
 	// We need to ask which swapchain image to use for rendering! Which one
 	// will we get? Who knows! It's up to the runtime to decide.
-	uint32_t                    color_id, depth_id;
+	uint32_t                    color_id;
 	XrSwapchainImageAcquireInfo acquire_info = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
 	if (XR_FAILED(xrAcquireSwapchainImage(display->swapchain_color.handle, &acquire_info, &color_id))) return false;
 	display->swapchain_color.acquired = true;
-	if (XR_FAILED(xrAcquireSwapchainImage(display->swapchain_depth.handle, &acquire_info, &depth_id))) return false;
-	display->swapchain_depth.acquired = true;
+	if (display->swapchain_depth.handle) {
+		uint32_t depth_id;
+		if (XR_FAILED(xrAcquireSwapchainImage(display->swapchain_depth.handle, &acquire_info, &depth_id))) return false;
+		display->swapchain_depth.acquired = true;
+	}
 
 	// Wait until the image is available to render to. The compositor could
 	// still be reading from it.
 	XrSwapchainImageWaitInfo wait_info = { XR_TYPE_SWAPCHAIN_IMAGE_WAIT_INFO };
 	wait_info.timeout = XR_INFINITE_DURATION;
 	if (XR_FAILED(xrWaitSwapchainImage(display->swapchain_color.handle, &wait_info))) return false;
-	if (XR_FAILED(xrWaitSwapchainImage(display->swapchain_depth.handle, &wait_info))) return false;
+	if (display->swapchain_depth.handle) {
+		if (XR_FAILED(xrWaitSwapchainImage(display->swapchain_depth.handle, &wait_info))) return false;
+	}
 
 	if (display->multisample <= 1) {
 		render_pipeline_surface_set_tex(display->render_surface, display->swapchain_color.textures[color_id]);
