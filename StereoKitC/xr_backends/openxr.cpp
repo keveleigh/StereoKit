@@ -373,6 +373,13 @@ bool openxr_init() {
 		return false;
 	}
 
+	// Create swapchains after extensions are initialized, so features
+	// like depth composition are available during creation.
+	if (!openxr_views_create_swapchains()) {
+		openxr_cleanup();
+		return false;
+	}
+
 	// On Android, tell OpenXR what kind of thread this is. This can be
 	// important on Android systems so we don't get treated as a low priority
 	// thread by accident.
