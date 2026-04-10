@@ -43,6 +43,10 @@ bool32_t mesh_get_keep_data(mesh_t mesh) {
 ///////////////////////////////////////////
 
 void _mesh_set_verts(mesh_t mesh, const vert_t *vertices, uint32_t vertex_count, bool32_t calculate_bounds, bool update_original) {
+	if (mesh->header.state >= asset_state_loaded && mesh->vert_count == 0) {
+		log_diagf("mesh_set_verts: Setting verts after mesh is already loaded. For best results, set verts before inds. (%s)", mesh->header.id_text);
+	}
+
 	// Assign default vertex type when vertex data is first provided
 	mesh->gpu_mesh.vert_type = render_get_default_vert();
 
@@ -135,8 +139,9 @@ void _mesh_set_inds (mesh_t mesh, const vind_t *indices, uint32_t index_count) {
 		mesh_update_label(mesh);
 	}
 
-	mesh->ind_count = index_count;
-	mesh->ind_draw  = index_count;
+	mesh->ind_count    = index_count;
+	mesh->ind_draw     = index_count;
+	mesh->header.state = asset_state_loaded;
 }
 
 ///////////////////////////////////////////
@@ -159,24 +164,108 @@ void mesh_set_inds(mesh_t mesh, const vind_t *indices,  int32_t index_count) {
 
 ///////////////////////////////////////////
 
-void mesh_set_data(mesh_t mesh, const vert_t *vertices, int32_t vertex_count, const vind_t *indices, int32_t index_count, bool32_t calculate_bounds) {
-	struct mesh_upload_job_t {
-		mesh_t        mesh;
-		const vert_t *vertices;
-		int32_t       vertex_count;
-		const vind_t *indices;
-		int32_t       index_count;
-		bool32_t      calculate_bounds;
-	};
-	mesh_upload_job_t job_data = {mesh, vertices, vertex_count, indices, index_count, calculate_bounds};
+///////////////////////////////////////////
+// Async mesh loading infrastructure     //
+///////////////////////////////////////////
 
-	assets_execute_blocking([](void *data) {
-		mesh_upload_job_t *job_data = (mesh_upload_job_t *)data;
-		if (job_data->vertex_count > 0) _mesh_set_verts(job_data->mesh, job_data->vertices, job_data->vertex_count, job_data->calculate_bounds, true);
-		if (job_data->index_count  > 0) _mesh_set_inds (job_data->mesh, job_data->indices,  job_data->index_count);
-		
-		return (bool32_t)true;
-	}, &job_data);
+struct mesh_load_t {
+	vert_t*  vertices;
+	int32_t  vertex_count;
+	vind_t*  indices;
+	int32_t  index_count;
+	bool32_t calc_bounds;
+};
+
+static bool32_t mesh_load_process(asset_task_t*, asset_header_t* asset, void *data) {
+	mesh_t       mesh = (mesh_t)asset;
+	mesh_load_t* load = (mesh_load_t*)data;
+
+	if (load->calc_bounds && load->vertex_count > 0) {
+		mesh->bounds = mesh_calculate_bounds(load->vertices, load->vertex_count);
+	}
+
+	mesh->header.state = asset_state_loaded_meta;
+	return true;
+}
+
+static bool32_t mesh_load_upload(asset_task_t*, asset_header_t* asset, void *data) {
+	mesh_t       mesh = (mesh_t)asset;
+	mesh_load_t* load = (mesh_load_t*)data;
+
+	// Asset threads have their own GPU context via skr_thread_init, so
+	// we can upload directly without going through assets_execute_blocking.
+	if (load->vertex_count > 0) _mesh_set_verts(mesh, load->vertices, load->vertex_count, false, true);
+	if (load->index_count  > 0) _mesh_set_inds (mesh, load->indices,  load->index_count);
+
+	return true;
+}
+
+static void mesh_load_free(asset_header_t*, void *data) {
+	mesh_load_t* load = (mesh_load_t*)data;
+	sk_free(load->vertices);
+	sk_free(load->indices);
+	sk_free(load);
+}
+
+static void mesh_load_on_failure(asset_header_t* asset, void *) {
+	((mesh_t)asset)->header.state = asset_state_error;
+}
+
+///////////////////////////////////////////
+
+void mesh_set_data(mesh_t mesh, const vert_t* vertices, int32_t vertex_count, const vind_t* indices, int32_t index_count, mesh_data_ flags, int32_t priority) {
+	bool32_t calc_bounds = (flags & mesh_data_calc_bounds) != 0;
+
+	if (!(flags & mesh_data_async)) {
+		struct mesh_upload_job_t {
+			mesh_t        mesh;
+			const vert_t* vertices;
+			int32_t       vertex_count;
+			const vind_t* indices;
+			int32_t       index_count;
+			bool32_t      calc_bounds;
+		};
+		mesh_upload_job_t job_data = {mesh, vertices, vertex_count, indices, index_count, calc_bounds};
+
+		assets_execute_blocking([](void *data) {
+			mesh_upload_job_t *job_data = (mesh_upload_job_t *)data;
+			if (job_data->vertex_count > 0) _mesh_set_verts(job_data->mesh, job_data->vertices, job_data->vertex_count, job_data->calc_bounds, true);
+			if (job_data->index_count  > 0) _mesh_set_inds (job_data->mesh, job_data->indices,  job_data->index_count);
+			return (bool32_t)true;
+		}, &job_data);
+	} else {
+		mesh->header.state = asset_state_loading;
+
+		mesh_load_t *load_data  = sk_malloc_zero_t(mesh_load_t, 1);
+		load_data->calc_bounds  = calc_bounds;
+		if (vertex_count > 0) {
+			load_data->vertices     = sk_malloc_t(vert_t, vertex_count);
+			memcpy(load_data->vertices, vertices, sizeof(vert_t) * vertex_count);
+			load_data->vertex_count = vertex_count;
+		}
+		if (index_count > 0) {
+			load_data->indices      = sk_malloc_t(vind_t, index_count);
+			memcpy(load_data->indices, indices, sizeof(vind_t) * index_count);
+			load_data->index_count  = index_count;
+		}
+
+		static const asset_load_action_t actions[] = {
+			asset_load_action_t {mesh_load_process, asset_thread_asset},
+			asset_load_action_t {mesh_load_upload,  asset_thread_asset},
+		};
+
+		asset_task_t task = {};
+		task.asset        = &mesh->header;
+		task.load_data    = load_data;
+		task.actions      = (asset_load_action_t *)actions;
+		task.action_count = _countof(actions);
+		task.free_data    = mesh_load_free;
+		task.on_failure   = mesh_load_on_failure;
+		task.priority     = priority;
+		task.sort         = asset_sort(priority, (int32_t)(vertex_count + index_count));
+
+		assets_add_task(task);
+	}
 }
 
 ///////////////////////////////////////////
@@ -483,6 +572,24 @@ void mesh_addref(mesh_t mesh) {
 
 ///////////////////////////////////////////
 
+asset_state_ mesh_asset_state(const mesh_t mesh) {
+	return mesh->header.state;
+}
+
+///////////////////////////////////////////
+
+void mesh_on_load(mesh_t mesh, void (*on_load)(mesh_t mesh, void *context), void *context) {
+	assets_on_load(&mesh->header, (void(*)(asset_header_t*,void*))on_load, context);
+}
+
+///////////////////////////////////////////
+
+void mesh_on_load_remove(mesh_t mesh, void (*on_load)(mesh_t mesh, void *context)) {
+	assets_on_load_remove(&mesh->header, (void(*)(asset_header_t*,void*))on_load);
+}
+
+///////////////////////////////////////////
+
 mesh_t mesh_create() {
 	mesh_t result = (_mesh_t*)assets_allocate(asset_type_mesh);
 	// Initialize gpu_mesh with empty vertex type — actual vertex format
@@ -510,8 +617,8 @@ mesh_t mesh_copy(mesh_t mesh) {
 	if (mesh->discard_data) {
 		log_err("mesh_copy not yet implemented for meshes with discard data set!");
 	} else {
-		mesh_set_inds (result, mesh->inds,  mesh->ind_count);
 		mesh_set_verts(result, mesh->verts, mesh->vert_count, false);
+		mesh_set_inds (result, mesh->inds,  mesh->ind_count);
 		if (mesh_has_skin(mesh))
 			mesh_set_skin_inv(result, mesh->skin_data.bone_data, mesh->vert_count, mesh->skin_data.bone_inverse_transforms, mesh->skin_data.bone_count);
 	}
@@ -789,7 +896,7 @@ mesh_t mesh_gen_plane(vec2 dimensions, vec3 plane_normal, vec3 plane_top_directi
 		} }
 	}
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -879,7 +986,7 @@ mesh_t mesh_gen_circle(float diameter, vec3 plane_normal, vec3 plane_top_directi
 		}
 	}
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -949,7 +1056,7 @@ mesh_t mesh_gen_cube(vec3 dimensions, int32_t subdivisions) {
 		}
 	}
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -1018,7 +1125,7 @@ mesh_t mesh_gen_sphere(float diameter, int32_t subdivisions) {
 		}
 	}
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -1087,7 +1194,7 @@ mesh_t mesh_gen_cylinder(float diameter, float depth, vec3 dir, int32_t subdivis
 	verts[(subdivisions+1)*4]   = {  z_off,  dir, {0.5f,0.01f}, {255,255,255,255} };
 	verts[(subdivisions+1)*4+1] = { -z_off, -dir, {0.5f,0.99f}, {255,255,255,255} };
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -1157,7 +1264,7 @@ mesh_t mesh_gen_cone(float diameter, float depth, vec3 dir, int32_t subdivisions
 	verts[(subdivisions+1)*4]   = {  z_off,  dir, {0.5f,0.01f}, {255,255,255,255} };
 	verts[(subdivisions+1)*4+1] = { vec3{}, -dir, {0.5f,0.99f}, {255,255,255,255} };
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);
@@ -1247,7 +1354,7 @@ mesh_t mesh_gen_rounded_cube(vec3 dimensions, float edge_radius, int32_t subdivi
 		}
 	}
 
-	mesh_set_data(result, verts, vert_count, inds, ind_count);
+	mesh_set_data(result, verts, vert_count, inds, ind_count, mesh_data_calc_bounds);
 
 	sk_free(verts);
 	sk_free(inds);

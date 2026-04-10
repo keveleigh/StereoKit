@@ -628,6 +628,19 @@ namespace StereoKit
 		None,
 	}
 
+	/// <summary>Bit-flags for controlling mesh data upload behavior.</summary>
+	[Flags]
+	public enum MeshData {
+		/// <summary>No special behavior. Mesh data will be uploaded synchronously with
+		/// no bounds calculation.</summary>
+		None         = 0,
+		/// <summary>Calculate mesh bounds from the provided vertices.</summary>
+		CalcBounds   = 1 << 0,
+		/// <summary>Upload mesh data asynchronously on a background thread. The mesh
+		/// will be skipped during rendering until the upload completes.</summary>
+		Async        = 1 << 1,
+	}
+
 	/// <summary>Textures come in various types and flavors! These are bit-flags
 	/// that tell StereoKit what type of texture we want, and how the application
 	/// might use it!</summary>

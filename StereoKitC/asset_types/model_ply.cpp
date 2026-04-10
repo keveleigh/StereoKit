@@ -79,7 +79,7 @@ bool modelfmt_ply(model_t model, const char *filename, const void *file_data, si
 		// Make a mesh out of it all
 		mesh = mesh_create();
 		mesh_set_id  (mesh, id);
-		mesh_set_data(mesh, verts, vert_count, final_inds, ind_count);
+		mesh_set_data(mesh, verts, vert_count, final_inds, ind_count, mesh_data_calc_bounds);
 
 		model_node_add(model, nullptr, matrix_identity, mesh, material);
 

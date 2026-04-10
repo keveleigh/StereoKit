@@ -189,7 +189,7 @@ bool modelfmt_stl(model_t model, const char *filename, const void *file_data, si
 
 		mesh = mesh_create();
 		mesh_set_id  (mesh, id);
-		mesh_set_data(mesh, &verts[0], verts.count, &faces[0], faces.count);
+		mesh_set_data(mesh, &verts[0], verts.count, &faces[0], faces.count, mesh_data_calc_bounds);
 
 		model_node_add(model, nullptr, matrix_identity, mesh, material);
 

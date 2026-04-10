@@ -217,11 +217,14 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       mesh_get_id(IntPtr mesh);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_addref(IntPtr mesh);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_release(IntPtr mesh);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AssetState   mesh_asset_state(IntPtr mesh);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_on_load(IntPtr mesh, [MarshalAs(UnmanagedType.FunctionPtr)] AssetOnLoadCallback asset_on_load_callback, IntPtr context);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_on_load_remove(IntPtr mesh, [MarshalAs(UnmanagedType.FunctionPtr)] AssetOnLoadCallback asset_on_load_callback);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_draw(IntPtr mesh, IntPtr material, Matrix transform, Color color_linear, RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_keep_data(IntPtr mesh, [MarshalAs(UnmanagedType.Bool)] bool keep_data);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mesh_get_keep_data(IntPtr mesh);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_data(IntPtr mesh, [In] Vertex[] in_arr_vertices, int vertex_count, [In] uint[] in_arr_indices, int index_count, [MarshalAs(UnmanagedType.Bool)] bool calculate_bounds);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_data(IntPtr mesh, [In] Vertex[] in_arr_vertices, int vertex_count, [In] uint[] in_arr_indices, int index_count, MeshData flags, int priority);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_verts(IntPtr mesh, [In] Vertex[] in_arr_vertices, int vertex_count, [MarshalAs(UnmanagedType.Bool)] bool calculate_bounds);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_get_verts(IntPtr mesh, out IntPtr out_arr_vertices, out int out_vertex_count, Memory reference_mode);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          mesh_get_vert_count(IntPtr mesh);
