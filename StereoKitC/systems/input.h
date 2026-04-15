@@ -19,6 +19,9 @@ typedef enum input_pose_ {
 	input_pose_r_palm,
 	input_pose_r_aim,
 
+	detached_pose_l,
+	detached_pose_r,
+
 	input_pose_max
 } input_pose_;
 

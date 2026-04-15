@@ -500,6 +500,8 @@ set(SK_SRC_XR_BACKENDS
 set(SK_SRC_XR_EXTS
   StereoKitC/xr_backends/extensions/composition_depth.h
   StereoKitC/xr_backends/extensions/composition_depth.cpp
+  StereoKitC/xr_backends/extensions/meta_detached_controllers.h
+  StereoKitC/xr_backends/extensions/meta_detached_controllers.cpp
   StereoKitC/xr_backends/extensions/meta_environment_depth.h
   StereoKitC/xr_backends/extensions/meta_environment_depth.cpp
   StereoKitC/xr_backends/extensions/debug_utils.h
