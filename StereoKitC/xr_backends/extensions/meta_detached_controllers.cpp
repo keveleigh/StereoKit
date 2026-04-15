@@ -4,9 +4,10 @@
  * Copyright (c) 2026 Qualcomm Technologies, Inc.
  */
 
-// This implements XR_META_detached_controllers
+// This implements XR_META_detached_controllers 
 // https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_META_detached_controllers
-
+// to use with
+// https://registry.khronos.org/OpenXR/specs/1.1/man/html/XR_META_simultaneous_hands_and_controllers.html
 #include "ext_management.h"
 #include "meta_detached_controllers.h"
 #include "../openxr_input.h"
@@ -32,7 +33,7 @@ void xr_profile_meta_detached_controllers_register() {
 		if (!backend_openxr_ext_enabled("XR_META_detached_controllers"))
 			return xr_system_fail;
 
-		// oculus/touch_controller
+		// oculus/touch_controller 
 		// https://registry.khronos.org/OpenXR/specs/1.1/html/xrspec.html#XR_META_detached_controllers
 		{
 			xr_interaction_profile_t profile_l = { "oculus/touch_controller" };
