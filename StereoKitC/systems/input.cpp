@@ -477,6 +477,13 @@ void input_controller_set_hand(handed_ hand, bool is_hand) {
 
 ///////////////////////////////////////////
 
+pose_t input_controller_detached(handed_ hand) {
+	input_pose_ detached_pose = hand == handed_left ? detached_pose_l : detached_pose_r;
+	return input_pose_get_world(detached_pose);
+}
+
+///////////////////////////////////////////
+
 void input_mouse_update() {
 	// Get mouse position from sk_app
 	int32_t  mouse_x = 0, mouse_y = 0;

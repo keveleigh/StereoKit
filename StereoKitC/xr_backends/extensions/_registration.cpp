@@ -15,6 +15,7 @@
 #include "composition_depth.h"
 #include "debug_utils.h"
 #include "meta_environment_depth.h"
+#include "meta_detached_controllers.h"
 #include "ext_interaction_render_model.h"
 #include "ext_render_model.h"
 #include "eye_interaction.h"
@@ -74,6 +75,7 @@ bool ext_registration() {
 	xr_profile_msft_hand_interaction_register    ();
 	xr_profile_bd_controller_interaction_register();
 	xr_profile_ext_eye_gaze_register             ();
+	xr_profile_meta_detached_controllers_register();
 	oxri_register();
 
 	anchors_register();
