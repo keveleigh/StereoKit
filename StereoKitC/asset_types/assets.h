@@ -77,8 +77,6 @@ void        assets_on_load_remove_all (asset_header_t *asset);
 bool32_t    assets_execute_blocking   (bool32_t (*asset_job)(void *data), void *data);
 void        assets_add_task           (asset_task_t task);
 void        assets_task_set_complexity(asset_task_t *task, int32_t priority);
-void        assets_block_until        (asset_header_t *asset, asset_state_ state);
-
 inline int64_t asset_sort(int32_t priority, int32_t complexity) { return ((int64_t)priority << 32) | ((int64_t)complexity); }
 
 } // namespace sk

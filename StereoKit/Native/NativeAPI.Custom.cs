@@ -93,7 +93,7 @@ namespace StereoKit
 
 		// model_create_mem with byte array data
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
-		public static extern IntPtr model_create_mem([MarshalAs(UnmanagedType.LPUTF8Str)] string filename_utf8, [In] byte[] data, UIntPtr data_size, IntPtr shader);
+		public static extern IntPtr model_create_mem([MarshalAs(UnmanagedType.LPUTF8Str)] string filename_utf8, [In] byte[] data, UIntPtr data_size, IntPtr shader, int priority);
 
 		// sound_write_samples with IntPtr (for native buffers)
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]

@@ -36,6 +36,32 @@ namespace StereoKit
 		/// complete.</param>
 		public static void BlockForPriority(int priority) => NativeAPI.assets_block_for_priority(priority);
 
+		/// <summary>This will block execution until the given asset reaches
+		/// the specified loading state. If the asset has already reached or
+		/// passed that state, this returns immediately. If the asset is in
+		/// an error state, this also returns immediately.</summary>
+		/// <param name="asset">The asset to wait on.</param>
+		/// <param name="state">The state to wait for, such as
+		/// AssetState.Loaded or AssetState.LoadedMeta.</param>
+		public static void BlockUntil(IAsset asset, AssetState state)
+		{
+			IntPtr inst = asset switch {
+				Font       a => a._inst,
+				Material   a => a._inst,
+				Mesh       a => a._inst,
+				Model      a => a._inst,
+				Shader     a => a._inst,
+				Sound      a => a._inst,
+				Sprite     a => a._inst,
+				Tex        a => a._inst,
+				Anchor     a => a._inst,
+				RenderList a => a._inst,
+				_ => IntPtr.Zero,
+			};
+			if (inst != IntPtr.Zero)
+				NativeAPI.assets_block_until(inst, state);
+		}
+
 		/// <summary>A list of supported model format extensions. This pairs
 		/// pretty well with `Platform.FilePicker` when attempting to load a
 		/// `Model`!</summary>

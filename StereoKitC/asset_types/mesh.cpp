@@ -169,10 +169,10 @@ void mesh_set_inds(mesh_t mesh, const vind_t *indices,  int32_t index_count) {
 ///////////////////////////////////////////
 
 struct mesh_load_t {
-	vert_t*  vertices;
-	int32_t  vertex_count;
-	vind_t*  indices;
-	int32_t  index_count;
+	vert_t*  verts;
+	vind_t*  inds;
+	int32_t  vert_count;
+	int32_t  ind_count;
 	bool32_t calc_bounds;
 };
 
@@ -180,8 +180,8 @@ static bool32_t mesh_load_process(asset_task_t*, asset_header_t* asset, void *da
 	mesh_t       mesh = (mesh_t)asset;
 	mesh_load_t* load = (mesh_load_t*)data;
 
-	if (load->calc_bounds && load->vertex_count > 0) {
-		mesh->bounds = mesh_calculate_bounds(load->vertices, load->vertex_count);
+	if (load->calc_bounds && load->vert_count > 0) {
+		mesh->bounds = mesh_calculate_bounds(load->verts, load->vert_count);
 	}
 
 	mesh->header.state = asset_state_loaded_meta;
@@ -192,18 +192,29 @@ static bool32_t mesh_load_upload(asset_task_t*, asset_header_t* asset, void *dat
 	mesh_t       mesh = (mesh_t)asset;
 	mesh_load_t* load = (mesh_load_t*)data;
 
-	// Asset threads have their own GPU context via skr_thread_init, so
-	// we can upload directly without going through assets_execute_blocking.
-	if (load->vertex_count > 0) _mesh_set_verts(mesh, load->vertices, load->vertex_count, false, true);
-	if (load->index_count  > 0) _mesh_set_inds (mesh, load->indices,  load->index_count);
+	// Upload from load's data, then hand ownership to the mesh or
+	// discard. The load task exclusively owns verts/inds until this
+	// point, so there's no race with the main thread.
+	if (load->vert_count > 0) _mesh_set_verts(mesh, load->verts, load->vert_count, false, false);
+	if (load->ind_count  > 0) _mesh_set_inds (mesh, load->inds,  load->ind_count);
+
+	if (!mesh->discard_data) {
+		mesh->verts         = load->verts;
+		mesh->vert_capacity = load->vert_count;
+		mesh->inds          = load->inds;
+		mesh->ind_capacity  = load->ind_count;
+
+		load->verts = nullptr;
+		load->inds  = nullptr;
+	}
 
 	return true;
 }
 
 static void mesh_load_free(asset_header_t*, void *data) {
 	mesh_load_t* load = (mesh_load_t*)data;
-	sk_free(load->vertices);
-	sk_free(load->indices);
+	sk_free(load->verts);
+	sk_free(load->inds);
 	sk_free(load);
 }
 
@@ -235,18 +246,24 @@ void mesh_set_data(mesh_t mesh, const vert_t* vertices, int32_t vertex_count, co
 		}, &job_data);
 	} else {
 		mesh->header.state = asset_state_loading;
+		mesh->vert_count   = vertex_count;
+		mesh->ind_count    = index_count;
 
-		mesh_load_t *load_data  = sk_malloc_zero_t(mesh_load_t, 1);
-		load_data->calc_bounds  = calc_bounds;
+		// The load task exclusively owns the vert/ind data until
+		// upload completes. mesh->verts/inds stay null during
+		// loading — the upload task hands ownership to the mesh
+		// afterward if discard_data is false.
+		mesh_load_t *load_data = sk_malloc_zero_t(mesh_load_t, 1);
+		load_data->calc_bounds = calc_bounds;
+		load_data->vert_count  = vertex_count;
+		load_data->ind_count   = index_count;
 		if (vertex_count > 0) {
-			load_data->vertices     = sk_malloc_t(vert_t, vertex_count);
-			memcpy(load_data->vertices, vertices, sizeof(vert_t) * vertex_count);
-			load_data->vertex_count = vertex_count;
+			load_data->verts = sk_malloc_t(vert_t, vertex_count);
+			memcpy(load_data->verts, vertices, sizeof(vert_t) * vertex_count);
 		}
 		if (index_count > 0) {
-			load_data->indices      = sk_malloc_t(vind_t, index_count);
-			memcpy(load_data->indices, indices, sizeof(vind_t) * index_count);
-			load_data->index_count  = index_count;
+			load_data->inds = sk_malloc_t(vind_t, index_count);
+			memcpy(load_data->inds, indices, sizeof(vind_t) * index_count);
 		}
 
 		static const asset_load_action_t actions[] = {
@@ -434,6 +451,10 @@ void _mesh_set_weights(mesh_t mesh, const uint16_t* bone_ids_4, int32_t bone_id_
 bool _mesh_set_skin(mesh_t mesh, const bone_weight_t *bone_weights, uint32_t bone_weight_count, int32_t bone_count) {
 	if (mesh->discard_data) {
 		log_err("mesh_set_skin: can't work with a mesh that doesn't keep data, ensure mesh_get_keep_data() is true");
+		return false;
+	}
+	if (mesh->verts == nullptr) {
+		log_err("mesh_set_skin: mesh has no vertex data, ensure mesh data is loaded before setting skin");
 		return false;
 	}
 

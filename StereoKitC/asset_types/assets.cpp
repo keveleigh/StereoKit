@@ -911,11 +911,12 @@ int32_t asset_thread(void *thread_inst_obj) {
 
 ///////////////////////////////////////////
 
-void assets_block_until(asset_header_t *asset, asset_state_ state) {
+void assets_block_until(asset_t asset, asset_state_ state) {
+	asset_header_t *header = (asset_header_t *)asset;
 	// If we're past the required state already, drop out. asset_state_none and
 	// below (error states) means no loading is happening, so blocking will
 	// only put us in an infinite loop.
-	if (asset->state >= state || asset->state <= asset_state_none)
+	if (header->state >= state || header->state <= asset_state_none)
 		return;
 
 	profiler_zone();
@@ -929,7 +930,7 @@ void assets_block_until(asset_header_t *asset, asset_state_ state) {
 		}
 	}
 
-	while (asset->state < state && asset->state >= 0) {
+	while (header->state < state && header->state >= 0) {
 		// Spin the GPU thread so the asset thread doesn't freeze up while
 		// we're waiting on it.
 		assets_step();

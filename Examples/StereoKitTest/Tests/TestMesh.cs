@@ -103,6 +103,10 @@ class TestMesh : ITest
 		if (frameToCallback < 0 && onLoadedFired)
 			frameToCallback = framesSinceRequest;
 
+		// Keep the test alive until async loads complete
+		if (!asyncChecked)
+			Tests.RunContinue();
+
 		// Once the callback has fired, run all async tests and log timing
 		if (!asyncChecked && frameToCallback >= 0) {
 			asyncChecked = true;
@@ -123,5 +127,7 @@ class TestMesh : ITest
 
 	public void Shutdown()
 	{
+		if (!asyncChecked)
+			Log.Err("TestMesh: async tests never ran! Mesh may not have finished loading in time.");
 	}
 }
