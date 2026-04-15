@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
- * Copyright (c) 2025 Nick Klingensmith
- * Copyright (c) 2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2026 Nick Klingensmith
+ * Copyright (c) 2026 Qualcomm Technologies, Inc.
  */
 
 // This implements XR_META_detached_controllers
