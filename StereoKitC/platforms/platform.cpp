@@ -134,8 +134,10 @@ bool platform_init() {
 	skr_settings_t skr_settings = {};
 	skr_settings.app_name          = settings->app_name;
 	skr_settings.app_version       = 1;
-	skr_settings.enable_validation = true;// settings->log_filter == log_diagnostic;
 	skr_settings.bind_settings     = &skr_binds;
+	#if defined(SK_DEBUG)
+	skr_settings.enable_validation = true;
+	#endif
 
 	// Build extension array - start with platform-specific surface extensions from sk_app
 	array_t<const char*> vk_extensions = {};
