@@ -31,8 +31,9 @@ struct _material_buffer_t {
 	skr_buffer_t buffer;
 };
 
-void   material_destroy    (material_t material);
-void   material_check_dirty(material_t material);
-size_t material_param_size (material_param_ type);
+void   material_destroy        (material_t material);
+void   material_check_dirty    (material_t material);
+tex_t  material_get_default_tex(material_t material, const char *name);
+size_t material_param_size     (material_param_ type);
 
 } // namespace sk

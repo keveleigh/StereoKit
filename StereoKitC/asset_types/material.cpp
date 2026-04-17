@@ -108,24 +108,47 @@ void material_alloc_resources(material_t material) {
 
 ///////////////////////////////////////////
 
+// Returns a default texture for a shader resource value string. Does NOT
+// add a reference - caller must addref if storing.
+static tex_t _material_default_tex_for(const char *value) {
+	if      (string_eq(value, "white")) return sk_default_tex;
+	else if (string_eq(value, "black")) return sk_default_tex_black;
+	else if (string_eq(value, "gray" )) return sk_default_tex_gray;
+	else if (string_eq(value, "flat" )) return sk_default_tex_flat;
+	else if (string_eq(value, "rough")) return sk_default_tex_rough;
+	else                                return sk_default_tex;
+}
+
+///////////////////////////////////////////
+
+tex_t material_get_default_tex(material_t material, const char *name) {
+	const sksc_shader_meta_t *meta = &material->shader->gpu_shader.meta;
+	id_hash_t id = hash_string(name);
+
+	for (uint32_t i = 0; i < meta->resource_count; i++) {
+		if (meta->resources[i].name_hash == id) {
+			tex_t result = _material_default_tex_for(meta->resources[i].value);
+			if (result) tex_addref(result);
+			return result;
+		}
+	}
+	return nullptr;
+}
+
+///////////////////////////////////////////
+
 void material_set_default_textures(material_t material) {
 	const sksc_shader_meta_t *meta = &material->shader->gpu_shader.meta;
 
 	// Set default textures for all resources declared in the shader
 	for (uint32_t i = 0; i < meta->resource_count; i++) {
-		tex_t default_tex = nullptr;
-
-		if      (string_eq(meta->resources[i].value, "white")) default_tex = tex_find(default_id_tex);
-		else if (string_eq(meta->resources[i].value, "black")) default_tex = tex_find(default_id_tex_black);
-		else if (string_eq(meta->resources[i].value, "gray" )) default_tex = tex_find(default_id_tex_gray);
-		else if (string_eq(meta->resources[i].value, "flat" )) default_tex = tex_find(default_id_tex_flat);
-		else if (string_eq(meta->resources[i].value, "rough")) default_tex = tex_find(default_id_tex_rough);
-		else                                                   default_tex = tex_find(default_id_tex);
+		tex_t default_tex = _material_default_tex_for(meta->resources[i].value);
 
 		// Release old texture if present, store new one
 		if (material->textures[i] != nullptr)
 			tex_release(material->textures[i]);
-		material->textures[i] = default_tex; // tex_find already adds a ref
+		tex_addref(default_tex);
+		material->textures[i] = default_tex;
 
 		// Update sk_renderer binding
 		tex_t physical_tex = default_tex->fallback ? default_tex->fallback : default_tex;
@@ -690,14 +713,8 @@ bool32_t material_set_texture_id(material_t material, id_hash_t id, tex_t value)
 			// Assigning a null texture will crash the renderer, so we want to
 			// instead find the default texture for the material parameter.
 			tex_t tex_to_set = value;
-			if (tex_to_set == nullptr) {
-				if      (string_eq(resource->value, "white")) tex_to_set = sk_default_tex;
-				else if (string_eq(resource->value, "black")) tex_to_set = sk_default_tex_black;
-				else if (string_eq(resource->value, "gray" )) tex_to_set = sk_default_tex_gray;
-				else if (string_eq(resource->value, "flat" )) tex_to_set = sk_default_tex_flat;
-				else if (string_eq(resource->value, "rough")) tex_to_set = sk_default_tex_rough;
-				else                                          tex_to_set = sk_default_tex;
-			}
+			if (tex_to_set == nullptr)
+				tex_to_set = _material_default_tex_for(resource->value);
 
 			// Update texture reference tracking
 			if (material->textures[i] != tex_to_set) {
