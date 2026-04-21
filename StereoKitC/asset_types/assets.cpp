@@ -785,11 +785,6 @@ void assets_complete_task(asset_task_t* task) {
 
 ///////////////////////////////////////////
 
-void assets_task_set_complexity(asset_task_t *task, int32_t complexity) {
-}
-
-///////////////////////////////////////////
-
 void asset_step_task() {
 	asset_task_t* task = assets_acquire_task();
 	if (task == nullptr) return;

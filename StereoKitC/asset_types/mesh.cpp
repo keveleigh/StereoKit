@@ -288,7 +288,7 @@ void mesh_set_data(mesh_t mesh, const vert_t* vertices, int32_t vertex_count, co
 		task.free_data    = mesh_load_free;
 		task.on_failure   = mesh_load_on_failure;
 		task.priority     = priority;
-		task.sort         = asset_sort(priority, (int32_t)(vertex_count + index_count));
+		task.sort         = asset_sort(priority, asset_complexity_bytes(vertex_count * sizeof(vert_t) + index_count * sizeof(vind_t)));
 
 		assets_add_task(task);
 	}

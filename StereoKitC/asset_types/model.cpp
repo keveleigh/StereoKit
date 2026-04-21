@@ -73,7 +73,7 @@ static model_format_ model_get_format(const char *filename) {
 
 ///////////////////////////////////////////
 
-static bool32_t model_load_file(asset_task_t *task, asset_header_t *, void *data) {
+static bool32_t model_load_file(asset_task_t *, asset_header_t *, void *data) {
 	profiler_zone();
 	model_load_t *load   = (model_load_t *)data;
 	bool32_t      loaded = platform_read_file(load->filename, &load->file_data, &load->file_size);
@@ -81,7 +81,6 @@ static bool32_t model_load_file(asset_task_t *task, asset_header_t *, void *data
 		log_warnf("Model file failed to load: %s", load->filename);
 		return false;
 	}
-	assets_task_set_complexity(task, (int32_t)load->file_size);
 	return true;
 }
 
@@ -263,7 +262,7 @@ model_t model_create_mem(const char *filename, const void *data, size_t data_siz
 	task.free_data    = model_load_free;
 	task.on_failure   = model_load_on_failure;
 	task.priority     = priority;
-	task.sort         = asset_sort(priority, (int32_t)data_size);
+	task.sort         = asset_sort(priority, asset_complexity_bytes(data_size));
 
 	assets_add_task(task);
 	return result;
@@ -309,7 +308,7 @@ model_t model_create_file(const char *filename, shader_t shader, int32_t priorit
 	task.free_data    = model_load_free;
 	task.on_failure   = model_load_on_failure;
 	task.priority     = priority;
-	task.sort         = asset_sort(priority, 0);
+	task.sort         = asset_sort(priority, asset_complexity_bytes(platform_file_size(filename)));
 
 	assets_add_task(task);
 	return result;
