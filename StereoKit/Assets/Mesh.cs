@@ -143,7 +143,7 @@ namespace StereoKit
 		/// <param name="vertices">An array of vertices to add to the mesh.
 		/// Remember to set all the relevant values! Your material will often
 		/// show black if the Normals or Colors are left at their default
-		/// values.</param>
+		/// values. Null is okay here, but may require a special shader.</param>
 		/// <param name="indices">A list of face indices, must be a multiple of
 		/// 3. Each index represents a vertex from the provided vertex array.
 		/// </param>
@@ -154,16 +154,19 @@ namespace StereoKit
 		/// frequently or need all the performance you can get, setting this to
 		/// false is a nice way to gain some speed!</param>
 		public void SetData(Vertex[] vertices, uint[] indices, bool calculateBounds = true)
-			=> NativeAPI.mesh_set_data(_inst, vertices, vertices.Length, indices, indices.Length,
+			=> NativeAPI.mesh_set_data(_inst, vertices, vertices?.Length ?? 0, indices, indices.Length,
 				calculateBounds ? MeshData.CalcBounds : MeshData.None, 0);
 
 		/// <summary>Assigns the vertices and indices for this Mesh with
 		/// control over upload behavior via flags. Upload is synchronous
 		/// by default — pass MeshData.Async for background upload.</summary>
 		/// <param name="vertices">An array of vertices to add to the mesh.
-		/// Null is okay here, but may require a special shader.</param>
-		/// <param name="indices">A list of face indices, must be a multiple
-		/// of 3.</param>
+		/// Remember to set all the relevant values! Your material will often
+		/// show black if the Normals or Colors are left at their default
+		/// values. Null is okay here, but may require a special shader.</param>
+		/// <param name="indices">A list of face indices, must be a multiple of
+		/// 3. Each index represents a vertex from the provided vertex array.
+		/// </param>
 		/// <param name="flags">Flags controlling upload behavior. See
 		/// MeshData for options.</param>
 		/// <param name="priority">Loading priority for async upload. Lower

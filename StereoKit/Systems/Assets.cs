@@ -56,6 +56,7 @@ namespace StereoKit
 				Tex        a => a._inst,
 				Anchor     a => a._inst,
 				RenderList a => a._inst,
+				Compute    a => a._inst,
 				_ => IntPtr.Zero,
 			};
 			if (inst != IntPtr.Zero)

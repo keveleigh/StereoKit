@@ -89,7 +89,8 @@ namespace StereoKit
 		/// A Model starts in the Loading state when created from a file,
 		/// transitions to LoadedMeta when the hierarchy is available, and
 		/// Loaded once all mesh and texture data has been submitted for
-		/// upload.</summary>
+		/// upload. This also reflects if an error occured while loading the
+		/// Model with a variety of asset error codes!</summary>
 		public AssetState AssetState => NativeAPI.model_asset_state(_inst);
 
 		/// <summary>This event fires when the Model has finished loading
@@ -392,8 +393,8 @@ namespace StereoKit
 		/// <param name="shader">The shader to use for the model's materials!
 		/// If null, this will
 		/// automatically determine the best shader available to use.</param>
-		/// <returns>A Model created from the file, or null if the file 
-		/// failed to load!</returns>
+		/// <returns>Always returns a valid Model created from the file, check
+		/// the AssetState to see if a failure occurred.</returns>
 		public static Model FromFile(string file, Shader shader = null, int loadPriority = 10)
 		{
 			IntPtr final = shader == null ? IntPtr.Zero : shader._inst;
@@ -414,8 +415,8 @@ namespace StereoKit
 		/// <param name="shader">The shader to use for the model's materials!
 		/// If null, this will automatically determine the best shader 
 		/// available to use.</param>
-		/// <returns>A Model created from the file, or null if the file
-		/// failed to load!</returns>
+		/// <returns>Always returns a valid Model created from the file, check
+		/// the AssetState to see if a failure occurred.</returns>
 		public static Model FromMemory(string filename, in byte[] data, Shader shader = null, int loadPriority = 10)
 		{
 			IntPtr final = shader == null ? IntPtr.Zero : shader._inst;

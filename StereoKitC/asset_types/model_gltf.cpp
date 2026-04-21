@@ -386,7 +386,7 @@ mesh_t gltf_parsemesh(cgltf_mesh *mesh, int node_id, int primitive_id, const cha
 		} else if (attr->type == cgltf_attribute_type_normal && has_lightmap_uvs == false) {
 			has_normals = true;
 			if (attr->index != 0) {
-				gltf_add_warning(warnings, "Too many vertex <~YLW>%s<~clr> channels! Only one supported, the rest will be ignored.");
+				gltf_add_warning(warnings, "Too many vertex <~YLW>%s<~clr> channels! Only one supported, the rest will be ignored.", "normal");
 			} else gltf_view_to_vert_f(verts, sizeof(vert_t), offsetof(vert_t, norm), attr->data);
 		} else if (attr->type == cgltf_attribute_type_texcoord) {
 			if (attr->index == 1 && gltf_material_is_lightmap(p->material)) {

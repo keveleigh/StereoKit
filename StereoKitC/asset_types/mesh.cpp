@@ -192,9 +192,18 @@ static bool32_t mesh_load_upload(asset_task_t*, asset_header_t* asset, void *dat
 	mesh_t       mesh = (mesh_t)asset;
 	mesh_load_t* load = (mesh_load_t*)data;
 
+	// Gate the renderer before swapping gpu buffers. When re-uploading an
+	// already-loaded mesh, _mesh_set_verts replaces the vertex buffer
+	// before _mesh_set_inds gets a chance to update ind_draw, so a main
+	// thread draw between those two steps would pair new verts with the
+	// old ind_draw/ind buffer. Zeroing ind_draw here keeps the renderer
+	// skipping this mesh until _mesh_set_inds restores it. Old gpu
+	// buffers + old ind_draw are mutually consistent up to this point.
+	mesh->ind_draw = 0;
+
 	// Upload from load's data, then hand ownership to the mesh or
 	// discard. The load task exclusively owns verts/inds until this
-	// point, so there's no race with the main thread.
+	// point, so there's no race with the main thread for those.
 	if (load->vert_count > 0) _mesh_set_verts(mesh, load->verts, load->vert_count, false, false);
 	if (load->ind_count  > 0) _mesh_set_inds (mesh, load->inds,  load->ind_count);
 
