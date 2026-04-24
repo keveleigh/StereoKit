@@ -238,6 +238,8 @@ bool32_t sk_step_end() {
 		ska_time_sleep(100);
 	local.in_step = false;
 	
+	profiler_plot("sk_renderer CPU (us)", (int64_t)skr_renderer_get_cpu_time_us());
+	profiler_plot("sk_renderer GPU (us)", (int64_t)skr_renderer_get_gpu_time_us());
 	profiler_frame_mark();
 	return local.running;
 }

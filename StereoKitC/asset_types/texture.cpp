@@ -250,7 +250,6 @@ bool32_t tex_load_arr_files(asset_task_t *task, asset_header_t *asset, void *job
 	tex_t       tex  = (tex_t)asset;
 
 	tex_set_meta(tex, data->color_width, data->color_height, data->color_format);
-	assets_task_set_complexity(task, data->color_width * data->color_height * data->color_array_count);
 	return true;
 }
 
@@ -461,7 +460,7 @@ bool tex_load_image_data(void *data, size_t data_size, bool32_t srgb_data, tex_t
 // Texture creation functions            //
 ///////////////////////////////////////////
 
-asset_task_t tex_make_loading_task(tex_t texture, void *load_data, const asset_load_action_t *actions, int32_t action_count, int32_t priority, float complexity) {
+asset_task_t tex_make_loading_task(tex_t texture, void *load_data, const asset_load_action_t *actions, int32_t action_count, int32_t priority, int32_t complexity) {
 	asset_task_t task = {};
 	task.asset        = (asset_header_t*)texture;
 	task.free_data    = tex_load_free;
@@ -496,7 +495,7 @@ tex_t tex_create_file_type(const char *file, tex_type_ type, bool32_t srgb_data,
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(platform_file_size(file))) );
 
 	return result;
 }
@@ -537,7 +536,7 @@ tex_t tex_create_mem_type(tex_type_ type, void *data, size_t data_size, bool32_t
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, (float)(load_data->color_width * load_data->color_height)) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(data_size)) );
 
 	return result;
 }
@@ -630,8 +629,10 @@ tex_t _tex_create_file_arr(tex_type_ type, const char **files, int32_t file_coun
 	load_data->is_srgb    = srgb_data;
 	load_data->file_count = file_count;
 	load_data->file_names = sk_malloc_t(char *, file_count);
+	size_t total_size = 0;
 	for (int32_t i = 0; i < file_count; i++) {
 		load_data->file_names[i] = string_copy(files[i]);
+		total_size              += platform_file_size(files[i]);
 	}
 
 	static const asset_load_action_t actions[] = {
@@ -639,7 +640,7 @@ tex_t _tex_create_file_arr(tex_type_ type, const char **files, int32_t file_coun
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(total_size)) );
 
 	return result;
 }
@@ -698,7 +699,6 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 		}
 
 		tex_set_meta(tex, size_w, size_h, data->color_format);
-		assets_task_set_complexity(task, size_w * size_h * 6);
 		return (bool32_t)true;
 	};
 
@@ -791,7 +791,7 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 		asset_load_action_t {tex_load_arr_parse, asset_thread_asset},
 		asset_load_action_t {upload,             asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(platform_file_size(cubemap_file))) );
 
 	return result;
 }
@@ -1274,7 +1274,7 @@ void tex_set_mem(tex_t texture, void* data, size_t data_size, bool32_t srgb_data
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	asset_task_t task = tex_make_loading_task(texture, load_data, actions, _countof(actions), priority, (float)(load_data->color_width * load_data->color_height));
+	asset_task_t task = tex_make_loading_task(texture, load_data, actions, _countof(actions), priority, asset_complexity_bytes(data_size));
 	if (blocking) {
 		for (int32_t i = 0; i < 2; i++) {
 			if (!actions[i].action(&task, &texture->header, load_data))

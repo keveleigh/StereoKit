@@ -1291,7 +1291,8 @@ int32_t render_list_prev_count(render_list_t list) {
 ///////////////////////////////////////////
 
 void render_list_add_mesh(render_list_t list, mesh_t mesh, material_t material, matrix transform, color128 color_linear, render_layer_ layer) {
-	render_item_t item;
+	if (mesh->ind_draw == 0) return;
+	render_item_t item = {};
 	item.mesh      = mesh;
 	item.mesh_inds = mesh->ind_draw;
 	item.color     = color_linear;
@@ -1317,6 +1318,8 @@ void render_list_add_model(render_list_t list, model_t model, matrix transform, 
 ///////////////////////////////////////////
 
 void render_list_add_model_mat(render_list_t list, model_t model, material_t material_override, matrix transform, color128 color_linear, render_layer_ layer) {
+	if (model->header.state < asset_state_loaded_meta) return;
+
 	XMMATRIX root;
 	if (hierarchy_use_top()) matrix_mul         (transform, hierarchy_top(), root);
 	else                     math_matrix_to_fast(transform, &root);
@@ -1325,8 +1328,9 @@ void render_list_add_model_mat(render_list_t list, model_t model, material_t mat
 	for (int32_t i = 0; i < model->visuals.count; i++) {
 		const model_visual_t *vis = &model->visuals[i];
 		if (vis->visible == false || vis->mesh == nullptr || vis->material == nullptr) continue;
-		
-		render_item_t item;
+		if (vis->mesh->ind_draw == 0) continue;
+
+		render_item_t item = {};
 		item.mesh      = vis->mesh;
 		item.mesh_inds = vis->mesh->ind_draw;
 		item.color     = color_linear;
