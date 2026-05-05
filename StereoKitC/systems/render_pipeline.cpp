@@ -41,6 +41,7 @@ static void render_pipeline_begin() {
 ///////////////////////////////////////////
 
 void render_pipeline_draw() {
+	profiler_zone();
 	render_pipeline_begin();
 
 	render_list_t list = render_get_primary_list();
@@ -61,18 +62,19 @@ void render_pipeline_draw() {
 		skr_vec4_t clear_color = { s->clear_color.r, s->clear_color.g, s->clear_color.b, s->clear_color.a };
 		skr_clear_ clear_flags = (skr_clear_)(skr_clear_color | skr_clear_depth | skr_clear_stencil);
 
-		render_draw_queue(list, s->view_matrices, s->proj_matrices, 0, s->array_count, s->layer, 0);
+		render_draw_queue(list, s->view_matrices, s->proj_matrices, 0, s->array_count, s->layer, 0, width, height);
 
 		skr_pass_t pass = {};
-		pass.color       = &s->tex->gpu_tex;
-		pass.depth       = depth_tex;
-		pass.resolve     = s->resolve_target;
-		pass.clear       = clear_flags;
-		pass.clear_color = clear_color;
-		pass.clear_depth = 1.0f;
-		pass.viewport    = { 0, 0, (float)width, (float)height };
-		pass.scissor     = { 0, 0, width, height };
-		pass.view_count  = s->array_count;
+		pass.color            = &s->tex->gpu_tex;
+		pass.depth            = depth_tex;
+		pass.resolve          = s->resolve_target;
+		pass.clear            = clear_flags;
+		pass.clear_color      = clear_color;
+		pass.clear_depth      = 1.0f;
+		pass.viewport         = { 0, 0, (float)width, (float)height };
+		pass.scissor          = { 0, 0, width, height };
+		pass.view_count       = s->array_count;
+		pass.views_correlated = s->array_count > 1;
 		render_pass_add_draw(&pass);
 		skr_pass_submit(&pass);
 	}
@@ -99,6 +101,7 @@ void render_pipeline_begin_frame() {
 ///////////////////////////////////////////
 
 void render_pipeline_skip_present() {
+	profiler_zone();
 	// End the frame without presenting to any swapchain surface.
 	// Used by OpenXR which manages its own swapchains externally.
 	skr_renderer_frame_end(nullptr, 0);
@@ -173,6 +176,7 @@ bool32_t render_pipeline_surface_resize(pipeline_surface_id surface_id, int32_t 
 ///////////////////////////////////////////
 
 skr_acquire_ render_pipeline_surface_acquire_swapchain(pipeline_surface_id surface_id, skr_surface_t* skr_surface) {
+	profiler_zone();
 	pipeline_surface_t* surface = &local.surfaces[surface_id];
 
 	// Acquire the next swapchain image
@@ -193,6 +197,7 @@ skr_acquire_ render_pipeline_surface_acquire_swapchain(pipeline_surface_id surfa
 ///////////////////////////////////////////
 
 void render_pipeline_surface_present_swapchain(pipeline_surface_id surface_id, skr_surface_t* skr_surface) {
+	profiler_zone();
 	pipeline_surface_t* surface = &local.surfaces[surface_id];
 
 	if (surface->resolve_target) {

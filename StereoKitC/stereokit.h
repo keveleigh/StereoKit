@@ -1163,40 +1163,56 @@ typedef enum cull_ {
 	cull_none,
 } cull_;
 
-SK_API mesh_t      mesh_find            (const char *name);
-SK_API mesh_t      mesh_create          (void);
-SK_API mesh_t      mesh_copy            (mesh_t mesh);
-SK_API void        mesh_set_id          (mesh_t mesh, const char *id);
-SK_API const char* mesh_get_id          (const mesh_t mesh);
-SK_API void        mesh_addref          (mesh_t mesh);
-SK_API void        mesh_release         (mesh_t mesh);
-SK_API void        mesh_draw            (mesh_t mesh, material_t material, matrix transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
-SK_API void        mesh_set_keep_data   (mesh_t mesh, bool32_t keep_data);
-SK_API bool32_t    mesh_get_keep_data   (mesh_t mesh);
-SK_API void        mesh_set_data        (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, const vind_t *in_arr_indices, int32_t index_count, bool32_t calculate_bounds sk_default(true));
-SK_API void        mesh_set_verts       (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, bool32_t calculate_bounds sk_default(true));
-SK_API void        mesh_get_verts       (mesh_t mesh, sk_ref_arr(vert_t) out_arr_vertices, sk_ref(int32_t) out_vertex_count, memory_ reference_mode);
-SK_API int32_t     mesh_get_vert_count  (mesh_t mesh);
-SK_API void        mesh_set_inds        (mesh_t mesh, const vind_t *in_arr_indices, int32_t index_count);
-SK_API void        mesh_get_inds        (mesh_t mesh, sk_ref_arr(vind_t) out_arr_indices,  sk_ref(int32_t) out_index_count, memory_ reference_mode);
-SK_API int32_t     mesh_get_ind_count   (mesh_t mesh);
-SK_API void        mesh_set_draw_inds   (mesh_t mesh, int32_t index_count);
-SK_API void        mesh_set_bounds      (mesh_t mesh, const sk_ref(bounds_t) bounds);
-SK_API bounds_t    mesh_get_bounds      (mesh_t mesh);
-SK_API bool32_t    mesh_has_skin        (mesh_t mesh);
-SK_API void        mesh_set_skin        (mesh_t mesh, const uint16_t *in_arr_bone_ids_4, int32_t bone_id_4_count, const vec4 *in_arr_bone_weights, int32_t bone_weight_count, const matrix *bone_resting_transforms, int32_t bone_count);
-SK_API void        mesh_update_skin     (mesh_t mesh, const matrix *in_arr_bone_transforms, int32_t bone_count);
-SK_API bool32_t    mesh_ray_intersect    (mesh_t mesh, ray_t model_space_ray, cull_ cull_mode, ray_t* out_pt, uint32_t* out_opt_start_inds sk_default(nullptr));
-SK_API bool32_t    mesh_ray_intersect_bvh(mesh_t mesh, ray_t model_space_ray, cull_ cull_mode, ray_t* out_pt, uint32_t* out_start_inds sk_default(nullptr));
-SK_API bool32_t    mesh_get_triangle     (mesh_t mesh, uint32_t triangle_index, vert_t* out_a, vert_t* out_b, vert_t* out_c);
+/*Bit-flags for controlling mesh data upload behavior.*/
+typedef enum mesh_data_ {
+	/*No special behavior. Mesh data will be uploaded synchronously with
+	  no bounds calculation.*/
+	mesh_data_none        = 0,
+	/*Calculate mesh bounds from the provided vertices.*/
+	mesh_data_calc_bounds = 1 << 0,
+	/*Upload mesh data asynchronously on a background thread. The mesh
+	  will be skipped during rendering until the upload completes.*/
+	mesh_data_async       = 1 << 1,
+} mesh_data_;
+SK_MakeFlag(mesh_data_);
 
-SK_API mesh_t      mesh_gen_plane       (vec2 dimensions, vec3 plane_normal, vec3 plane_top_direction, int32_t subdivisions sk_default(0), bool32_t double_sided sk_default(false));
-SK_API mesh_t      mesh_gen_circle      (float diameter,  vec3 plane_normal, vec3 plane_top_direction, int32_t spokes sk_default(16), bool32_t double_sided sk_default(false));
-SK_API mesh_t      mesh_gen_cube        (vec3 dimensions, int32_t subdivisions sk_default(0));
-SK_API mesh_t      mesh_gen_sphere      (float diameter,  int32_t subdivisions sk_default(4));
-SK_API mesh_t      mesh_gen_rounded_cube(vec3 dimensions, float edge_radius, int32_t subdivisions);
-SK_API mesh_t      mesh_gen_cylinder    (float diameter,  float depth, vec3 direction, int32_t subdivisions sk_default(16));
-SK_API mesh_t      mesh_gen_cone        (float diameter,  float depth, vec3 direction, int32_t subdivisions sk_default(16));
+SK_API mesh_t       mesh_find            (const char *name);
+SK_API mesh_t       mesh_create          (void);
+SK_API mesh_t       mesh_copy            (mesh_t mesh);
+SK_API void         mesh_set_id          (mesh_t mesh, const char *id);
+SK_API const char*  mesh_get_id          (const mesh_t mesh);
+SK_API void         mesh_addref          (mesh_t mesh);
+SK_API void         mesh_release         (mesh_t mesh);
+SK_API asset_state_ mesh_asset_state     (const mesh_t mesh);
+SK_API void         mesh_on_load         (mesh_t mesh, void (*asset_on_load_callback)(mesh_t mesh, void *context), void *context);
+SK_API void         mesh_on_load_remove  (mesh_t mesh, void (*asset_on_load_callback)(mesh_t mesh, void *context));
+SK_API void         mesh_draw            (mesh_t mesh, material_t material, matrix transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
+SK_API void         mesh_set_keep_data   (mesh_t mesh, bool32_t keep_data);
+SK_API bool32_t     mesh_get_keep_data   (mesh_t mesh);
+SK_API void         mesh_set_data        (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, const vind_t *in_arr_indices, int32_t index_count, mesh_data_ flags sk_default(mesh_data_calc_bounds), int32_t priority sk_default(0));
+SK_API void         mesh_set_verts       (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, bool32_t calculate_bounds sk_default(true));
+SK_API void         mesh_get_verts       (mesh_t mesh, sk_ref_arr(vert_t) out_arr_vertices, sk_ref(int32_t) out_vertex_count, memory_ reference_mode);
+SK_API int32_t      mesh_get_vert_count  (mesh_t mesh);
+SK_API void         mesh_set_inds        (mesh_t mesh, const vind_t *in_arr_indices, int32_t index_count);
+SK_API void         mesh_get_inds        (mesh_t mesh, sk_ref_arr(vind_t) out_arr_indices,  sk_ref(int32_t) out_index_count, memory_ reference_mode);
+SK_API int32_t      mesh_get_ind_count   (mesh_t mesh);
+SK_API void         mesh_set_draw_inds   (mesh_t mesh, int32_t index_count);
+SK_API void         mesh_set_bounds      (mesh_t mesh, const sk_ref(bounds_t) bounds);
+SK_API bounds_t     mesh_get_bounds      (mesh_t mesh);
+SK_API bool32_t     mesh_has_skin        (mesh_t mesh);
+SK_API void         mesh_set_skin        (mesh_t mesh, const uint16_t *in_arr_bone_ids_4, int32_t bone_id_4_count, const vec4 *in_arr_bone_weights, int32_t bone_weight_count, const matrix *bone_resting_transforms, int32_t bone_count);
+SK_API void         mesh_update_skin     (mesh_t mesh, const matrix *in_arr_bone_transforms, int32_t bone_count);
+SK_API bool32_t     mesh_ray_intersect    (mesh_t mesh, ray_t model_space_ray, cull_ cull_mode, ray_t* out_pt, uint32_t* out_opt_start_inds sk_default(nullptr));
+SK_API bool32_t     mesh_ray_intersect_bvh(mesh_t mesh, ray_t model_space_ray, cull_ cull_mode, ray_t* out_pt, uint32_t* out_start_inds sk_default(nullptr));
+SK_API bool32_t     mesh_get_triangle     (mesh_t mesh, uint32_t triangle_index, vert_t* out_a, vert_t* out_b, vert_t* out_c);
+
+SK_API mesh_t       mesh_gen_plane       (vec2 dimensions, vec3 plane_normal, vec3 plane_top_direction, int32_t subdivisions sk_default(0), bool32_t double_sided sk_default(false));
+SK_API mesh_t       mesh_gen_circle      (float diameter,  vec3 plane_normal, vec3 plane_top_direction, int32_t spokes sk_default(16), bool32_t double_sided sk_default(false));
+SK_API mesh_t       mesh_gen_cube        (vec3 dimensions, int32_t subdivisions sk_default(0));
+SK_API mesh_t       mesh_gen_sphere      (float diameter,  int32_t subdivisions sk_default(4));
+SK_API mesh_t       mesh_gen_rounded_cube(vec3 dimensions, float edge_radius, int32_t subdivisions);
+SK_API mesh_t       mesh_gen_cylinder    (float diameter,  float depth, vec3 direction, int32_t subdivisions sk_default(16));
+SK_API mesh_t       mesh_gen_cone        (float diameter,  float depth, vec3 direction, int32_t subdivisions sk_default(16));
 
 ///////////////////////////////////////////
 
@@ -1244,32 +1260,6 @@ typedef enum tex_type_ {
 	tex_type_image         = tex_type_image_nomips | tex_type_mips,
 } tex_type_;
 SK_MakeFlag(tex_type_);
-
-/*Describes a source image for channel packing via
-  `tex_create_packed`. Provide either a filename or in-memory data.
-  The channel_map is a fixed 4-byte array where each position
-  represents an output channel (RGBA), and the value selects which
-  source channel to read: 'R', 'G', 'B', 'A', or 0 to skip. For
-  example, {0,'G','B',0} copies source green to output green and
-  source blue to output blue.*/
-typedef struct tex_pack_source_t {
-	/*File path for the source image, or NULL if providing
-	  in-memory data instead.*/
-	const char  *filename;
-	/*Pointer to encoded image file data (PNG, JPEG, etc.), or
-	  NULL if using a filename instead.*/
-	const void  *data;
-	/*Size of the data buffer in bytes, ignored when using a
-	  filename.*/
-	size_t       data_size;
-	/*A 4-byte channel map. Each position is an output channel
-	  (0=R, 1=G, 2=B, 3=A). The value selects which source
-	  channel to read: 'R', 'G', 'B', 'A', or 0 to skip.
-	  Examples: {'R',0,0,0} copies source R to output R.
-	  {0,0,0,'R'} copies source R to output A. {0,'B','G',0}
-	  swaps green and blue.*/
-	uint8_t      channel_map[4];
-} tex_pack_source_t;
 
 /*How does the shader grab pixels from the texture? Or more
   specifically, how does the shader grab colors between the provided
@@ -1352,7 +1342,6 @@ SK_API tex_t        tex_create_file         (const char *file_utf8,             
 SK_API tex_t        tex_create_file_arr     (const char **in_arr_files, int32_t file_count, bool32_t srgb_data sk_default(true), int32_t priority sk_default(10));
 SK_API tex_t        tex_create_cubemap_file (const char *cubemap_file_utf8,                 bool32_t srgb_data sk_default(true), int32_t priority sk_default(10));
 SK_API tex_t        tex_create_cubemap_files(const char **in_arr_cube_face_file_xxyyzz,     bool32_t srgb_data sk_default(true), int32_t priority sk_default(10));
-SK_API tex_t        tex_create_packed       (const tex_pack_source_t *in_arr_sources, int32_t source_count, color128 default_color sk_default({}), bool32_t srgb_data sk_default(false), int32_t priority sk_default(10));
 SK_API tex_t        tex_copy                (const tex_t texture, tex_type_ type sk_default(tex_type_image), tex_format_ format sk_default(tex_format_none));
 SK_API bool32_t     tex_gen_mips            (tex_t texture);
 SK_API void         tex_set_id              (tex_t texture, const char *id);
@@ -1597,6 +1586,8 @@ SK_API void              material_set_uint4       (material_t material, const ch
 SK_API void              material_set_matrix      (material_t material, const char *name, matrix   value);
 SK_API bool32_t          material_set_texture     (material_t material, const char *name, tex_t    value);
 SK_API bool32_t          material_set_texture_id  (material_t material, id_hash_t   id,   tex_t    value);
+SK_API bool32_t          material_set_storage     (material_t material, const char *name, compute_buffer_t  buffer);
+SK_API bool32_t          material_set_constant    (material_t material, const char *name, material_buffer_t buffer);
 SK_API float             material_get_float       (material_t material, const char *name);
 SK_API vec2              material_get_vector2     (material_t material, const char *name);
 SK_API vec3              material_get_vector3     (material_t material, const char *name);
@@ -1660,7 +1651,8 @@ SK_API bool32_t         compute_get_bool         (compute_t compute, const char 
 SK_API color128         compute_get_color        (compute_t compute, const char *name);
 SK_API matrix           compute_get_matrix       (compute_t compute, const char *name);
 SK_API bool32_t         compute_set_texture      (compute_t compute, const char *name, tex_t texture);
-SK_API bool32_t         compute_set_buffer       (compute_t compute, const char *name, compute_buffer_t buffer);
+SK_API bool32_t         compute_set_storage      (compute_t compute, const char *name, compute_buffer_t  buffer);
+SK_API bool32_t         compute_set_constant     (compute_t compute, const char *name, material_buffer_t buffer);
 SK_API void             compute_dispatch         (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
 SK_API int32_t          compute_get_param_count  (compute_t compute);
 SK_API void             compute_get_param_info   (compute_t compute, int32_t index, char **out_name, material_param_ *out_type);
@@ -1863,12 +1855,15 @@ SK_API model_t       model_find                    (const char *id);
 SK_API model_t       model_copy                    (model_t model);
 SK_API model_t       model_create                  (void);
 SK_API model_t       model_create_mesh             (mesh_t mesh, material_t material);
-SK_API model_t       model_create_mem              (const char *filename_utf8, const void *data, size_t data_size, shader_t shader sk_default(nullptr));
-SK_API model_t       model_create_file             (const char *filename_utf8, shader_t shader sk_default(nullptr));
+SK_API model_t       model_create_mem              (const char *filename_utf8, const void *data, size_t data_size, shader_t shader sk_default(nullptr), int32_t priority sk_default(10));
+SK_API model_t       model_create_file             (const char *filename_utf8, shader_t shader sk_default(nullptr), int32_t priority sk_default(10));
 SK_API void          model_set_id                  (model_t model, const char *id);
 SK_API const char*   model_get_id                  (const model_t model);
 SK_API void          model_addref                  (model_t model);
 SK_API void          model_release                 (model_t model);
+SK_API asset_state_  model_asset_state             (const model_t model);
+SK_API void          model_on_load                 (model_t model, void (*asset_on_load_callback)(model_t model, void *context), void *context);
+SK_API void          model_on_load_remove          (model_t model, void (*asset_on_load_callback)(model_t model, void *context));
 SK_API void          model_draw                    (model_t model,                               matrix transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void          model_draw_mat                (model_t model, material_t material_override, matrix transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void          model_recalculate_bounds      (model_t model);
@@ -2879,6 +2874,7 @@ SK_API const controller_t*   input_controller                (handed_ hand);
 SK_API button_state_         input_controller_menu           (void);
 SK_API void                  input_controller_model_set      (handed_ hand, model_t model);
 SK_API model_t               input_controller_model_get      (handed_ hand);
+SK_API pose_t                input_controller_detached       (handed_ hand);
 SK_API pose_t                input_head                      (void);
 SK_API pose_t                input_eyes                      (void);
 SK_API button_state_         input_eyes_tracked              (void);
@@ -3261,6 +3257,7 @@ SK_API int32_t     assets_current_task         (void);
 SK_API int32_t     assets_total_tasks          (void);
 SK_API int32_t     assets_current_task_priority(void);
 SK_API void        assets_block_for_priority   (int32_t priority);
+SK_API void        assets_block_until          (asset_t asset, asset_state_ state);
 SK_API int32_t     assets_count                (void);
 SK_API asset_t     assets_get_index            (int32_t index);
 SK_API asset_type_ assets_get_type             (int32_t index);

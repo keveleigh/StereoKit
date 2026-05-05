@@ -14,11 +14,11 @@ struct vsIn {
 	float4 col  : COLOR0;
 };
 struct psIn {
-	float4 pos   : SV_POSITION;
-	float2 uv    : TEXCOORD0;
-	float4 color : COLOR0;
-	float4 world : TEXCOORD1;
-	float2 scale : TEXCOORD2;
+	float4      pos   : SV_POSITION;
+	float2      uv    : TEXCOORD0;
+	min16float4 color : COLOR0;
+	float3      world : TEXCOORD1;
+	float2      scale : TEXCOORD2;
 };
 
 psIn vs(vsIn input, sk_ids_t ids) {
@@ -35,15 +35,16 @@ psIn vs(vsIn input, sk_ids_t ids) {
 	else if (abs(input.norm.x) > 0.75) o.scale = scale.zy;
 	else                               o.scale = scale.xy;
 
-	o.world = mul(input .pos, sk_inst    [ids.inst].world);
-	o.pos   = mul(o.world,    sk_viewproj[ids.view]);
+	float4 world = mul(input .pos, sk_inst    [ids.inst].world);
+	o.pos        = mul(world,      sk_viewproj[ids.view]);
+	o.world      = world.xyz;
 
 	o.uv    = input.uv-0.5;
 	o.color = color * input.col * sk_inst[ids.inst].color;
 	return o;
 }
-float4 ps(psIn input) : SV_TARGET {
-	half   glow = sk_finger_glow(input.world.xyz);
+min16float4 ps(psIn input) : SV_TARGET {
+	min16float glow = sk_finger_glow(input.world);
 	
 	float  border_grow = glow * border_size_grow + border_size;
 	float2 border_pos  = (0.5-abs(input.uv)) * input.scale;
@@ -57,5 +58,5 @@ float4 ps(psIn input) : SV_TARGET {
 	// Transparency.MSAA seems to work pretty nicely here.
 	input.color.a *= max(glow*2, corner / fwidth(corner));
 
-	return float4(lerp(input.color.rgb, float3(1, 1, 1), glow), input.color.a);
+	return min16float4(lerp(input.color.rgb, min16float3(1, 1, 1), glow), input.color.a);
 }

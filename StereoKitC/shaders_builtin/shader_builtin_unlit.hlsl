@@ -16,9 +16,9 @@ struct vsIn {
 	float4 col  : COLOR0;
 };
 struct psIn {
-	float4 pos   : SV_POSITION;
-	float2 uv    : TEXCOORD0;
-	half4  color : COLOR0;
+	float4      pos   : SV_POSITION;
+	float2      uv    : TEXCOORD0;
+	min16float4 color : COLOR0;
 };
 
 psIn vs(vsIn input, sk_ids_t ids) {
@@ -31,6 +31,6 @@ psIn vs(vsIn input, sk_ids_t ids) {
 	return o;
 }
 
-half4 ps(psIn input) : SV_TARGET {
+min16float4 ps(psIn input) : SV_TARGET {
 	return diffuse.Sample(diffuse_s, input.uv) * input.color;
 }

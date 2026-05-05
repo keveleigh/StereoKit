@@ -579,41 +579,4 @@ namespace StereoKit
 		public static implicit operator Pivot(TextAlign a) => (Pivot)a;
 	}
 
-	/// <summary>Describes a source image for channel packing. This is
-	/// the internal marshaling struct matching the native
-	/// tex_pack_source_t layout.</summary>
-	[StructLayout(LayoutKind.Sequential)]
-	internal struct TexPackSourceNative
-	{
-		public IntPtr  filename;
-		public IntPtr  data;
-		public UIntPtr dataSize;
-		public byte    channelR;
-		public byte    channelG;
-		public byte    channelB;
-		public byte    channelA;
-	}
-
-	/// <summary>Describes a source image for channel packing via
-	/// `Tex.FromPacked`. Provide either a Filename or in-memory Data.
-	/// The ChannelMap is a 4-byte array where each position represents
-	/// an output channel (RGBA), and the value selects which source
-	/// channel to read: (byte)'R', (byte)'G', (byte)'B', (byte)'A',
-	/// or 0 to skip.</summary>
-	public struct TexPackSource
-	{
-		/// <summary>File path for the source image, or null if
-		/// providing in-memory data instead.</summary>
-		public string filename;
-		/// <summary>Encoded image file data (PNG, JPEG, etc.), or
-		/// null if using a filename instead.</summary>
-		public byte[] data;
-		/// <summary>A 4-character string mapping source channels to
-		/// output channels. Each position is an output channel (RGBA).
-		/// The character selects which source channel to read: 'R',
-		/// 'G', 'B', 'A', or '_' to skip. For example, "R___" copies
-		/// source R to output R. "_GB_" copies source G and B to
-		/// output G and B.</summary>
-		public string channelMap;
-	}
 }

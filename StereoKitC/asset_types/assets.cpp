@@ -513,12 +513,20 @@ void assets_step() {
 ///////////////////////////////////////////
 
 void assets_shutdown() {
+	// Signal asset threads to drain remaining tasks and exit. Use a single
+	// loop for all threads so we keep calling assets_step while any thread
+	// is still running — the old per-thread sequential loop could miss
+	// queued work from threads that exited while waiting on another.
 	asset_thread_enabled = false;
 	ft_condition_broadcast(asset_tasks_available);
-	for (int32_t i = 0; i < asset_threads.count; i++) {
-		while (asset_threads[i].running) {
-			assets_step();
-			ft_yield();
+	bool any_running = true;
+	while (any_running) {
+		assets_step();
+		ft_yield();
+
+		any_running = false;
+		for (int32_t i = 0; i < asset_threads.count; i++) {
+			if (asset_threads[i].running) { any_running = true; break; }
 		}
 	}
 	asset_threads.free();
@@ -533,7 +541,7 @@ void assets_shutdown() {
 	// assets array on destroy!
 	for (int32_t i = assets.count-1; i >= 0; i--) {
 		// mark as no refs, or assets_destroy will not be pleased.
-		assets[i]->refs = 0; 
+		assets[i]->refs = 0;
 		assets_destroy(assets[i]);
 	}
 
@@ -777,11 +785,6 @@ void assets_complete_task(asset_task_t* task) {
 
 ///////////////////////////////////////////
 
-void assets_task_set_complexity(asset_task_t *task, int32_t complexity) {
-}
-
-///////////////////////////////////////////
-
 void asset_step_task() {
 	asset_task_t* task = assets_acquire_task();
 	if (task == nullptr) return;
@@ -903,11 +906,12 @@ int32_t asset_thread(void *thread_inst_obj) {
 
 ///////////////////////////////////////////
 
-void assets_block_until(asset_header_t *asset, asset_state_ state) {
+void assets_block_until(asset_t asset, asset_state_ state) {
+	asset_header_t *header = (asset_header_t *)asset;
 	// If we're past the required state already, drop out. asset_state_none and
 	// below (error states) means no loading is happening, so blocking will
 	// only put us in an infinite loop.
-	if (asset->state >= state || asset->state <= asset_state_none)
+	if (header->state >= state || header->state <= asset_state_none)
 		return;
 
 	profiler_zone();
@@ -921,7 +925,7 @@ void assets_block_until(asset_header_t *asset, asset_state_ state) {
 		}
 	}
 
-	while (asset->state < state && asset->state >= 0) {
+	while (header->state < state && header->state >= 0) {
 		// Spin the GPU thread so the asset thread doesn't freeze up while
 		// we're waiting on it.
 		assets_step();

@@ -3,6 +3,7 @@
 #include "../libraries/stref.h"
 #include "compute.h"
 #include "compute_buffer.h"
+#include "material.h"
 #include "shader.h"
 #include "texture.h"
 #include "assets.h"
@@ -30,7 +31,7 @@ compute_t compute_create(shader_t shader) {
 	}
 
 	// Allocate tracking arrays for bound resources
-	const sksc_shader_meta_t *meta = shader->gpu_shader.meta;
+	const sksc_shader_meta_t *meta = &shader->gpu_shader.meta;
 
 	result->texture_count = 0;
 	result->buffer_count  = 0;
@@ -207,7 +208,7 @@ matrix compute_get_matrix(compute_t compute, const char *name) {
 ///////////////////////////////////////////
 
 bool32_t compute_set_texture(compute_t compute, const char *name, tex_t texture) {
-	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
+	const sksc_shader_meta_t *meta = &compute->shader->gpu_shader.meta;
 
 	// Find which texture tracking slot this resource maps to
 	int32_t  tex_idx = 0;
@@ -236,8 +237,8 @@ bool32_t compute_set_texture(compute_t compute, const char *name, tex_t texture)
 
 ///////////////////////////////////////////
 
-bool32_t compute_set_buffer(compute_t compute, const char *name, compute_buffer_t buffer) {
-	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
+bool32_t compute_set_storage(compute_t compute, const char *name, compute_buffer_t buffer) {
+	const sksc_shader_meta_t *meta = &compute->shader->gpu_shader.meta;
 
 	// Find which buffer tracking slot this resource maps to
 	int32_t  buf_idx = 0;
@@ -268,11 +269,32 @@ bool32_t compute_set_buffer(compute_t compute, const char *name, compute_buffer_
 
 ///////////////////////////////////////////
 
+bool32_t compute_set_constant(compute_t compute, const char *name, material_buffer_t buffer) {
+	const sksc_shader_meta_t *meta = &compute->shader->gpu_shader.meta;
+	id_hash_t hash = hash_string(name);
+
+	for (uint32_t i = 0; i < meta->buffer_count; i++) {
+		if (meta->buffers[i].name_hash != hash) continue;
+
+		skr_register_ reg = (skr_register_)meta->buffers[i].bind.register_type;
+		if (reg != skr_register_constant) {
+			log_warnf("'%s' is not a constant buffer.", name);
+			return false;
+		}
+
+		skr_compute_set_buffer(&compute->gpu_compute, name, buffer ? &buffer->buffer : nullptr);
+		return true;
+	}
+	return false;
+}
+
+///////////////////////////////////////////
+
 void compute_dispatch(compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
 	// Resolve texture fallbacks at dispatch time so that textures
 	// that finish loading between set and dispatch use the correct
 	// data instead of a stale fallback.
-	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
+	const sksc_shader_meta_t *meta = &compute->shader->gpu_shader.meta;
 	int32_t tex_idx = 0;
 	for (uint32_t i = 0; i < meta->resource_count; i++) {
 		skr_register_ reg = (skr_register_)meta->resources[i].bind.register_type;
@@ -295,19 +317,19 @@ void compute_dispatch(compute_t compute, uint32_t group_count_x, uint32_t group_
 ///////////////////////////////////////////
 
 int32_t compute_get_param_count(compute_t compute) {
-	int32_t buffer_id = compute->shader->gpu_shader.meta->global_buffer_id;
+	int32_t buffer_id = compute->shader->gpu_shader.meta.global_buffer_id;
 	if (buffer_id == -1)
-		return compute->shader->gpu_shader.meta->resource_count;
+		return compute->shader->gpu_shader.meta.resource_count;
 
 	return
-		compute->shader->gpu_shader.meta->buffers[buffer_id].var_count +
-		compute->shader->gpu_shader.meta->resource_count;
+		compute->shader->gpu_shader.meta.buffers[buffer_id].var_count +
+		compute->shader->gpu_shader.meta.resource_count;
 }
 
 ///////////////////////////////////////////
 
 void compute_get_param_info(compute_t compute, int32_t index, char **out_name, material_param_ *out_type) {
-	const sksc_shader_meta_t *meta = compute->shader->gpu_shader.meta;
+	const sksc_shader_meta_t *meta = &compute->shader->gpu_shader.meta;
 
 	int32_t buffer_id = meta->global_buffer_id;
 	int32_t buffer_ct = buffer_id >= 0

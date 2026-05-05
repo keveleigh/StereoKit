@@ -628,67 +628,6 @@ namespace StereoKit
 			return inst == IntPtr.Zero ? null : new Tex(inst);
 		}
 
-		/// <summary>Creates a texture by loading multiple source images
-		/// and packing their channels into a single output texture.
-		/// Each source specifies which channels to contribute via its
-		/// channel map. This is useful for creating packed textures
-		/// like ORM (Occlusion/Roughness/Metallic) from separate
-		/// source images.</summary>
-		/// <param name="sources">Array of source descriptors, each
-		/// providing image data (file or memory) and a channel
-		/// map.</param>
-		/// <param name="defaultColor">Default color for unmapped
-		/// channels.</param>
-		/// <param name="sRGBData">Is the source image data in sRGB
-		/// color space? Color images like photos and albedo maps are
-		/// sRGB, while data textures like normals, roughness, metallic,
-		/// and AO are linear. Image formats like PNG and JPEG don't
-		/// reliably communicate this on their own. Most packed data
-		/// textures are linear.</param>
-		/// <param name="priority">Async loading priority.</param>
-		/// <returns>A Tex asset, or null on failure.</returns>
-		public static Tex FromPacked(TexPackSource[] sources, Color defaultColor = default, bool sRGBData = false, int priority = 10)
-		{
-			int count = sources.Length;
-			List<GCHandle>        pins   = new List<GCHandle>(count);
-			TexPackSourceNative[] native = new TexPackSourceNative[count];
-			try
-			{
-				for (int i = 0; i < count; i++)
-				{
-					if (sources[i].data != null)
-					{
-						GCHandle h = GCHandle.Alloc(sources[i].data, GCHandleType.Pinned);
-						pins.Add(h);
-						native[i].data     = h.AddrOfPinnedObject();
-						native[i].dataSize = (UIntPtr)sources[i].data.Length;
-					}
-					if (sources[i].filename != null)
-					{
-						byte[]   utf8 = NativeHelper.ToUtf8(sources[i].filename);
-						GCHandle h    = GCHandle.Alloc(utf8, GCHandleType.Pinned);
-						pins.Add(h);
-						native[i].filename = h.AddrOfPinnedObject();
-					}
-					string map = sources[i].channelMap;
-					if (map != null)
-					{
-						native[i].channelR = map.Length > 0 ? (byte)map[0] : (byte)0;
-						native[i].channelG = map.Length > 1 ? (byte)map[1] : (byte)0;
-						native[i].channelB = map.Length > 2 ? (byte)map[2] : (byte)0;
-						native[i].channelA = map.Length > 3 ? (byte)map[3] : (byte)0;
-					}
-				}
-				IntPtr inst = NativeAPI.tex_create_packed(native, count, defaultColor, sRGBData, priority);
-				return inst == IntPtr.Zero ? null : new Tex(inst);
-			}
-			finally
-			{
-				for (int i = 0; i < pins.Count; i++)
-					pins[i].Free();
-			}
-		}
-
 		/// <summary>Creates a texture and sets the texture's pixels using a
 		/// color array! This will be an image of type `TexType.Image`, and
 		/// a format of `TexFormat.Rgba32` or `TexFormat.Rgba32Linear`

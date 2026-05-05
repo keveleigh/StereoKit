@@ -250,7 +250,6 @@ bool32_t tex_load_arr_files(asset_task_t *task, asset_header_t *asset, void *job
 	tex_t       tex  = (tex_t)asset;
 
 	tex_set_meta(tex, data->color_width, data->color_height, data->color_format);
-	assets_task_set_complexity(task, data->color_width * data->color_height * data->color_array_count);
 	return true;
 }
 
@@ -332,235 +331,6 @@ void tex_load_on_failure(asset_header_t *asset, void *) {
 	tex_set_fallback(tex, _tex_get_error_fallback(tex));
 }
 
-///////////////////////////////////////////
-// Packed texture loading stages         //
-///////////////////////////////////////////
-
-struct tex_pack_load_t {
-	int32_t       source_count;
-	bool32_t      is_srgb;
-	char        **source_filenames; // NULL entries = memory source
-	void        **source_data;     // Encoded bytes (copied or loaded from file)
-	size_t       *source_sizes;
-	uint8_t     (*source_maps)[4]; // Per-source channel maps
-	color32       default_color;
-	int32_t       out_width;
-	int32_t       out_height;
-	tex_format_   out_format;
-	color32      *packed_data;     // Final output after packing
-};
-
-///////////////////////////////////////////
-
-void tex_pack_load_free(asset_header_t *, void *job_data) {
-	tex_pack_load_t *data = (tex_pack_load_t *)job_data;
-
-	for (int32_t i = 0; i < data->source_count; i++) {
-		if (data->source_filenames != nullptr) sk_free(data->source_filenames[i]);
-		if (data->source_data      != nullptr) sk_free(data->source_data     [i]);
-	}
-	sk_free(data->source_filenames);
-	sk_free(data->source_data);
-	sk_free(data->source_sizes);
-	sk_free(data->source_maps);
-	sk_free(data->packed_data);
-	sk_free(data);
-}
-
-///////////////////////////////////////////
-
-void tex_pack_load_on_failure(asset_header_t *asset, void *) {
-	tex_t tex = (tex_t)asset;
-	tex_set_fallback(tex, _tex_get_error_fallback(tex));
-}
-
-///////////////////////////////////////////
-
-bool32_t tex_pack_load_and_merge(asset_task_t *task, asset_header_t *asset, void *job_data) {
-	profiler_zone();
-
-	tex_pack_load_t *data = (tex_pack_load_t *)job_data;
-	tex_t            tex  = (tex_t)asset;
-
-	// Arrays for decoded source pixel data
-	void   **decoded       = sk_malloc_zero_t(void *, data->source_count);
-	int32_t *decoded_w     = sk_malloc_t(int32_t, data->source_count);
-	int32_t *decoded_h     = sk_malloc_t(int32_t, data->source_count);
-	int32_t  max_w         = 0;
-	int32_t  max_h         = 0;
-	int32_t  pixel_count   = 0;
-
-	struct pack_info_t {
-		int32_t  ch_map[4];   // source channel index per output channel, -1 = skip
-		uint32_t write_mask;  // bitmask of output bytes to write
-		bool     identity;    // true if all active channels map to same position
-		bool     same_size;   // true if source matches output dimensions
-	};
-	pack_info_t *pinfo = nullptr;
-
-	// Load and decode each source
-	for (int32_t i = 0; i < data->source_count; i++) {
-		// Load file if this is a file-based source
-		if (data->source_filenames[i] != nullptr && data->source_data[i] == nullptr) {
-			if (!platform_read_file(data->source_filenames[i], &data->source_data[i], &data->source_sizes[i])) {
-				log_warnf("tex_create_packed: failed to load file '%s'", data->source_filenames[i]);
-				tex->header.state = asset_state_error_not_found;
-				goto fail;
-			}
-		}
-
-		// Decode the image
-		int32_t     w, h, arr, mip;
-		tex_format_ fmt;
-		tex_type_   type = tex_type_image;
-		if (!tex_load_image_data(data->source_data[i], data->source_sizes[i],
-				data->is_srgb, &type, &fmt, &w, &h, &arr, &mip,
-				&decoded[i])) {
-			log_warnf("tex_create_packed: source %d failed to decode", i);
-			tex->header.state = asset_state_error_unsupported;
-			goto fail;
-		}
-
-		// Only RGBA32 formats are supported for channel packing
-		if (fmt != tex_format_rgba32 && fmt != tex_format_rgba32_linear) {
-			log_warnf("tex_create_packed: source %d is not RGBA32 (format %d), HDR and compressed formats are unsupported", i, fmt);
-			tex->header.state = asset_state_error_unsupported;
-			goto fail;
-		}
-
-		decoded_w[i] = w;
-		decoded_h[i] = h;
-		if (w > max_w) max_w = w;
-		if (h > max_h) max_h = h;
-
-		// Free encoded source data now that we've decoded it
-		sk_free(data->source_data[i]);
-	}
-
-	// Update output dimensions (may differ from metadata estimate if
-	// file-based sources had unknown dimensions)
-	data->out_width  = max_w;
-	data->out_height = max_h;
-	tex_set_meta(tex, max_w, max_h, data->out_format);
-	assets_task_set_complexity(task, max_w * max_h);
-
-	// Pre-compute per-source channel mapping info
-	pixel_count = max_w * max_h;
-	uint32_t default_u32;
-	memcpy(&default_u32, &data->default_color, 4);
-
-	pinfo = (pack_info_t *)sk_malloc(sizeof(pack_info_t) * data->source_count);
-
-	for (int32_t s = 0; s < data->source_count; s++) {
-		uint8_t *map       = data->source_maps[s];
-		pinfo[s].write_mask = 0;
-		pinfo[s].identity   = true;
-		pinfo[s].same_size  = (decoded_w[s] == max_w && decoded_h[s] == max_h);
-
-		for (int32_t ch = 0; ch < 4; ch++) {
-			int32_t src_ch = -1;
-			switch (map[ch]) {
-			case 'R': case 'r': src_ch = 0; break;
-			case 'G': case 'g': src_ch = 1; break;
-			case 'B': case 'b': src_ch = 2; break;
-			case 'A': case 'a': src_ch = 3; break;
-			}
-			pinfo[s].ch_map[ch] = src_ch;
-			if (src_ch >= 0) {
-				pinfo[s].write_mask |= 0xFFu << (ch * 8);
-				if (src_ch != ch)
-					pinfo[s].identity = false;
-			}
-		}
-	}
-
-	// Allocate output and fill with default color
-	data->packed_data = sk_malloc_t(color32, pixel_count);
-	{
-		uint32_t *dp = (uint32_t *)data->packed_data;
-		for (int32_t i = 0; i < pixel_count; i++)
-			dp[i] = default_u32;
-	}
-
-	// Pack channels from each source into the output
-	for (int32_t s = 0; s < data->source_count; s++) {
-		if (pinfo[s].write_mask == 0) {
-			sk_free(decoded[s]);
-			decoded[s] = nullptr;
-			continue;
-		}
-
-		uint32_t *src = (uint32_t *)decoded[s];
-		uint32_t *dst = (uint32_t *)data->packed_data;
-
-		if (pinfo[s].same_size && pinfo[s].identity) {
-			// Fast path: same size, channels map to same position.
-			// Masked 32-bit merge — compiler can auto-vectorize this.
-			uint32_t mask = pinfo[s].write_mask;
-			uint32_t keep = ~mask;
-			for (int32_t i = 0; i < pixel_count; i++)
-				dst[i] = (dst[i] & keep) | (src[i] & mask);
-		} else if (pinfo[s].same_size) {
-			// Same size but channels are remapped
-			int32_t *ch_map = pinfo[s].ch_map;
-			for (int32_t i = 0; i < pixel_count; i++) {
-				uint8_t *sp = (uint8_t *)&src[i];
-				uint8_t *dp = (uint8_t *)&dst[i];
-				for (int32_t ch = 0; ch < 4; ch++)
-					if (ch_map[ch] >= 0)
-						dp[ch] = sp[ch_map[ch]];
-			}
-		} else {
-			// Different sizes — nearest-neighbor resampling
-			int32_t  src_w  = decoded_w[s];
-			int32_t  src_h  = decoded_h[s];
-			int32_t *ch_map = pinfo[s].ch_map;
-			for (int32_t y = 0; y < max_h; y++) {
-				int32_t sy = (y * src_h) / max_h;
-				for (int32_t x = 0; x < max_w; x++) {
-					int32_t  sx = (x * src_w) / max_w;
-					uint8_t *sp = (uint8_t *)&src[sy * src_w + sx];
-					uint8_t *dp = (uint8_t *)&dst[y * max_w + x];
-					for (int32_t ch = 0; ch < 4; ch++)
-						if (ch_map[ch] >= 0)
-							dp[ch] = sp[ch_map[ch]];
-				}
-			}
-		}
-
-		sk_free(decoded[s]);
-		decoded[s] = nullptr;
-	}
-	sk_free(pinfo);
-
-	sk_free(decoded);
-	sk_free(decoded_w);
-	sk_free(decoded_h);
-
-	tex->header.state = asset_state_loaded_meta;
-	return true;
-
-fail:
-	for (int32_t i = 0; i < data->source_count; i++)
-		sk_free(decoded[i]);
-	sk_free(decoded);
-	sk_free(decoded_w);
-	sk_free(decoded_h);
-	sk_free(pinfo);
-	tex_set_fallback(tex, _tex_get_error_fallback(tex));
-	return false;
-}
-
-///////////////////////////////////////////
-
-bool32_t tex_pack_upload(asset_task_t *, asset_header_t *asset, void *job_data) {
-	tex_pack_load_t *data = (tex_pack_load_t *)job_data;
-	tex_t            tex  = (tex_t)asset;
-
-	void *arr[] = { data->packed_data };
-	tex_set_color_arr_mips(tex, data->out_width, data->out_height, arr, 1, 1);
-	return true;
-}
 
 ///////////////////////////////////////////
 
@@ -690,7 +460,7 @@ bool tex_load_image_data(void *data, size_t data_size, bool32_t srgb_data, tex_t
 // Texture creation functions            //
 ///////////////////////////////////////////
 
-asset_task_t tex_make_loading_task(tex_t texture, void *load_data, const asset_load_action_t *actions, int32_t action_count, int32_t priority, float complexity) {
+asset_task_t tex_make_loading_task(tex_t texture, void *load_data, const asset_load_action_t *actions, int32_t action_count, int32_t priority, int32_t complexity) {
 	asset_task_t task = {};
 	task.asset        = (asset_header_t*)texture;
 	task.free_data    = tex_load_free;
@@ -725,7 +495,7 @@ tex_t tex_create_file_type(const char *file, tex_type_ type, bool32_t srgb_data,
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(platform_file_size(file))) );
 
 	return result;
 }
@@ -766,7 +536,7 @@ tex_t tex_create_mem_type(tex_type_ type, void *data, size_t data_size, bool32_t
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, (float)(load_data->color_width * load_data->color_height)) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(data_size)) );
 
 	return result;
 }
@@ -775,85 +545,6 @@ tex_t tex_create_mem_type(tex_type_ type, void *data, size_t data_size, bool32_t
 
 tex_t tex_create_mem(void *data, size_t data_size, bool32_t srgb_data, int32_t priority) {
 	return tex_create_mem_type(tex_type_image, data, data_size, srgb_data, priority);
-}
-
-///////////////////////////////////////////
-
-tex_t tex_create_packed(const tex_pack_source_t *in_arr_sources, int32_t source_count, color128 default_color, bool32_t srgb_data, int32_t priority) {
-	if (source_count < 1 || in_arr_sources == nullptr) {
-		log_warn("tex_create_packed: source_count must be >= 1 and sources must not be null");
-		return nullptr;
-	}
-
-	tex_t result = tex_create(tex_type_image);
-	result->header.state = asset_state_loading;
-
-	tex_pack_load_t *load = sk_malloc_zero_t(tex_pack_load_t, 1);
-	load->source_count    = source_count;
-	load->is_srgb         = srgb_data;
-	load->default_color   = color_to_32(default_color);
-	load->out_format      = srgb_data ? tex_format_rgba32 : tex_format_rgba32_linear;
-	load->source_filenames = sk_malloc_zero_t(char *,       source_count);
-	load->source_data      = sk_malloc_zero_t(void *,       source_count);
-	load->source_sizes     = sk_malloc_zero_t(size_t,       source_count);
-	load->source_maps      = (uint8_t(*)[4])sk_calloc(source_count * 4);
-
-	// Copy source data and extract metadata where possible
-	int32_t max_w = 0, max_h = 0;
-	bool    has_file_sources = false;
-	for (int32_t i = 0; i < source_count; i++) {
-		const tex_pack_source_t *src = &in_arr_sources[i];
-
-		memcpy(load->source_maps[i], src->channel_map, 4);
-
-		if (src->filename != nullptr) {
-			load->source_filenames[i] = string_copy(src->filename);
-			has_file_sources = true;
-		} else if (src->data != nullptr && src->data_size > 0) {
-			load->source_data [i] = sk_malloc(src->data_size);
-			memcpy(load->source_data[i], src->data, src->data_size);
-			load->source_sizes[i] = src->data_size;
-
-			// Extract metadata from memory sources for early
-			// dimension info
-			int32_t     w, h, arr, mip;
-			tex_format_ fmt;
-			tex_type_   type = tex_type_image;
-			if (tex_load_image_info(load->source_data[i], load->source_sizes[i], srgb_data, &type, &fmt, &w, &h, &arr, &mip)) {
-				if (w > max_w) max_w = w;
-				if (h > max_h) max_h = h;
-			}
-		} else {
-			log_warnf("tex_create_packed: source %d has no filename or data", i);
-			tex_pack_load_free(&result->header, load);
-			result->header.state = asset_state_error_unsupported;
-			return result;
-		}
-	}
-
-	// Set metadata early if we know the dimensions (all memory sources)
-	load->out_width  = max_w;
-	load->out_height = max_h;
-	if (!has_file_sources && max_w > 0 && max_h > 0)
-		tex_set_meta(result, max_w, max_h, load->out_format);
-
-	static const asset_load_action_t actions[] = {
-		asset_load_action_t { tex_pack_load_and_merge, asset_thread_asset },
-		asset_load_action_t { tex_pack_upload,         asset_thread_asset },
-	};
-
-	asset_task_t task = {};
-	task.asset        = (asset_header_t *)result;
-	task.free_data    = tex_pack_load_free;
-	task.on_failure   = tex_pack_load_on_failure;
-	task.load_data    = load;
-	task.actions      = (asset_load_action_t *)actions;
-	task.action_count = _countof(actions);
-	task.priority     = priority;
-	task.sort         = asset_sort(priority, max_w * max_h);
-	assets_add_task(task);
-
-	return result;
 }
 
 ///////////////////////////////////////////
@@ -938,8 +629,10 @@ tex_t _tex_create_file_arr(tex_type_ type, const char **files, int32_t file_coun
 	load_data->is_srgb    = srgb_data;
 	load_data->file_count = file_count;
 	load_data->file_names = sk_malloc_t(char *, file_count);
+	size_t total_size = 0;
 	for (int32_t i = 0; i < file_count; i++) {
 		load_data->file_names[i] = string_copy(files[i]);
+		total_size              += platform_file_size(files[i]);
 	}
 
 	static const asset_load_action_t actions[] = {
@@ -947,7 +640,7 @@ tex_t _tex_create_file_arr(tex_type_ type, const char **files, int32_t file_coun
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(total_size)) );
 
 	return result;
 }
@@ -1006,7 +699,6 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 		}
 
 		tex_set_meta(tex, size_w, size_h, data->color_format);
-		assets_task_set_complexity(task, size_w * size_h * 6);
 		return (bool32_t)true;
 	};
 
@@ -1099,7 +791,7 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 		asset_load_action_t {tex_load_arr_parse, asset_thread_asset},
 		asset_load_action_t {upload,             asset_thread_asset},
 	};
-	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, 0) );
+	assets_add_task( tex_make_loading_task(result, load_data, actions, _countof(actions), priority, asset_complexity_bytes(platform_file_size(cubemap_file))) );
 
 	return result;
 }
@@ -1162,11 +854,23 @@ void tex_add_zbuffer(tex_t texture, tex_format_ format) {
 		return;
 	}
 
+	// If we already have a zbuffer that matches the color texture's
+	// resolution and sample count, keep it.
+	int32_t msaa = skr_tex_get_multisample(&texture->gpu_tex);
+	if (texture->depth_buffer != nullptr
+		&& texture->depth_buffer->width  == texture->width
+		&& texture->depth_buffer->height == texture->height
+		&& skr_tex_get_multisample(&texture->depth_buffer->gpu_tex) == msaa) {
+		return;
+	}
+
+	if (texture->depth_buffer != nullptr) tex_release(texture->depth_buffer);
+
 	char id[64];
 	assets_unique_name(asset_type_tex, "sk/tex/zbuffer/", id, sizeof(id));
-	texture->depth_buffer = tex_create(tex_type_depth, format);
+	texture->depth_buffer = tex_create(tex_type_zbuffer, format);
 	tex_set_id       (texture->depth_buffer, id);
-	tex_set_color_arr(texture->depth_buffer, texture->width, texture->height, nullptr, texture->gpu_tex.layer_count, skr_tex_get_multisample(&texture->gpu_tex), nullptr);
+	tex_set_color_arr(texture->depth_buffer, texture->width, texture->height, nullptr, texture->gpu_tex.layer_count, msaa, nullptr);
 	texture->depth_buffer->header.state = asset_state_loaded;
 }
 
@@ -1214,6 +918,7 @@ void tex_set_surface(tex_t texture, void *native_surface, tex_type_ type, int64_
 		skr_tex_external_info_t info = {};
 		info.image         = (VkImage)native_surface;
 		info.format        = skr_tex_fmt_from_native((uint32_t)native_fmt);
+		info.flags         = tex_type_to_skr_flags(type);
 		info.size          = { width, height, 1 };
 		info.sampler       = tex_get_skr_sampler(texture);
 		info.multisample   = multisample;
@@ -1569,7 +1274,7 @@ void tex_set_mem(tex_t texture, void* data, size_t data_size, bool32_t srgb_data
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
 		asset_load_action_t {tex_load_arr_upload, asset_thread_asset},
 	};
-	asset_task_t task = tex_make_loading_task(texture, load_data, actions, _countof(actions), priority, (float)(load_data->color_width * load_data->color_height));
+	asset_task_t task = tex_make_loading_task(texture, load_data, actions, _countof(actions), priority, asset_complexity_bytes(data_size));
 	if (blocking) {
 		for (int32_t i = 0; i < 2; i++) {
 			if (!actions[i].action(&task, &texture->header, load_data))

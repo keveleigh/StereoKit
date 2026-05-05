@@ -12,7 +12,8 @@ cbuffer stereokit_buffer : register(b1) {
 	float4   sk_camera_pos [2];
 	float4   sk_camera_dir [2];
 	float4   sk_fingertip  [2];
-	float4   sk_cubemap_i;
+	float4   sk_cubemap_i;   // .xy = width/height, .z  = mip count, .w = unused
+	float4   sk_screen_size; // .xy = width/height, .zw = 1/width, 1/height
 	float    sk_time;
 	uint     sk_view_count;
 	uint     sk_eye_offset;
@@ -89,8 +90,8 @@ float sk_finger_distance(float3 world_pos) {
 
 ///////////////////////////////////////////
 
-half sk_finger_glow(float3 world_pos) {
-	half d_sq = sk_finger_distance_sq(world_pos);
+min16float sk_finger_glow(float3 world_pos) {
+	min16float d_sq = sk_finger_distance_sq(world_pos);
 	return max(0, 1/(1+10000*d_sq)-0.0069h);
 }
 

@@ -11,9 +11,9 @@ struct vsIn {
 	float4 color    : COLOR0;
 };
 struct psIn {
-	float4 pos     : SV_Position;
-	float3 world   : TEXCOORD0;
-	half3  color   : COLOR0;
+	float4      pos   : SV_Position;
+	float3      world : TEXCOORD0;
+	min16float3 color : COLOR0;
 };
 
 psIn vs(vsIn input, sk_ids_t ids) {
@@ -45,7 +45,7 @@ psIn vs(vsIn input, sk_ids_t ids) {
 	return o;
 }
 
-float4 ps(psIn input) : SV_TARGET {
-	half   glow = sk_finger_glow(input.world) * 0.2h;
-	return float4(lerp(input.color.rgb, float3(2,2,2), glow), 1);
+min16float4 ps(psIn input) : SV_TARGET {
+	min16float glow = sk_finger_glow(input.world) * 0.2h;
+	return min16float4(lerp(input.color.rgb, min16float3(2,2,2), glow), 1);
 }
