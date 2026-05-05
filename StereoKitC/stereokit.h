@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
- * Copyright (c) 2019-2025 Nick Klingensmith
- * Copyright (c) 2023-2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2019-2026 Nick Klingensmith
+ * Copyright (c) 2023-2026 Qualcomm Technologies, Inc.
  */
 
 #pragma once
@@ -2764,6 +2764,9 @@ typedef enum input_pose_ {
 	/*The left hand/controller aim pose. This points forward from the hand
 	  like a laser pointer, useful for UI interaction at a distance.*/
 	input_pose_l_aim,
+	/*The left pose of a "detached controller", when the user has both hands
+	  and controllers active in the scene.*/
+	input_pose_l_detached,
 	/*The right hand/controller grip pose, centered in the hand where
 	  you'd hold something like a sword hilt or a tool handle.*/
 	input_pose_r_grip,
@@ -2775,6 +2778,9 @@ typedef enum input_pose_ {
 	  hand like a laser pointer, useful for UI interaction at a
 	  distance.*/
 	input_pose_r_aim,
+	/*The right pose of a "detached controller", when the user has both hands
+	  and controllers active in the scene.*/
+	input_pose_r_detached,
 
 	/*Total number of input pose types.*/
 	input_pose_max

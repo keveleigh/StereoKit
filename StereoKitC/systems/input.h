@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
- * Copyright (c) 2019-2025 Nick Klingensmith
- * Copyright (c) 2024-2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2019-2026 Nick Klingensmith
+ * Copyright (c) 2024-2026 Qualcomm Technologies, Inc.
  */
 
 #pragma once
@@ -9,53 +9,6 @@
 #include "../stereokit.h"
 
 namespace sk {
-
-typedef enum input_pose_ {
-	input_pose_eyes,
-	input_pose_l_grip,
-	input_pose_l_palm,
-	input_pose_l_aim,
-	input_pose_r_grip,
-	input_pose_r_palm,
-	input_pose_r_aim,
-
-	detached_pose_l,
-	detached_pose_r,
-
-	input_pose_max
-} input_pose_;
-
-typedef enum input_float_ {
-	input_float_l_trigger,
-	input_float_l_grip,
-	input_float_r_trigger,
-	input_float_r_grip,
-
-	input_float_max
-} input_float_;
-
-typedef enum input_button_ {
-	input_button_l_aim_ready,
-	input_button_l_stick,
-	input_button_l_x1,
-	input_button_l_x2,
-	input_button_l_menu,
-	input_button_r_aim_ready,
-	input_button_r_stick,
-	input_button_r_x1,
-	input_button_r_x2,
-	input_button_r_menu,
-
-	input_button_bool_max
-} input_button_;
-
-
-typedef enum input_xy_ {
-	input_xy_l_stick,
-	input_xy_r_stick,
-
-	input_xy_max
-} xra_xy_;
 
 bool          input_init               ();
 void          input_shutdown           ();

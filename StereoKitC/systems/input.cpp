@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
- * Copyright (c) 2019-2025 Nick Klingensmith
- * Copyright (c) 2024-2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2019-2026 Nick Klingensmith
+ * Copyright (c) 2024-2026 Qualcomm Technologies, Inc.
  */
 
 #include "../stereokit.h"
@@ -472,8 +472,8 @@ void input_controller_set_hand(handed_ hand, bool is_hand) {
 ///////////////////////////////////////////
 
 pose_t input_controller_detached(handed_ hand) {
-	input_pose_ detached_pose = hand == handed_left ? detached_pose_l : detached_pose_r;
-	return input_pose_get_world(detached_pose);
+	input_pose_ detached_pose = hand == handed_left ? input_pose_l_detached : input_pose_r_detached;
+	return input_pose(detached_pose);
 }
 
 ///////////////////////////////////////////

@@ -1576,6 +1576,9 @@ namespace StereoKit
 		/// <summary>The left hand/controller aim pose. This points forward from the hand
 		/// like a laser pointer, useful for UI interaction at a distance.</summary>
 		LAim,
+		/// <summary>The left pose of a "detached controller", when the user has both hands
+		/// and controllers active in the scene.</summary>
+		LDetached,
 		/// <summary>The right hand/controller grip pose, centered in the hand where
 		/// you'd hold something like a sword hilt or a tool handle.</summary>
 		RGrip,
@@ -1587,6 +1590,9 @@ namespace StereoKit
 		/// hand like a laser pointer, useful for UI interaction at a
 		/// distance.</summary>
 		RAim,
+		/// <summary>The right pose of a "detached controller", when the user has both hands
+		/// and controllers active in the scene.</summary>
+		RDetached,
 		/// <summary>Total number of input pose types.</summary>
 		Max,
 	}
