@@ -2873,9 +2873,10 @@ typedef enum input_haptic_ {
 } input_haptic_;
 
 /*Bit flags describing what playback modes a haptic output currently
-  supports. Querable via Input.HapticCaps. The set of supported modes
-  may change at runtime as the user picks up or sets down a controller,
-  or as the active interaction profile changes.*/
+  supports. Queryable via Input.HapticCaps. The set of supported modes
+  may change at runtime whenever the active OpenXR interaction profile
+  changes, which typically happens as the user picks up, sets down, or
+  swaps a controller.*/
 typedef enum input_haptic_caps_ {
 	/*No haptic output is available right now (e.g. no controller is
 	  bound, or the haptic action isn't active).*/
@@ -2888,7 +2889,7 @@ typedef enum input_haptic_caps_ {
 	  the XR_FB_haptic_pcm OpenXR extension.*/
 	input_haptic_caps_waveform = 1 << 1,
 	/*Amplitude envelope playback via Input.HapticCurve. Requires the
-	  XR_FB_haptic_pcm OpenXR extension.*/
+	  XR_FB_haptic_amplitude_envelope OpenXR extension.*/
 	input_haptic_caps_curve    = 1 << 2,
 } input_haptic_caps_;
 
