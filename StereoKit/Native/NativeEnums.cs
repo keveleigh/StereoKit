@@ -1559,6 +1559,184 @@ namespace StereoKit
 		Menu,
 	}
 
+	/// <summary>Index values for input poses. These represent tracked spatial poses
+	/// from the XR system, such as hand or controller positions and
+	/// orientations.</summary>
+	public enum InputPose {
+		/// <summary>The user's eye gaze, where they're looking in the world. Requires
+		/// eye tracking hardware and permissions to provide meaningful data.</summary>
+		Eyes,
+		/// <summary>The left hand/controller grip pose, centered in the hand where you'd
+		/// hold something like a sword hilt or a tool handle.</summary>
+		LGrip,
+		/// <summary>The left hand/controller palm pose, located at the surface of the
+		/// palm facing outward. This uses the palm pose OpenXR extension when
+		/// available, and falls back to an approximation when it's not.</summary>
+		LPalm,
+		/// <summary>The left hand/controller aim pose. This points forward from the hand
+		/// like a laser pointer, useful for UI interaction at a distance.</summary>
+		LAim,
+		/// <summary>The left pose of a "detached controller", when the user has both hands
+		/// and controllers active in the scene.</summary>
+		LDetached,
+		/// <summary>The right hand/controller grip pose, centered in the hand where
+		/// you'd hold something like a sword hilt or a tool handle.</summary>
+		RGrip,
+		/// <summary>The right hand/controller palm pose, located at the surface of the
+		/// palm facing outward. This uses the palm pose OpenXR extension when
+		/// available, and falls back to an approximation when it's not.</summary>
+		RPalm,
+		/// <summary>The right hand/controller aim pose. This points forward from the
+		/// hand like a laser pointer, useful for UI interaction at a
+		/// distance.</summary>
+		RAim,
+		/// <summary>The right pose of a "detached controller", when the user has both hands
+		/// and controllers active in the scene.</summary>
+		RDetached,
+		/// <summary>Total number of input pose types.</summary>
+		Max,
+	}
+
+	/// <summary>Index values for analog float inputs from controllers. These are
+	/// inputs that range from 0-1 based on how far the user has pressed
+	/// them.</summary>
+	public enum InputFloat {
+		/// <summary>The trigger on the left controller, where the user's index finger
+		/// typically rests.</summary>
+		LTrigger,
+		/// <summary>The grip button on the left controller, usually where the remaining
+		/// fingers sit.</summary>
+		LGrip,
+		/// <summary>The trigger on the right controller, where the user's index finger
+		/// typically rests.</summary>
+		RTrigger,
+		/// <summary>The grip button on the right controller, usually where the remaining
+		/// fingers sit.</summary>
+		RGrip,
+		/// <summary>Total number of input float types.</summary>
+		Max,
+	}
+
+	/// <summary>Index values for binary button inputs from controllers. These are
+	/// on/off inputs that provide button_state_ information.</summary>
+	public enum InputButton {
+		/// <summary>Is the left hand ready to interact at a distance? This maps to the
+		/// pinch_ext/ready_ext binding from the hand interaction extension, and
+		/// factors in facing direction and pinch readiness.</summary>
+		LAimReady,
+		/// <summary>The left controller's thumbstick button, pressed by clicking the
+		/// stick inward. This has nothing to do with the stick's XY position.</summary>
+		LStick,
+		/// <summary>The lower of the two left thumb buttons, sometimes labelled X, and
+		/// sometimes A.</summary>
+		LX1,
+		/// <summary>The upper of the two left thumb buttons, sometimes labelled Y, and
+		/// sometimes B.</summary>
+		LX2,
+		/// <summary>The menu or settings button on the left controller.</summary>
+		LMenu,
+		/// <summary>Is the right hand ready to interact at a distance? This maps to the
+		/// pinch_ext/ready_ext binding from the hand interaction extension, and
+		/// factors in facing direction and pinch readiness.</summary>
+		RAimReady,
+		/// <summary>The right controller's thumbstick button, pressed by clicking the
+		/// stick inward. This has nothing to do with the stick's XY position.</summary>
+		RStick,
+		/// <summary>The lower of the two right thumb buttons, sometimes labelled X, and
+		/// sometimes A.</summary>
+		RX1,
+		/// <summary>The upper of the two right thumb buttons, sometimes labelled Y, and
+		/// sometimes B.</summary>
+		RX2,
+		/// <summary>The menu or settings button on the right controller.</summary>
+		RMenu,
+		/// <summary>Total number of input button types.</summary>
+		Max,
+	}
+
+	/// <summary>Index values for 2D axis inputs from controllers, like thumbsticks.
+	/// These provide a vec2 with X and Y ranging from -1 to 1.</summary>
+	public enum InputXY {
+		/// <summary>The thumbstick on the left controller. X is left/right, Y is
+		/// forward/back.</summary>
+		LStick,
+		/// <summary>The thumbstick on the right controller. X is left/right, Y is
+		/// forward/back.</summary>
+		RStick,
+		/// <summary>Total number of input XY types.</summary>
+		Max,
+	}
+
+	/// <summary>Index values for haptic outputs on controllers. These represent a
+	/// destination for vibration playback, requested via Input.HapticPulse,
+	/// Input.HapticWaveform, or Input.HapticCurve.</summary>
+	public enum InputHaptic {
+		/// <summary>The left controller's primary haptic actuator.</summary>
+		LController,
+		/// <summary>The right controller's primary haptic actuator.</summary>
+		RController,
+		/// <summary>Total number of haptic outputs.</summary>
+		Max,
+	}
+
+	/// <summary>Bit flags describing what playback modes a haptic output currently
+	/// supports. Queryable via Input.HapticCaps. The set of supported modes
+	/// may change at runtime whenever the active OpenXR interaction profile
+	/// changes, which typically happens as the user picks up, sets down, or
+	/// swaps a controller.</summary>
+	[Flags]
+	public enum InputHapticCaps {
+		/// <summary>No haptic output is available right now (e.g. no controller is
+		/// bound, or the haptic action isn't active).</summary>
+		None         = 0,
+		/// <summary>Simple frequency / amplitude / duration vibration via
+		/// Input.HapticPulse. Supported by every controller that has any
+		/// haptic actuator.</summary>
+		Pulse        = 1 << 0,
+		/// <summary>Sample-by-sample PCM playback via Input.HapticWaveform. Requires
+		/// the XR_FB_haptic_pcm OpenXR extension.</summary>
+		Waveform     = 1 << 1,
+		/// <summary>Amplitude envelope playback via Input.HapticCurve. Requires the
+		/// XR_FB_haptic_amplitude_envelope OpenXR extension.</summary>
+		Curve        = 1 << 2,
+	}
+
+	/// <summary>A bit-flag describing the tracking state of a pose, with separate
+	/// bits for position and orientation. The PosAny, RotAny, and Any
+	/// combinations are handy when you only care if there's tracking at
+	/// all, and not whether it's directly measured or just an educated
+	/// guess.</summary>
+	[Flags]
+	public enum PoseState {
+		/// <summary>The pose has no tracking at all, neither position nor
+		/// orientation should be trusted.</summary>
+		Lost         = 0,
+		/// <summary>The position isn't directly tracked, but the system has an
+		/// educated guess for it. For example, a controller's accelerometer
+		/// can keep dead-reckoning the position for a short time after it
+		/// leaves optical view.</summary>
+		PosInferred  = 1 << 0,
+		/// <summary>The orientation isn't directly tracked, but the system has an
+		/// educated guess for it, often from an IMU after the source has
+		/// left direct view.</summary>
+		RotInferred  = 1 << 1,
+		/// <summary>The position is actively tracked by the underlying hardware,
+		/// to the best of its ability.</summary>
+		PosKnown     = 1 << 2,
+		/// <summary>The orientation is actively tracked by the underlying hardware,
+		/// to the best of its ability.</summary>
+		RotKnown     = 1 << 3,
+		/// <summary>Matches any positional tracking, whether the position is
+		/// directly known or just inferred.</summary>
+		PosAny       = PosInferred | PosKnown,
+		/// <summary>Matches any orientation tracking, whether the orientation is
+		/// directly known or just inferred.</summary>
+		RotAny       = RotInferred | RotKnown,
+		/// <summary>Matches any tracking at all, on position or orientation. A pose
+		/// with no overlap with this is fully lost.</summary>
+		Any          = PosInferred | PosKnown | RotInferred | RotKnown,
+	}
+
 	/// <summary>This is a bit flag that describes what an anchoring system is capable of
 	/// doing.</summary>
 	[Flags]

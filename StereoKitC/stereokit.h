@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
- * Copyright (c) 2019-2025 Nick Klingensmith
- * Copyright (c) 2023-2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2019-2026 Nick Klingensmith
+ * Copyright (c) 2023-2026 Qualcomm Technologies, Inc.
  */
 
 #pragma once
@@ -2747,10 +2747,190 @@ typedef enum controller_key_ {
 	controller_key_menu,
 } controller_key_;
 
+/*Index values for input poses. These represent tracked spatial poses
+  from the XR system, such as hand or controller positions and
+  orientations.*/
+typedef enum input_pose_ {
+	/*The user's eye gaze, where they're looking in the world. Requires
+	  eye tracking hardware and permissions to provide meaningful data.*/
+	input_pose_eyes,
+	/*The left hand/controller grip pose, centered in the hand where you'd
+	  hold something like a sword hilt or a tool handle.*/
+	input_pose_l_grip,
+	/*The left hand/controller palm pose, located at the surface of the
+	  palm facing outward. This uses the palm pose OpenXR extension when
+	  available, and falls back to an approximation when it's not.*/
+	input_pose_l_palm,
+	/*The left hand/controller aim pose. This points forward from the hand
+	  like a laser pointer, useful for UI interaction at a distance.*/
+	input_pose_l_aim,
+	/*The left pose of a "detached controller", when the user has both hands
+	  and controllers active in the scene.*/
+	input_pose_l_detached,
+	/*The right hand/controller grip pose, centered in the hand where
+	  you'd hold something like a sword hilt or a tool handle.*/
+	input_pose_r_grip,
+	/*The right hand/controller palm pose, located at the surface of the
+	  palm facing outward. This uses the palm pose OpenXR extension when
+	  available, and falls back to an approximation when it's not.*/
+	input_pose_r_palm,
+	/*The right hand/controller aim pose. This points forward from the
+	  hand like a laser pointer, useful for UI interaction at a
+	  distance.*/
+	input_pose_r_aim,
+	/*The right pose of a "detached controller", when the user has both hands
+	  and controllers active in the scene.*/
+	input_pose_r_detached,
+
+	/*Total number of input pose types.*/
+	input_pose_max
+} input_pose_;
+
+/*Index values for analog float inputs from controllers. These are
+  inputs that range from 0-1 based on how far the user has pressed
+  them.*/
+typedef enum input_float_ {
+	/*The trigger on the left controller, where the user's index finger
+	  typically rests.*/
+	input_float_l_trigger,
+	/*The grip button on the left controller, usually where the remaining
+	  fingers sit.*/
+	input_float_l_grip,
+	/*The trigger on the right controller, where the user's index finger
+	  typically rests.*/
+	input_float_r_trigger,
+	/*The grip button on the right controller, usually where the remaining
+	  fingers sit.*/
+	input_float_r_grip,
+
+	/*Total number of input float types.*/
+	input_float_max
+} input_float_;
+
+/*Index values for binary button inputs from controllers. These are
+  on/off inputs that provide button_state_ information.*/
+typedef enum input_button_ {
+	/*Is the left hand ready to interact at a distance? This maps to the
+	  pinch_ext/ready_ext binding from the hand interaction extension, and
+	  factors in facing direction and pinch readiness.*/
+	input_button_l_aim_ready,
+	/*The left controller's thumbstick button, pressed by clicking the
+	  stick inward. This has nothing to do with the stick's XY position.*/
+	input_button_l_stick,
+	/*The lower of the two left thumb buttons, sometimes labelled X, and
+	  sometimes A.*/
+	input_button_l_x1,
+	/*The upper of the two left thumb buttons, sometimes labelled Y, and
+	  sometimes B.*/
+	input_button_l_x2,
+	/*The menu or settings button on the left controller.*/
+	input_button_l_menu,
+	/*Is the right hand ready to interact at a distance? This maps to the
+	  pinch_ext/ready_ext binding from the hand interaction extension, and
+	  factors in facing direction and pinch readiness.*/
+	input_button_r_aim_ready,
+	/*The right controller's thumbstick button, pressed by clicking the
+	  stick inward. This has nothing to do with the stick's XY position.*/
+	input_button_r_stick,
+	/*The lower of the two right thumb buttons, sometimes labelled X, and
+	  sometimes A.*/
+	input_button_r_x1,
+	/*The upper of the two right thumb buttons, sometimes labelled Y, and
+	  sometimes B.*/
+	input_button_r_x2,
+	/*The menu or settings button on the right controller.*/
+	input_button_r_menu,
+
+	/*Total number of input button types.*/
+	input_button_max
+} input_button_;
+
+/*Index values for 2D axis inputs from controllers, like thumbsticks.
+  These provide a vec2 with X and Y ranging from -1 to 1.*/
+typedef enum input_xy_ {
+	/*The thumbstick on the left controller. X is left/right, Y is
+	  forward/back.*/
+	input_xy_l_stick,
+	/*The thumbstick on the right controller. X is left/right, Y is
+	  forward/back.*/
+	input_xy_r_stick,
+
+	/*Total number of input XY types.*/
+	input_xy_max
+} input_xy_;
+
+/*Index values for haptic outputs on controllers. These represent a
+  destination for vibration playback, requested via Input.HapticPulse,
+  Input.HapticWaveform, or Input.HapticCurve.*/
+typedef enum input_haptic_ {
+	/*The left controller's primary haptic actuator.*/
+	input_haptic_l_controller,
+	/*The right controller's primary haptic actuator.*/
+	input_haptic_r_controller,
+
+	/*Total number of haptic outputs.*/
+	input_haptic_max
+} input_haptic_;
+
+/*Bit flags describing what playback modes a haptic output currently
+  supports. Queryable via Input.HapticCaps. The set of supported modes
+  may change at runtime whenever the active OpenXR interaction profile
+  changes, which typically happens as the user picks up, sets down, or
+  swaps a controller.*/
+typedef enum input_haptic_caps_ {
+	/*No haptic output is available right now (e.g. no controller is
+	  bound, or the haptic action isn't active).*/
+	input_haptic_caps_none     = 0,
+	/*Simple frequency / amplitude / duration vibration via
+	  Input.HapticPulse. Supported by every controller that has any
+	  haptic actuator.*/
+	input_haptic_caps_pulse    = 1 << 0,
+	/*Sample-by-sample PCM playback via Input.HapticWaveform. Requires
+	  the XR_FB_haptic_pcm OpenXR extension.*/
+	input_haptic_caps_waveform = 1 << 1,
+	/*Amplitude envelope playback via Input.HapticCurve. Requires the
+	  XR_FB_haptic_amplitude_envelope OpenXR extension.*/
+	input_haptic_caps_curve    = 1 << 2,
+} input_haptic_caps_;
+
+/*A bit-flag describing the tracking state of a pose, with separate
+  bits for position and orientation. The PosAny, RotAny, and Any
+  combinations are handy when you only care if there's tracking at
+  all, and not whether it's directly measured or just an educated
+  guess.*/
+typedef enum pose_state_ {
+	/*The pose has no tracking at all, neither position nor
+	  orientation should be trusted.*/
+	pose_state_lost         = 0,
+	/*The position isn't directly tracked, but the system has an
+	  educated guess for it. For example, a controller's accelerometer
+	  can keep dead-reckoning the position for a short time after it
+	  leaves optical view.*/
+	pose_state_pos_inferred = 1 << 0,
+	/*The orientation isn't directly tracked, but the system has an
+	  educated guess for it, often from an IMU after the source has
+	  left direct view.*/
+	pose_state_rot_inferred = 1 << 1,
+	/*The position is actively tracked by the underlying hardware,
+	  to the best of its ability.*/
+	pose_state_pos_known    = 1 << 2,
+	/*The orientation is actively tracked by the underlying hardware,
+	  to the best of its ability.*/
+	pose_state_rot_known    = 1 << 3,
+
+	/*Matches any positional tracking, whether the position is
+	  directly known or just inferred.*/
+	pose_state_pos_any = pose_state_pos_inferred | pose_state_pos_known,
+	/*Matches any orientation tracking, whether the orientation is
+	  directly known or just inferred.*/
+	pose_state_rot_any = pose_state_rot_inferred | pose_state_rot_known,
+	/*Matches any tracking at all, on position or orientation. A pose
+	  with no overlap with this is fully lost.*/
+	pose_state_any     = pose_state_pos_inferred | pose_state_pos_known | pose_state_rot_inferred | pose_state_rot_known,
+} pose_state_;
+
 typedef int32_t hand_sim_id_t;
 
-SK_API int32_t               input_pointer_count             (input_source_ filter sk_default(input_source_any));
-SK_API pointer_t             input_pointer                   (int32_t index, input_source_ filter sk_default(input_source_any));
 SK_API const hand_t*         input_hand                      (handed_ hand);
 SK_API void                  input_hand_override             (handed_ hand, const hand_joint_t *in_arr_hand_joints);
 SK_API hand_source_          input_hand_source               (handed_ hand);
@@ -2763,7 +2943,6 @@ SK_API pose_t                input_head                      (void);
 SK_API pose_t                input_eyes                      (void);
 SK_API button_state_         input_eyes_tracked              (void);
 SK_API const mouse_t*        input_mouse                     (void);
-SK_API button_state_         input_key                       (key_ key);
 SK_API void                  input_key_inject_press          (key_ key);
 SK_API void                  input_key_inject_release        (key_ key);
 SK_API char32_t              input_text_consume              (void);
@@ -2775,10 +2954,26 @@ SK_API void                  input_hand_material             (handed_ hand, mate
 SK_API bool32_t              input_get_finger_glow           (void);
 SK_API void                  input_set_finger_glow           (bool32_t visible);
 
+SK_API pose_t                input_pose                      (input_pose_   pose_type);
+SK_API pose_state_           input_pose_state                (input_pose_   pose_type);
+SK_API float                 input_float                     (input_float_  float_type);
+SK_API button_state_         input_button                    (input_button_ button_type);
+SK_API vec2                  input_xy                        (input_xy_     xy_type);
+SK_API button_state_         input_key                       (key_ key);
+
+SK_API input_haptic_caps_    input_haptic_caps               (input_haptic_ haptic_type);
+SK_API float                 input_haptic_preferred_rate     (input_haptic_ haptic_type);
+SK_API void                  input_haptic_pulse              (input_haptic_ haptic_type, float frequency, float amplitude, float duration_seconds);
+SK_API void                  input_haptic_waveform           (input_haptic_ haptic_type, const float* in_arr_samples,    int32_t sample_count, float sample_rate_hz, bool32_t append, int32_t* out_prev_samples_consumed sk_default(nullptr));
+SK_API void                  input_haptic_curve              (input_haptic_ haptic_type, const float* in_arr_amplitudes, int32_t sample_count, float sample_rate_hz);
+SK_API void                  input_haptic_stop               (input_haptic_ haptic_type);
+
 SK_API hand_sim_id_t         input_hand_sim_pose_add         (const pose_t* in_arr_palm_relative_hand_joints_25, controller_key_ button1, controller_key_ and_button2 sk_default(controller_key_none), key_ or_hotkey1 sk_default(key_none), key_ and_hotkey2 sk_default(key_none));
 SK_API void                  input_hand_sim_pose_remove      (hand_sim_id_t id);
 SK_API void                  input_hand_sim_pose_clear       (void);
 
+SK_API SK_DEPRECATED int32_t input_pointer_count             (input_source_ filter sk_default(input_source_any));
+SK_API SK_DEPRECATED pointer_t input_pointer                 (int32_t index, input_source_ filter sk_default(input_source_any));
 SK_API SK_DEPRECATED void    input_subscribe                 (input_source_ source, button_state_ input_event, void (*input_event_callback)(input_source_ source, button_state_ input_event, const sk_ref(pointer_t) in_pointer));
 SK_API SK_DEPRECATED void    input_unsubscribe               (input_source_ source, button_state_ input_event, void (*input_event_callback)(input_source_ source, button_state_ input_event, const sk_ref(pointer_t) in_pointer));
 SK_API SK_DEPRECATED void    input_fire_event                (input_source_ source, button_state_ input_event, const sk_ref(pointer_t) pointer);
