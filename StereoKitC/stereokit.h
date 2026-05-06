@@ -2893,15 +2893,39 @@ typedef enum input_haptic_caps_ {
 	input_haptic_caps_curve    = 1 << 2,
 } input_haptic_caps_;
 
+/*A bit-flag describing the tracking state of a pose, with separate
+  bits for position and orientation. The PosAny, RotAny, and Any
+  combinations are handy when you only care if there's tracking at
+  all, and not whether it's directly measured or just an educated
+  guess.*/
 typedef enum pose_state_ {
+	/*The pose has no tracking at all, neither position nor
+	  orientation should be trusted.*/
 	pose_state_lost         = 0,
+	/*The position isn't directly tracked, but the system has an
+	  educated guess for it. For example, a controller's accelerometer
+	  can keep dead-reckoning the position for a short time after it
+	  leaves optical view.*/
 	pose_state_pos_inferred = 1 << 0,
+	/*The orientation isn't directly tracked, but the system has an
+	  educated guess for it, often from an IMU after the source has
+	  left direct view.*/
 	pose_state_rot_inferred = 1 << 1,
+	/*The position is actively tracked by the underlying hardware,
+	  to the best of its ability.*/
 	pose_state_pos_known    = 1 << 2,
+	/*The orientation is actively tracked by the underlying hardware,
+	  to the best of its ability.*/
 	pose_state_rot_known    = 1 << 3,
 
+	/*Matches any positional tracking, whether the position is
+	  directly known or just inferred.*/
 	pose_state_pos_any = pose_state_pos_inferred | pose_state_pos_known,
+	/*Matches any orientation tracking, whether the orientation is
+	  directly known or just inferred.*/
 	pose_state_rot_any = pose_state_rot_inferred | pose_state_rot_known,
+	/*Matches any tracking at all, on position or orientation. A pose
+	  with no overlap with this is fully lost.*/
 	pose_state_any     = pose_state_pos_inferred | pose_state_pos_known | pose_state_rot_inferred | pose_state_rot_known,
 } pose_state_;
 

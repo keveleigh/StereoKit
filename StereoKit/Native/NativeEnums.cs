@@ -1680,9 +1680,10 @@ namespace StereoKit
 	}
 
 	/// <summary>Bit flags describing what playback modes a haptic output currently
-	/// supports. Querable via Input.HapticCaps. The set of supported modes
-	/// may change at runtime as the user picks up or sets down a controller,
-	/// or as the active interaction profile changes.</summary>
+	/// supports. Queryable via Input.HapticCaps. The set of supported modes
+	/// may change at runtime whenever the active OpenXR interaction profile
+	/// changes, which typically happens as the user picks up, sets down, or
+	/// swaps a controller.</summary>
 	[Flags]
 	public enum InputHapticCaps {
 		/// <summary>No haptic output is available right now (e.g. no controller is
@@ -1696,19 +1697,43 @@ namespace StereoKit
 		/// the XR_FB_haptic_pcm OpenXR extension.</summary>
 		Waveform     = 1 << 1,
 		/// <summary>Amplitude envelope playback via Input.HapticCurve. Requires the
-		/// XR_FB_haptic_pcm OpenXR extension.</summary>
+		/// XR_FB_haptic_amplitude_envelope OpenXR extension.</summary>
 		Curve        = 1 << 2,
 	}
 
+	/// <summary>A bit-flag describing the tracking state of a pose, with separate
+	/// bits for position and orientation. The PosAny, RotAny, and Any
+	/// combinations are handy when you only care if there's tracking at
+	/// all, and not whether it's directly measured or just an educated
+	/// guess.</summary>
 	[Flags]
 	public enum PoseState {
+		/// <summary>The pose has no tracking at all, neither position nor
+		/// orientation should be trusted.</summary>
 		Lost         = 0,
+		/// <summary>The position isn't directly tracked, but the system has an
+		/// educated guess for it. For example, a controller's accelerometer
+		/// can keep dead-reckoning the position for a short time after it
+		/// leaves optical view.</summary>
 		PosInferred  = 1 << 0,
+		/// <summary>The orientation isn't directly tracked, but the system has an
+		/// educated guess for it, often from an IMU after the source has
+		/// left direct view.</summary>
 		RotInferred  = 1 << 1,
+		/// <summary>The position is actively tracked by the underlying hardware,
+		/// to the best of its ability.</summary>
 		PosKnown     = 1 << 2,
+		/// <summary>The orientation is actively tracked by the underlying hardware,
+		/// to the best of its ability.</summary>
 		RotKnown     = 1 << 3,
+		/// <summary>Matches any positional tracking, whether the position is
+		/// directly known or just inferred.</summary>
 		PosAny       = PosInferred | PosKnown,
+		/// <summary>Matches any orientation tracking, whether the orientation is
+		/// directly known or just inferred.</summary>
 		RotAny       = RotInferred | RotKnown,
+		/// <summary>Matches any tracking at all, on position or orientation. A pose
+		/// with no overlap with this is fully lost.</summary>
 		Any          = PosInferred | PosKnown | RotInferred | RotKnown,
 	}
 
