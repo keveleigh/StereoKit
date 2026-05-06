@@ -2859,6 +2859,39 @@ typedef enum input_xy_ {
 	input_xy_max
 } input_xy_;
 
+/*Index values for haptic outputs on controllers. These represent a
+  destination for vibration playback, requested via Input.HapticPulse,
+  Input.HapticWaveform, or Input.HapticCurve.*/
+typedef enum input_haptic_ {
+	/*The left controller's primary haptic actuator.*/
+	input_haptic_l_controller,
+	/*The right controller's primary haptic actuator.*/
+	input_haptic_r_controller,
+
+	/*Total number of haptic outputs.*/
+	input_haptic_max
+} input_haptic_;
+
+/*Bit flags describing what playback modes a haptic output currently
+  supports. Querable via Input.HapticCaps. The set of supported modes
+  may change at runtime as the user picks up or sets down a controller,
+  or as the active interaction profile changes.*/
+typedef enum input_haptic_caps_ {
+	/*No haptic output is available right now (e.g. no controller is
+	  bound, or the haptic action isn't active).*/
+	input_haptic_caps_none     = 0,
+	/*Simple frequency / amplitude / duration vibration via
+	  Input.HapticPulse. Supported by every controller that has any
+	  haptic actuator.*/
+	input_haptic_caps_pulse    = 1 << 0,
+	/*Sample-by-sample PCM playback via Input.HapticWaveform. Requires
+	  the XR_FB_haptic_pcm OpenXR extension.*/
+	input_haptic_caps_waveform = 1 << 1,
+	/*Amplitude envelope playback via Input.HapticCurve. Requires the
+	  XR_FB_haptic_pcm OpenXR extension.*/
+	input_haptic_caps_curve    = 1 << 2,
+} input_haptic_caps_;
+
 typedef enum pose_state_ {
 	pose_state_lost         = 0,
 	pose_state_pos_inferred = 1 << 0,
@@ -2902,6 +2935,13 @@ SK_API float                 input_float                     (input_float_  floa
 SK_API button_state_         input_button                    (input_button_ button_type);
 SK_API vec2                  input_xy                        (input_xy_     xy_type);
 SK_API button_state_         input_key                       (key_ key);
+
+SK_API input_haptic_caps_    input_haptic_caps               (input_haptic_ haptic_type);
+SK_API float                 input_haptic_preferred_rate     (input_haptic_ haptic_type);
+SK_API void                  input_haptic_pulse              (input_haptic_ haptic_type, float frequency, float amplitude, float duration_seconds);
+SK_API void                  input_haptic_waveform           (input_haptic_ haptic_type, const float* in_arr_samples,    int32_t sample_count, float sample_rate_hz, bool32_t append, int32_t* out_prev_samples_consumed sk_default(nullptr));
+SK_API void                  input_haptic_curve              (input_haptic_ haptic_type, const float* in_arr_amplitudes, int32_t sample_count, float sample_rate_hz);
+SK_API void                  input_haptic_stop               (input_haptic_ haptic_type);
 
 SK_API hand_sim_id_t         input_hand_sim_pose_add         (const pose_t* in_arr_palm_relative_hand_joints_25, controller_key_ button1, controller_key_ and_button2 sk_default(controller_key_none), key_ or_hotkey1 sk_default(key_none), key_ and_hotkey2 sk_default(key_none));
 SK_API void                  input_hand_sim_pose_remove      (hand_sim_id_t id);

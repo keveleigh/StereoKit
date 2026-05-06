@@ -516,6 +516,53 @@ void input_scroll_inject(float scroll_delta)                     { ska_scroll_ac
 
 ///////////////////////////////////////////
 
+input_haptic_caps_ input_haptic_caps(input_haptic_ haptic_type) {
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		return oxri_haptic_caps(haptic_type);
+#endif
+	return input_haptic_caps_none;
+}
+
+float input_haptic_preferred_rate(input_haptic_ haptic_type) {
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		return oxri_haptic_preferred_rate(haptic_type);
+#endif
+	return 0;
+}
+
+void input_haptic_pulse(input_haptic_ haptic_type, float frequency, float amplitude, float duration_seconds) {
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		oxri_haptic_pulse(haptic_type, frequency, amplitude, (double)duration_seconds);
+#endif
+}
+
+void input_haptic_waveform(input_haptic_ haptic_type, const float* in_arr_samples, int32_t sample_count, float sample_rate_hz, bool32_t append, int32_t* out_prev_samples_consumed) {
+	if (out_prev_samples_consumed) *out_prev_samples_consumed = 0;
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		oxri_haptic_waveform(haptic_type, in_arr_samples, sample_count, sample_rate_hz, append != 0, out_prev_samples_consumed);
+#endif
+}
+
+void input_haptic_curve(input_haptic_ haptic_type, const float* in_arr_amplitudes, int32_t sample_count, float sample_rate_hz) {
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		oxri_haptic_curve(haptic_type, in_arr_amplitudes, sample_count, sample_rate_hz);
+#endif
+}
+
+void input_haptic_stop(input_haptic_ haptic_type) {
+#if defined(SK_XR_OPENXR)
+	if (backend_xr_get_type() == backend_xr_type_openxr)
+		oxri_haptic_stop(haptic_type);
+#endif
+}
+
+///////////////////////////////////////////
+
 pose_t        input_pose_get_local(input_pose_   pose_type)   { return pose_type   >= 0 && pose_type   < local.curr_poses  .count ? local.curr_poses[pose_type].pose : pose_identity; }
 pose_t        input_pose          (input_pose_   pose_type)   { return pose_type   >= 0 && pose_type   < local.curr_poses  .count ? render_cam_final_transform(local.curr_poses[pose_type].pose) : pose_identity; }
 float         input_float         (input_float_  float_type)  { return float_type  >= 0 && float_type  < local.curr_floats .count ? local.curr_floats [float_type]     : 0; }

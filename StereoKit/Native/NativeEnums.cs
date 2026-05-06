@@ -1667,6 +1667,39 @@ namespace StereoKit
 		Max,
 	}
 
+	/// <summary>Index values for haptic outputs on controllers. These represent a
+	/// destination for vibration playback, requested via Input.HapticPulse,
+	/// Input.HapticWaveform, or Input.HapticCurve.</summary>
+	public enum InputHaptic {
+		/// <summary>The left controller's primary haptic actuator.</summary>
+		LController,
+		/// <summary>The right controller's primary haptic actuator.</summary>
+		RController,
+		/// <summary>Total number of haptic outputs.</summary>
+		Max,
+	}
+
+	/// <summary>Bit flags describing what playback modes a haptic output currently
+	/// supports. Querable via Input.HapticCaps. The set of supported modes
+	/// may change at runtime as the user picks up or sets down a controller,
+	/// or as the active interaction profile changes.</summary>
+	[Flags]
+	public enum InputHapticCaps {
+		/// <summary>No haptic output is available right now (e.g. no controller is
+		/// bound, or the haptic action isn't active).</summary>
+		None         = 0,
+		/// <summary>Simple frequency / amplitude / duration vibration via
+		/// Input.HapticPulse. Supported by every controller that has any
+		/// haptic actuator.</summary>
+		Pulse        = 1 << 0,
+		/// <summary>Sample-by-sample PCM playback via Input.HapticWaveform. Requires
+		/// the XR_FB_haptic_pcm OpenXR extension.</summary>
+		Waveform     = 1 << 1,
+		/// <summary>Amplitude envelope playback via Input.HapticCurve. Requires the
+		/// XR_FB_haptic_pcm OpenXR extension.</summary>
+		Curve        = 1 << 2,
+	}
+
 	[Flags]
 	public enum PoseState {
 		Lost         = 0,

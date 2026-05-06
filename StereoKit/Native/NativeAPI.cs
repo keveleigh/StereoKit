@@ -809,6 +809,12 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_button(InputButton button_type);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec2         input_xy(InputXY xy_type);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     input_key(Key key);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InputHapticCaps input_haptic_caps(InputHaptic haptic_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        input_haptic_preferred_rate(InputHaptic haptic_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_haptic_pulse(InputHaptic haptic_type, float frequency, float amplitude, float duration_seconds);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_haptic_waveform(InputHaptic haptic_type, [In] float[] in_arr_samples, int sample_count, float sample_rate_hz, [MarshalAs(UnmanagedType.Bool)] bool append, out int out_prev_samples_consumed);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_haptic_curve(InputHaptic haptic_type, [In] float[] in_arr_amplitudes, int sample_count, float sample_rate_hz);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_haptic_stop(InputHaptic haptic_type);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern HandSimId    input_hand_sim_pose_add([In] Pose[] in_arr_palm_relative_hand_joints_25, ControllerKey button1, ControllerKey and_button2, Key or_hotkey1, Key and_hotkey2);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_hand_sim_pose_remove(HandSimId id);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         input_hand_sim_pose_clear();
