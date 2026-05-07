@@ -309,6 +309,89 @@ namespace StereoKit
 			}
 			NativeAPI.tex_set_colors(_inst, width, height, data);
 		}
+		/// <summary>Set the texture's pixels for a multi-layer and/or
+		/// mip-mapped texture, using an array of pointers. Each pointer in
+		/// `arrayData` represents one layer (face for cubemaps, slice for array
+		/// textures), and points to a tightly packed block containing all mip
+		/// levels for that layer in the order `[mip0][mip1][mip2]...`. The
+		/// memory layout per mip should match the texture's format. This is the
+		/// raw pointer variant for advanced use cases like uploading
+		/// pre-decoded image data from native code.</summary>
+		/// <param name="width">Width in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="height">Height in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="arrayData">An array of `arrayCount` pointers, one per
+		/// layer. Each layer points to packed mip data
+		/// `[mip0][mip1][mip2]...`.</param>
+		/// <param name="mipCount">The number of mip levels packed into each
+		/// layer's data. Use 1 if no mip data is provided beyond the base.
+		/// </param>
+		/// <param name="multisample">Multisample count, only relevant for
+		/// rendertarget textures.</param>
+		public void SetColors(int width, int height, IntPtr[] arrayData, int mipCount, int multisample = 1)
+			=> NativeAPI.tex_set_color_arr_mips(_inst, width, height, arrayData, arrayData.Length, mipCount, multisample, IntPtr.Zero);
+		/// <summary>Set the texture's pixels for a multi-layer and/or
+		/// mip-mapped texture using a jagged color array. Each entry in
+		/// `arrayData` is one layer (face for cubemaps, slice for array
+		/// textures), packed as `[mip0][mip1][mip2]...`. This function should
+		/// only be called on textures with a format of Rgba32 or Rgba32Linear.
+		/// </summary>
+		/// <param name="width">Width in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="height">Height in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="arrayData">A jagged array where each `arrayData[layer]`
+		/// contains all mip levels for that layer, packed as
+		/// `[mip0][mip1][mip2]...` with mip 0 sized `width*height`, mip 1
+		/// sized `(width/2)*(height/2)`, and so on.</param>
+		/// <param name="mipCount">The number of mip levels packed into each
+		/// layer's data. Use 1 if no mip data is provided beyond the base.
+		/// </param>
+		/// <param name="multisample">Multisample count, only relevant for
+		/// rendertarget textures.</param>
+		public void SetColors(int width, int height, in Color32[][] arrayData, int mipCount, int multisample = 1)
+		{
+			TexFormat format = Format;
+			if (format != TexFormat.Rgba32 && format != TexFormat.Rgba32Linear)
+			{
+				Log.Err($"Can't set a {format} format texture from Color32 data!");
+				return;
+			}
+			SetColorsPinned(width, height, arrayData, mipCount, multisample);
+		}
+		/// <summary>Set the texture's pixels for a multi-layer and/or
+		/// mip-mapped texture using a jagged byte array. Each entry in
+		/// `arrayData` is one layer (face for cubemaps, slice for array
+		/// textures), packed as `[mip0][mip1][mip2]...`. The byte layout per
+		/// mip should match the texture's format.</summary>
+		/// <param name="width">Width in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="height">Height in pixels of mip 0. Powers of two are
+		/// generally best!</param>
+		/// <param name="arrayData">A jagged array where each `arrayData[layer]`
+		/// contains all mip levels for that layer as bytes, packed as
+		/// `[mip0][mip1][mip2]...`.</param>
+		/// <param name="mipCount">The number of mip levels packed into each
+		/// layer's data. Use 1 if no mip data is provided beyond the base.
+		/// </param>
+		/// <param name="multisample">Multisample count, only relevant for
+		/// rendertarget textures.</param>
+		public void SetColors(int width, int height, in byte[][] arrayData, int mipCount, int multisample = 1)
+			=> SetColorsPinned(width, height, arrayData, mipCount, multisample);
+
+		void SetColorsPinned<T>(int width, int height, T[][] arrayData, int mipCount, int multisample) where T : struct
+		{
+			GCHandle[] handles = new GCHandle[arrayData.Length];
+			IntPtr  [] ptrs    = new IntPtr  [arrayData.Length];
+			for (int i = 0; i < arrayData.Length; i++)
+			{
+				handles[i] = GCHandle.Alloc(arrayData[i], GCHandleType.Pinned);
+				ptrs   [i] = handles[i].AddrOfPinnedObject();
+			}
+			NativeAPI.tex_set_color_arr_mips(_inst, width, height, ptrs, arrayData.Length, mipCount, multisample, IntPtr.Zero);
+			for (int i = 0; i < handles.Length; i++) handles[i].Free();
+		}
 
 		/// <summary>Loads an image file stored in memory directly into
 		/// the created texture! Supported formats are: jpg, png, tga,

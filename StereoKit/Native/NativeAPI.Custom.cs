@@ -83,6 +83,10 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void tex_set_color_arr_mips(IntPtr texture, int width, int height, IntPtr array_data, int array_count, int mip_count, int multisample, IntPtr out_sh_lighting_info);
 
+		// tex_set_color_arr_mips overload accepting an array of per-layer pointers
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void tex_set_color_arr_mips(IntPtr texture, int width, int height, [In] IntPtr[] array_data, int array_count, int mip_count, int multisample, IntPtr out_sh_lighting_info);
+
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern IntPtr tex_gen_cubemap(IntPtr gradient, Vec3 gradient_dir, int resolution, IntPtr out_sh_lighting_info);
 
