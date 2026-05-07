@@ -791,7 +791,7 @@ void render_draw_queue(render_list_t list, const matrix *views, const matrix *pr
 	// render_global_textures system.
 	tex_t sky_tex = local.global_textures[render_skytex_register];
 	local.global_buffer.cubemap_i = sky_tex != nullptr
-		? vec4{ (float)sky_tex->width, (float)sky_tex->height, floorf(log2f((float)sky_tex->width)), 0 }
+		? vec4{ (float)sky_tex->width, (float)sky_tex->height, sky_tex->gpu_tex.mip_levels > 0 ? (float)(sky_tex->gpu_tex.mip_levels - 1) : 0, 0 }
 		: vec4{};
 
 	// Upload shader globals

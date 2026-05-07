@@ -807,17 +807,32 @@ tex_t tex_create_cubemap_files(const char **cube_face_file_xxyyzz, bool32_t srgb
 tex_t tex_copy(const tex_t texture, tex_type_ type, tex_format_ format) {
 	profiler_zone();
 
-	skr_vec3i_t tex_size = { texture->width, texture->height, 1 };
-	tex_t       result   = tex_create(type, format == tex_format_none ? texture->format : format);
-	tex_set_color_arr_mips(result, texture->width, texture->height, nullptr, 1, skr_tex_calc_mip_count(tex_size));
+	int32_t src_mip_count = (int32_t)texture->gpu_tex.mip_levels;
+	bool    wants_mips    = (type & tex_type_mips) > 0;
+	bool    has_mips      = src_mip_count > 1;
 
-	bool wants_mips    = (type          & tex_type_mips) > 0;
-	bool has_mips      = (texture->type & tex_type_mips) > 0;
-	bool generate_mips = has_mips == false && wants_mips == true;
+	// Destination mip count:
+	//  - dest doesn't want mips           → 1 mip
+	//  - dest wants mips, source has them → match the source (preserves a
+	//                                       partial chain instead of leaving
+	//                                       the tail uninitialized)
+	//  - dest wants mips, source has none → full chain (generated below)
+	int32_t dest_mip_count;
+	if      (!wants_mips) dest_mip_count = 1;
+	else if (has_mips)    dest_mip_count = src_mip_count;
+	else                  dest_mip_count = skr_tex_calc_mip_count({ texture->width, texture->height, 1 });
 
-	// Copy base mip (and generate remaining mips if needed)
-	skr_tex_copy(&texture->gpu_tex, &result->gpu_tex, 0, 0, 0, 0, texture->gpu_tex.layer_count);
-	if (generate_mips) {
+	tex_t result = tex_create(type, format == tex_format_none ? texture->format : format);
+	tex_set_color_arr_mips(result, texture->width, texture->height, nullptr, 1, dest_mip_count);
+
+	// skr_tex_copy is one-mip-per-call; copy each level the source actually
+	// has. If the source has no mips but the destination wants them, fall
+	// through to skr_tex_generate_mips after the base copy.
+	int32_t copy_count = (has_mips && wants_mips) ? src_mip_count : 1;
+	for (int32_t m = 0; m < copy_count; m++) {
+		skr_tex_copy(&texture->gpu_tex, &result->gpu_tex, m, 0, m, 0, texture->gpu_tex.layer_count);
+	}
+	if (wants_mips && !has_mips) {
 		skr_tex_generate_mips(&result->gpu_tex, nullptr);
 	}
 	return result;
@@ -1046,7 +1061,7 @@ void tex_compute_sh(tex_t texture, bool end_cmd) {
 	profiler_zone();
 
 	skr_vec3i_t base_size = { texture->width, texture->height, 1 };
-	int32_t     mip_count = skr_tex_calc_mip_count(base_size);
+	int32_t     mip_count = (int32_t)texture->gpu_tex.mip_levels;
 	int32_t     mip_level = maxi(0, mip_count - 6);
 	skr_vec3i_t mip_size  = skr_tex_calc_mip_dimensions(base_size, mip_level);
 
@@ -1141,8 +1156,12 @@ void _tex_set_color_arr(tex_t texture, int32_t width, int32_t height, void **arr
 		if (is_array) flags = (skr_tex_flags_)(flags | skr_tex_flags_array);
 		skr_vec3i_t size = { width, height, is_array ? array_count : 1 };
 
-		// Determine mip count for creation
-		int32_t create_mip_count = (texture->type & tex_type_mips) ? 0 : mip_count; // 0 = auto-calculate
+		// Determine mip count for creation. If the caller asked for mips but only
+		// supplied the base level, pass 0 to request a full auto-generated chain
+		// (filled in below by skr_tex_generate_mips). If the caller supplied
+		// multiple mips, cap the GPU texture at that count so we don't leave
+		// uninitialized levels above what was uploaded.
+		int32_t create_mip_count = ((texture->type & tex_type_mips) && mip_count <= 1) ? 0 : mip_count;
 
 		// Create new texture into a temporary first
 		skr_tex_t new_tex;
@@ -1433,8 +1452,12 @@ int32_t tex_get_anisotropy(tex_t texture) {
 ///////////////////////////////////////////
 
 int32_t tex_get_mips(tex_t texture) {
-	return (texture->type & tex_type_mips)
-		? skr_tex_calc_mip_count(texture->gpu_tex.size)
+	// Return the actual stored mip count rather than recomputing from
+	// dimensions. The two can differ: tex_type_mips just signals intent, but
+	// the caller may have supplied a partial chain (KTX2 truncated mip set,
+	// etc.), in which case gpu_tex.mip_levels is the truth.
+	return texture->gpu_tex.mip_levels > 0
+		? (int32_t)texture->gpu_tex.mip_levels
 		: 1;
 }
 
