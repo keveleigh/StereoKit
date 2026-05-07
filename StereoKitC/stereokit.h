@@ -2059,8 +2059,23 @@ SK_API render_list_t         render_get_primary_list(void);
 ///////////////////////////////////////////
 
 
+/* Controls whether a RenderList holds asset references for the items it
+   contains. Tracked lists are safe to keep around across frames at the cost
+   of an addref/releaseref pair per item. */
+typedef enum render_list_refs_ {
+	/* The list calls addref on each item's mesh/material when added, and
+	   releaseref when cleared. This keeps assets alive for as long as the
+	   list holds them, and is the safe default. */
+	render_list_refs_tracked = 0,
+	/* The list does not addref or releaseref its items. The caller is
+	   responsible for ensuring referenced assets remain valid until the
+	   list is cleared. Useful for per-frame lists that are filled and
+	   drained inside a single frame. */
+	render_list_refs_none    = 1,
+} render_list_refs_;
+
 SK_API render_list_t         render_list_find         (const char* id);
-SK_API render_list_t         render_list_create       (void);
+SK_API render_list_t         render_list_create       (render_list_refs_ refs sk_default(render_list_refs_tracked));
 SK_API void                  render_list_set_id       (      render_list_t list, const char* id);
 SK_API const char*           render_list_get_id       (const render_list_t list);
 SK_API void                  render_list_addref       (      render_list_t list);

@@ -240,7 +240,7 @@ bool render_init() {
 	render_set_clip    (local.clip_planes.x, local.clip_planes.y);
 	render_set_cam_root(matrix_identity);
 
-	local.list_primary = render_list_create();
+	local.list_primary = render_list_create(render_list_refs_none);
 	render_list_set_id(local.list_primary, "sk/render/primary_renderlist");
 	render_list_push  (local.list_primary);
 
@@ -1128,8 +1128,9 @@ render_list_t render_list_find(const char* id) {
 
 ///////////////////////////////////////////
 
-render_list_t render_list_create() {
+render_list_t render_list_create(render_list_refs_ refs) {
 	render_list_t result = (render_list_t)assets_allocate(asset_type_render_list);
+	result->refs = refs;
 	return result;
 }
 
@@ -1191,16 +1192,20 @@ void render_list_pop() {
 
 void render_list_add(const render_item_t *item) {
 	local.list_active->queue.add(*item);
-	assets_addref(&item->material->header);
-	assets_addref(&item->mesh->header);
+	if (local.list_active->refs == render_list_refs_tracked) {
+		assets_addref(&item->material->header);
+		assets_addref(&item->mesh->header);
+	}
 }
 
 ///////////////////////////////////////////
 
 void render_list_add_to(render_list_t list, const render_item_t *item) {
 	list->queue.add(*item);
-	assets_addref(&item->material->header);
-	assets_addref(&item->mesh->header);
+	if (list->refs == render_list_refs_tracked) {
+		assets_addref(&item->material->header);
+		assets_addref(&item->mesh->header);
+	}
 }
 
 ///////////////////////////////////////////
@@ -1267,9 +1272,11 @@ static void render_list_execute(render_list_t list, render_layer_ filter, int32_
 
 void render_list_clear(render_list_t list) {
 	list->prev_count = list->queue.count;
-	for (int32_t i = 0; i < list->queue.count; i++) {
-		assets_releaseref(&list->queue[i].material->header);
-		assets_releaseref(&list->queue[i].mesh    ->header);
+	if (list->refs == render_list_refs_tracked) {
+		for (int32_t i = 0; i < list->queue.count; i++) {
+			assets_releaseref(&list->queue[i].material->header);
+			assets_releaseref(&list->queue[i].mesh    ->header);
+		}
 	}
 	list->queue.clear();
 	list->stats = {};

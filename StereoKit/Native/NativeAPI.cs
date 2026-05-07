@@ -651,7 +651,7 @@ namespace StereoKit
 		///////////////////////////////////////////
 
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_list_find([MarshalAs(UnmanagedType.LPUTF8Str)] string id);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_list_create();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_list_create(RenderListRefs refs);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_list_set_id(IntPtr list, [MarshalAs(UnmanagedType.LPUTF8Str)] string id);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_list_get_id(IntPtr list);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_list_addref(IntPtr list);

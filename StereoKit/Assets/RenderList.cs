@@ -7,7 +7,7 @@ namespace StereoKit
 	/// submitted to various surfaces. RenderList.Primary is where all normal
 	/// Draw calls get added to, and this RenderList is renderer to primary
 	/// display surface.
-	/// 
+	///
 	/// Manually working with a RenderList can be useful for "baking down
 	/// matrices" or caching a scene of objects. Or for drawing a separate
 	/// scene to an offscreen surface, like for thumbnails of Models.</summary>
@@ -34,9 +34,14 @@ namespace StereoKit
 		public int PrevCount => NativeAPI.render_list_prev_count(_inst);
 
 		/// <summary>Creates a new empty RenderList.</summary>
-		public RenderList()
+		/// <param name="refs">Controls whether the list tracks asset
+		/// references for the Meshes and Materials added to it. The default,
+		/// `Tracked`, is safe across frames. `None` skips the addref/release
+		/// pair on each add and clear, but the caller must ensure the list
+		/// is cleared before any referenced asset could be released.</param>
+		public RenderList(RenderListRefs refs = RenderListRefs.Tracked)
 		{
-			_inst = NativeAPI.render_list_create();
+			_inst = NativeAPI.render_list_create(refs);
 		}
 		internal RenderList(IntPtr list)
 		{
