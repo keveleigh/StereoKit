@@ -32,6 +32,11 @@ namespace StereoKit
 		/// <summary> The height of the texture, in pixels. This will be a
 		/// blocking call if AssetState is less than LoadedMeta. </summary>
 		public int Height => NativeAPI.tex_get_height(_inst);
+		/// <summary> The depth of the texture, in pixels. Only meaningful
+		/// for 3D (volume) textures created with TexType.Volume — for 2D,
+		/// array, and cubemap textures this is 1. This will be a blocking
+		/// call if AssetState is less than LoadedMeta. </summary>
+		public int Depth => NativeAPI.tex_get_depth(_inst);
 		/// <summary>The number of mip-map levels this texture has. This will
 		/// be 1 if the texture doesn't have mip mapping enabled. This will be
 		/// a blocking call if AssetState is less than LoadedMeta.</summary>
@@ -201,6 +206,31 @@ namespace StereoKit
 		/// constructing the texture!</param>
 		public void SetColors(int width, int height, IntPtr data)
 			=> NativeAPI.tex_set_colors(_inst, width, height, data);
+		/// <summary>Set the contents of a 3D (volume) texture from a
+		/// contiguous block of memory. The texture must be created with
+		/// TexType.Volume. Pass IntPtr.Zero to allocate an empty volume
+		/// (e.g. for use as a compute UAV). Slice-major layout: all of
+		/// slice 0, then slice 1, etc., each slice being width*height
+		/// pixels of the texture's format.</summary>
+		/// <param name="width">Width in pixels.</param>
+		/// <param name="height">Height in pixels.</param>
+		/// <param name="depth">Depth in pixels (number of slices).</param>
+		/// <param name="data">A pointer to width*height*depth pixels of
+		/// the texture's format, or IntPtr.Zero to allocate an empty
+		/// volume.</param>
+		public void SetColors(int width, int height, int depth, IntPtr data)
+			=> NativeAPI.tex_set_colors_3d(_inst, width, height, depth, data);
+		/// <summary>Set the contents of a 3D (volume) texture from a byte
+		/// array. The texture must be created with TexType.Volume and a
+		/// single-channel format such as R8. Slice-major layout: all of
+		/// slice 0, then slice 1, etc., each slice being width*height
+		/// bytes.</summary>
+		/// <param name="width">Width in pixels.</param>
+		/// <param name="height">Height in pixels.</param>
+		/// <param name="depth">Depth in pixels (number of slices).</param>
+		/// <param name="data">An array of width*height*depth bytes.</param>
+		public void SetColors(int width, int height, int depth, in byte[] data)
+			=> NativeAPI.tex_set_colors_3d(_inst, width, height, depth, data);
 		/// <summary>Set the texture's pixels using a color array! This
 		/// function should only be called on textures with a format of
 		/// Rgba32 or Rgba32Linear. You can call this as many times as you'd

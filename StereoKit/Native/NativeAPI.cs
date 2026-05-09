@@ -280,6 +280,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_colors(IntPtr texture, int width, int height, IntPtr data);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_color_arr(IntPtr texture, int width, int height, IntPtr array_data, int array_count, int multisample, out SphericalHarmonics out_sh_lighting_info);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_color_arr_mips(IntPtr texture, int width, int height, IntPtr array_data, int array_count, int mip_count, int multisample, out SphericalHarmonics out_sh_lighting_info);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_colors_3d(IntPtr texture, int width, int height, int depth, IntPtr data);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_mem(IntPtr texture, IntPtr data, UIntPtr data_size, [MarshalAs(UnmanagedType.Bool)] bool srgb_data, [MarshalAs(UnmanagedType.Bool)] bool blocking, int priority);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_add_zbuffer(IntPtr texture, TexFormat format);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_zbuffer(IntPtr texture, IntPtr depth_texture);
@@ -292,6 +293,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern TexFormat    tex_get_format(IntPtr texture);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          tex_get_width(IntPtr texture);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          tex_get_height(IntPtr texture);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          tex_get_depth(IntPtr texture);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_sample(IntPtr texture, TexSample sample);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern TexSample    tex_get_sample(IntPtr texture);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         tex_set_sample_comp(IntPtr texture, TexSampleComp compare);

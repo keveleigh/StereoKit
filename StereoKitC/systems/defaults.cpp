@@ -24,6 +24,7 @@ tex_t        sk_default_tex_rough;
 tex_t        sk_default_tex_devtex;
 tex_t        sk_default_tex_error;
 tex_t        sk_default_cubemap;
+tex_t        sk_default_tex_3d;
 mesh_t       sk_default_quad;
 mesh_t       sk_default_screen_quad;
 mesh_t       sk_default_sphere;
@@ -182,6 +183,13 @@ bool defaults_init() {
 
 	tex_set_loading_fallback(sk_default_cubemap);
 	tex_set_error_fallback  (sk_default_cubemap);
+
+	color32 black_3d = { 0, 0, 0, 0 };
+	sk_default_tex_3d = tex_create(tex_type_image_nomips | tex_type_volume, tex_format_rgba32);
+	tex_set_colors_3d(sk_default_tex_3d, 1, 1, 1, &black_3d);
+	tex_set_id              (sk_default_tex_3d, default_id_tex_3d);
+	tex_set_loading_fallback(sk_default_tex_3d);
+	tex_set_error_fallback  (sk_default_tex_3d);
 
 	// Default quad mesh
 	sk_default_quad = mesh_create();
@@ -440,6 +448,7 @@ void defaults_shutdown() {
 	tex_release     (sk_default_tex_devtex);
 	tex_release     (sk_default_tex_error);
 	tex_release     (sk_default_cubemap);
+	tex_release     (sk_default_tex_3d);
 }
 
 } // namespace sk

@@ -1255,6 +1255,10 @@ typedef enum tex_type_ {
 	  Create it with a format that supports storage images, such as
 	  tex_format_rgba128.*/
 	tex_type_compute       = 1 << 7,
+	/*A volumetric (3D) texture, sized with width, height, and depth.
+	  Volume textures are mutually exclusive with Cubemap and array
+	  textures, and don't pair with a zbuffer.*/
+	tex_type_volume        = 1 << 8,
 	/*A standard color image that also generates mip-maps
 	  automatically.*/
 	tex_type_image         = tex_type_image_nomips | tex_type_mips,
@@ -1357,6 +1361,7 @@ SK_API void         tex_on_load_remove      (tex_t texture, void (*asset_on_load
 SK_API void         tex_set_colors          (tex_t texture, int32_t width, int32_t height, void *data);
 SK_API void         tex_set_color_arr       (tex_t texture, int32_t width, int32_t height, void** array_data, int32_t array_count,                    int32_t multisample sk_default(1), spherical_harmonics_t* out_sh_lighting_info sk_default(nullptr));
 SK_API void         tex_set_color_arr_mips  (tex_t texture, int32_t width, int32_t height, void** array_data, int32_t array_count, int32_t mip_count, int32_t multisample sk_default(1), spherical_harmonics_t* out_sh_lighting_info sk_default(nullptr));
+SK_API void         tex_set_colors_3d       (tex_t texture, int32_t width, int32_t height, int32_t depth, void *data);
 SK_API void         tex_set_mem             (tex_t texture, void* data, size_t data_size, bool32_t srgb_data sk_default(true), bool32_t blocking sk_default(false), int32_t priority sk_default(10));
 SK_API void         tex_add_zbuffer         (tex_t texture, tex_format_ format sk_default(tex_format_depthstencil));
 SK_API void         tex_set_zbuffer         (tex_t texture, tex_t depth_texture);
@@ -1369,6 +1374,7 @@ SK_API tex_t        tex_gen_cubemap_sh      (const sk_ref(spherical_harmonics_t)
 SK_API tex_format_  tex_get_format          (tex_t texture);
 SK_API int32_t      tex_get_width           (tex_t texture);
 SK_API int32_t      tex_get_height          (tex_t texture);
+SK_API int32_t      tex_get_depth           (tex_t texture);
 SK_API void         tex_set_sample          (tex_t texture, tex_sample_ sample sk_default(tex_sample_linear));
 SK_API tex_sample_  tex_get_sample          (tex_t texture);
 SK_API void             tex_set_sample_comp (tex_t texture, tex_sample_comp_ compare sk_default(tex_sample_comp_none));
@@ -3376,6 +3382,7 @@ SK_CONST char *default_id_tex_rough            = "default/tex_rough";
 SK_CONST char *default_id_tex_devtex           = "default/tex_devtex";
 SK_CONST char *default_id_tex_error            = "default/tex_error";
 SK_CONST char *default_id_cubemap              = "default/cubemap";
+SK_CONST char *default_id_tex_3d               = "default/tex_3d";
 SK_CONST char *default_id_font                 = "default/font";
 SK_CONST char *default_id_mesh_quad            = "default/mesh_quad";
 SK_CONST char *default_id_mesh_screen_quad     = "default/mesh_screen_quad";

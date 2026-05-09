@@ -681,6 +681,10 @@ namespace StereoKit
 		/// Create it with a format that supports storage images, such as
 		/// tex_format_rgba128.</summary>
 		Compute      = 1 << 7,
+		/// <summary>A volumetric (3D) texture, sized with width, height, and depth.
+		/// Volume textures are mutually exclusive with Cubemap and array
+		/// textures, and don't pair with a zbuffer.</summary>
+		Volume       = 1 << 8,
 		/// <summary>A standard color image that also generates mip-maps
 		/// automatically.</summary>
 		Image        = ImageNomips | Mips,

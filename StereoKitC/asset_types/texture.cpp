@@ -52,17 +52,19 @@ tex_t tex_error_texture           = nullptr;
 tex_t tex_loading_texture         = nullptr;
 tex_t tex_error_texture_cubemap   = nullptr;
 tex_t tex_loading_texture_cubemap = nullptr;
+tex_t tex_error_texture_3d        = nullptr;
+tex_t tex_loading_texture_3d      = nullptr;
 
 tex_t _tex_get_loading_fallback(tex_t texture) {
-	return (texture->type & tex_type_cubemap)
-		? tex_loading_texture_cubemap
-		: tex_loading_texture;
+	if (texture->type & tex_type_volume)  return tex_loading_texture_3d;
+	if (texture->type & tex_type_cubemap) return tex_loading_texture_cubemap;
+	return tex_loading_texture;
 }
 
 tex_t _tex_get_error_fallback(tex_t texture) {
-	return (texture->type & tex_type_cubemap)
-		? tex_error_texture_cubemap
-		: tex_error_texture;
+	if (texture->type & tex_type_volume)  return tex_error_texture_3d;
+	if (texture->type & tex_type_cubemap) return tex_error_texture_cubemap;
+	return tex_error_texture;
 }
 
 ///////////////////////////////////////////
@@ -91,6 +93,7 @@ skr_tex_flags_ tex_type_to_skr_flags(tex_type_ type) {
 	if (type & tex_type_rendertarget) flags = (skr_tex_flags_)(flags | skr_tex_flags_writeable);
 	if (type & tex_type_depthtarget)  flags = (skr_tex_flags_)(flags | skr_tex_flags_writeable); // Readable depth (shadow maps)
 	if (type & tex_type_compute)      flags = (skr_tex_flags_)(flags | skr_tex_flags_compute);
+	if (type & tex_type_volume)       flags = (skr_tex_flags_)(flags | skr_tex_flags_3d);
 	return flags;
 }
 
@@ -249,7 +252,7 @@ bool32_t tex_load_arr_files(asset_task_t *task, asset_header_t *asset, void *job
 	tex_load_t* data = (tex_load_t*)job_data;
 	tex_t       tex  = (tex_t)asset;
 
-	tex_set_meta(tex, data->color_width, data->color_height, data->color_format);
+	tex_set_meta(tex, data->color_width, data->color_height, 1, data->color_format);
 	return true;
 }
 
@@ -530,7 +533,7 @@ tex_t tex_create_mem_type(tex_type_ type, void *data, size_t data_size, bool32_t
 		result->header.state = asset_state_error_unsupported;
 		return result;
 	}
-	tex_set_meta(result, load_data->color_width, load_data->color_height, format);
+	tex_set_meta(result, load_data->color_width, load_data->color_height, 1, format);
 
 	static const asset_load_action_t actions[] = {
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
@@ -698,7 +701,7 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 			return (bool32_t)false;
 		}
 
-		tex_set_meta(tex, size_w, size_h, data->color_format);
+		tex_set_meta(tex, size_w, size_h, 1, data->color_format);
 		return (bool32_t)true;
 	};
 
@@ -739,7 +742,7 @@ tex_t tex_create_cubemap_file(const char *cubemap_file, bool32_t srgb_data, int3
 			tex->header.state = asset_state_error;
 			return (bool32_t)false;
 		}
-		tex_set_meta(tex, tex->width, tex->height, tex->format);
+		tex_set_meta(tex, tex->width, tex->height, 1, tex->format);
 		tex_update_label(tex);
 
 		shader_t convert_shader = shader_find(default_id_shader_equirect);
@@ -1096,6 +1099,11 @@ void tex_compute_sh(tex_t texture, bool end_cmd) {
 void _tex_set_color_arr(tex_t texture, int32_t width, int32_t height, void **array_data, int32_t array_count, int32_t mip_count, spherical_harmonics_t *sh_lighting_info, int32_t multisample) {
 	profiler_zone();
 
+	if (texture->type & tex_type_volume) {
+		log_warn("Use tex_set_colors_3d for volume textures, not tex_set_color_arr.");
+		return;
+	}
+
 	bool dynamic        = texture->type & tex_type_dynamic;
 	bool different_size = texture->width != width || texture->height != height || (int32_t)texture->gpu_tex.layer_count != array_count;
 	if (!different_size && (array_data == nullptr || *array_data == nullptr))
@@ -1191,7 +1199,7 @@ void _tex_set_color_arr(tex_t texture, int32_t width, int32_t height, void **arr
 			skr_tex_generate_mips(&texture->gpu_tex, nullptr);
 		}
 
-		tex_set_meta(texture, width, height, texture->format);
+		tex_set_meta(texture, width, height, 1, texture->format);
 
 		if (texture->depth_buffer != nullptr) {
 			tex_set_color_arr(texture->depth_buffer, width, height, nullptr, texture->gpu_tex.layer_count, multisample, nullptr);
@@ -1287,7 +1295,7 @@ void tex_set_mem(tex_t texture, void* data, size_t data_size, bool32_t srgb_data
 		texture->header.state = asset_state_error_unsupported;
 		return;
 	}
-	tex_set_meta(texture, load_data->color_width, load_data->color_height, format);
+	tex_set_meta(texture, load_data->color_width, load_data->color_height, 1, format);
 
 	static const asset_load_action_t actions[] = {
 		asset_load_action_t {tex_load_arr_parse,  asset_thread_asset},
@@ -1322,6 +1330,113 @@ spherical_harmonics_t tex_get_cubemap_lighting(tex_t cubemap_texture) {
 void tex_set_colors(tex_t texture, int32_t width, int32_t height, void *data) {
 	void *data_arr[1] = { data };
 	tex_set_color_arr(texture, width, height, data_arr, 1);
+}
+
+///////////////////////////////////////////
+
+void _tex_set_colors_3d(tex_t texture, int32_t width, int32_t height, int32_t depth, void *data) {
+	profiler_zone();
+
+	if (!(texture->type & tex_type_volume)) {
+		log_warn("Use tex_set_colors / tex_set_color_arr for non-volume textures, not tex_set_colors_3d.");
+		return;
+	}
+
+	bool dynamic        = (texture->type & tex_type_dynamic) != 0;
+	bool different_size =
+		texture->width  != width  ||
+		texture->height != height ||
+		texture->depth  != depth;
+
+	// No-op: existing same-sized texture and no new data to upload.
+	if (!different_size && data == nullptr && skr_tex_is_valid(&texture->gpu_tex))
+		return;
+
+	skr_tex_data_t tex_data = {};
+	if (data != nullptr) {
+		tex_data.data        = data;
+		tex_data.mip_count   = 1;
+		tex_data.layer_count = 1; // 3D: one "layer" with depth slices in the data block
+		tex_data.base_mip    = 0;
+		tex_data.base_layer  = 0;
+		tex_data.row_pitch   = 0;
+	}
+
+	if (!skr_tex_is_valid(&texture->gpu_tex) || different_size || (!different_size && !dynamic)) {
+		if (!different_size && !dynamic)
+			texture->type |= tex_type_dynamic;
+
+		skr_tex_flags_    flags   = tex_type_to_skr_flags(texture->type);
+		skr_tex_fmt_      format  = (skr_tex_fmt_)texture->format;
+		skr_tex_sampler_t sampler = tex_get_skr_sampler(texture);
+		skr_vec3i_t       size    = { width, height, depth };
+
+		// Mips: caller asked for a chain → pass 0 to auto-fill, otherwise 1.
+		int32_t create_mip_count = (texture->type & tex_type_mips) ? 0 : 1;
+
+		skr_tex_t new_tex;
+		skr_err_ err = skr_tex_create(
+			format, flags, sampler, size, 1, create_mip_count,
+			data != nullptr ? &tex_data : nullptr,
+			&new_tex);
+
+		if (err != skr_err_success) {
+			log_err("Failed to create 3D texture");
+			tex_set_fallback(texture, _tex_get_error_fallback(texture));
+			texture->header.state = asset_state_error;
+			return;
+		}
+
+		// Atomic swap: render thread always sees a valid handle.
+		skr_tex_t old_tex = texture->gpu_tex;
+		texture->gpu_tex = new_tex;
+		if (skr_tex_is_valid(&old_tex))
+			skr_tex_destroy(&old_tex);
+
+		if ((texture->type & tex_type_mips) && data != nullptr) {
+			skr_tex_generate_mips(&texture->gpu_tex, nullptr);
+		}
+
+		tex_set_meta(texture, width, height, depth, texture->format);
+		tex_update_label(texture);
+	} else if (dynamic) {
+		if (data != nullptr) {
+			skr_tex_set_data(&texture->gpu_tex, &tex_data);
+			if (texture->type & tex_type_mips) {
+				skr_tex_generate_mips(&texture->gpu_tex, nullptr);
+			}
+		}
+	} else {
+		log_warn("Attempting additional writes to a non-dynamic texture!");
+	}
+
+	if (skr_tex_is_valid(&texture->gpu_tex)) {
+		tex_set_fallback(texture, nullptr);
+		texture->header.state = asset_state_loaded;
+	}
+}
+
+///////////////////////////////////////////
+
+void tex_set_colors_3d(tex_t texture, int32_t width, int32_t height, int32_t depth, void *data) {
+	profiler_zone();
+
+	// Serialize the GPU work onto the asset thread, matching the 2D path.
+	// skr_tex_create / skr_tex_set_data assume single-threaded use.
+	struct tex_upload_3d_job_t {
+		tex_t   texture;
+		int32_t width;
+		int32_t height;
+		int32_t depth;
+		void   *data;
+	};
+	tex_upload_3d_job_t job_data = { texture, width, height, depth, data };
+
+	assets_execute_blocking([](void *data) {
+		tex_upload_3d_job_t *job = (tex_upload_3d_job_t *)data;
+		_tex_set_colors_3d(job->texture, job->width, job->height, job->depth, job->data);
+		return (bool32_t)true;
+	}, &job_data);
 }
 
 ///////////////////////////////////////////
@@ -1395,6 +1510,13 @@ int32_t tex_get_width(tex_t texture) {
 int32_t tex_get_height(tex_t texture) {
 	assets_block_until(&texture->header, asset_state_loaded_meta);
 	return texture->height;
+}
+
+///////////////////////////////////////////
+
+int32_t tex_get_depth(tex_t texture) {
+	assets_block_until(&texture->header, asset_state_loaded_meta);
+	return texture->depth;
 }
 
 ///////////////////////////////////////////
@@ -1530,6 +1652,7 @@ tex_format_ tex_get_supported_depth_format(tex_format_ preferred, bool needs_ste
 id_hash_t tex_meta_hash(tex_t texture) {
 	id_hash_t result = hash_int     (texture->width);
 	result           = hash_int_with(texture->height, result);
+	result           = hash_int_with(texture->depth,  result);
 	uint64_t image   = (uint64_t)texture->gpu_tex.image;
 	result           = hash_int_with((int32_t)(image & 0xFFFFFFFF), result);
 	result           = hash_int_with((int32_t)(image >> 32),        result);
@@ -1540,9 +1663,10 @@ id_hash_t tex_meta_hash(tex_t texture) {
 
 ///////////////////////////////////////////
 
-void tex_set_meta(tex_t texture, int32_t width, int32_t height, tex_format_ format) {
+void tex_set_meta(tex_t texture, int32_t width, int32_t height, int32_t depth, tex_format_ format) {
 	texture->width  = width;
 	texture->height = height;
+	texture->depth  = depth;
 	texture->format = format;
 
 	// Compressed formats can't be rendered into, so mip generation is not
@@ -1612,13 +1736,18 @@ void tex_set_loading_fallback(tex_t loading_texture) {
 		}
 		tex_addref(loading_texture);
 	}
-	// Assign to the appropriate fallback based on texture type, or clear both
-	// if nullptr
+	// Assign to the appropriate fallback based on texture type, or clear all
+	// slots if nullptr
 	if (loading_texture == nullptr) {
 		tex_release(tex_loading_texture);
 		tex_release(tex_loading_texture_cubemap);
+		tex_release(tex_loading_texture_3d);
 		tex_loading_texture         = nullptr;
 		tex_loading_texture_cubemap = nullptr;
+		tex_loading_texture_3d      = nullptr;
+	} else if (loading_texture->type & tex_type_volume) {
+		tex_release(tex_loading_texture_3d);
+		tex_loading_texture_3d = loading_texture;
 	} else if (loading_texture->type & tex_type_cubemap) {
 		tex_release(tex_loading_texture_cubemap);
 		tex_loading_texture_cubemap = loading_texture;
@@ -1639,13 +1768,18 @@ void tex_set_error_fallback(tex_t error_texture) {
 		}
 		tex_addref(error_texture);
 	}
-	// Assign to the appropriate fallback based on texture type, or clear both
-	// if nullptr
+	// Assign to the appropriate fallback based on texture type, or clear all
+	// slots if nullptr
 	if (error_texture == nullptr) {
 		tex_release(tex_error_texture);
 		tex_release(tex_error_texture_cubemap);
+		tex_release(tex_error_texture_3d);
 		tex_error_texture         = nullptr;
 		tex_error_texture_cubemap = nullptr;
+		tex_error_texture_3d      = nullptr;
+	} else if (error_texture->type & tex_type_volume) {
+		tex_release(tex_error_texture_3d);
+		tex_error_texture_3d = error_texture;
 	} else if (error_texture->type & tex_type_cubemap) {
 		tex_release(tex_error_texture_cubemap);
 		tex_error_texture_cubemap = error_texture;

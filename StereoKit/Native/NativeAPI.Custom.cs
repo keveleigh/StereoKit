@@ -63,6 +63,10 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void tex_set_colors(IntPtr texture, int width, int height, [In] float[] data);
 
+		// tex_set_colors_3d overload for byte[] (single-channel volumes, SDFs, etc.)
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void tex_set_colors_3d(IntPtr texture, int width, int height, int depth, [In] byte[] data);
+
 		// tex_create_mem with byte array
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern IntPtr tex_create_mem([In] byte[] data, UIntPtr data_size, [MarshalAs(UnmanagedType.Bool)] bool srgb_data, int priority);
