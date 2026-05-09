@@ -67,6 +67,13 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void tex_set_colors_3d(IntPtr texture, int width, int height, int depth, [In] byte[] data);
 
+		// render_list_draw_now single-matrix overload — passes one camera +
+		// projection by reference (ABI-equivalent to a 1-element array
+		// pointer) so the common single-view call path doesn't have to
+		// allocate a temporary array.
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void render_list_draw_now(IntPtr list, IntPtr to_rendertarget, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, Color clear_color, RenderClear clear, Rect viewport_pct, RenderLayer layer_filter, int material_variant);
+
 		// tex_create_mem with byte array
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern IntPtr tex_create_mem([In] byte[] data, UIntPtr data_size, [MarshalAs(UnmanagedType.Bool)] bool srgb_data, int priority);

@@ -46,18 +46,22 @@ static void render_list_execute(render_list_t list, render_layer_ filter, int32_
 
 ///////////////////////////////////////////
 
+// Sizes the globally-bound shader buffer's per-view arrays (sk_view,
+// sk_proj, sk_viewproj, etc.). Must match SK_MAX_VIEWS in stereokit.hlsli.
+#define SK_MAX_VIEWS 6
+
 struct render_transform_buffer_t {
 	XMMATRIX world;
 	color128 color;
 };
 struct render_global_buffer_t {
-	XMMATRIX view[2];
-	XMMATRIX proj[2];
-	XMMATRIX proj_inv[2];
-	XMMATRIX viewproj[2];
+	XMMATRIX view[SK_MAX_VIEWS];
+	XMMATRIX proj[SK_MAX_VIEWS];
+	XMMATRIX proj_inv[SK_MAX_VIEWS];
+	XMMATRIX viewproj[SK_MAX_VIEWS];
 	vec4     lighting[7];
-	vec4     camera_pos[2];
-	vec4     camera_dir[2];
+	vec4     camera_pos[SK_MAX_VIEWS];
+	vec4     camera_dir[SK_MAX_VIEWS];
 	vec4     fingertip[2];
 	vec4     cubemap_i;
 	vec4     screen_size; // {width, height, 1/width, 1/height}
@@ -741,16 +745,6 @@ void render_add_model(model_t model, const matrix &transform, color128 color_lin
 ///////////////////////////////////////////
 
 void render_draw_queue(render_list_t list, const matrix *views, const matrix *projections, int32_t eye_offset, int32_t view_count, render_layer_ filter, int32_t material_variant, int32_t surface_width, int32_t surface_height) {
-	// A temporary fix for multiview trying to render to mono rendertargets
-	if (view_count == 1) {
-		memset(&local.global_buffer.view      [1], 0, sizeof(local.global_buffer.view      [1]));
-		memset(&local.global_buffer.proj      [1], 0, sizeof(local.global_buffer.proj      [1]));
-		memset(&local.global_buffer.proj_inv  [1], 0, sizeof(local.global_buffer.proj_inv  [1]));
-		memset(&local.global_buffer.viewproj  [1], 0, sizeof(local.global_buffer.viewproj  [1]));
-		memset(&local.global_buffer.camera_pos[1], 0, sizeof(local.global_buffer.camera_pos[1]));
-		memset(&local.global_buffer.camera_dir[1], 0, sizeof(local.global_buffer.camera_dir[1]));
-	}
-
 	// Copy camera information into the global buffer
 	for (int32_t i = 0; i < view_count; i++) {
 		XMMATRIX view_f, projection_f;
@@ -1361,7 +1355,7 @@ void render_list_add_model_mat(render_list_t list, model_t model, material_t mat
 
 ///////////////////////////////////////////
 
-void render_list_draw_now(render_list_t list, tex_t to_rendertarget, matrix camera, matrix projection, color128 clear_color, render_clear_ clear, rect_t viewport_pct, render_layer_ layer_filter, int32_t material_variant) {
+void render_list_draw_now(render_list_t list, tex_t to_rendertarget, const matrix* cameras, const matrix* projections, int32_t view_count, color128 clear_color, render_clear_ clear, rect_t viewport_pct, render_layer_ layer_filter, int32_t material_variant) {
 	int32_t w = to_rendertarget->width;
 	int32_t h = to_rendertarget->height;
 
@@ -1390,7 +1384,7 @@ void render_list_draw_now(render_list_t list, tex_t to_rendertarget, matrix came
 
 	// Render!
 	skr_vec4_t skr_clear_color = { clear_color.r, clear_color.g, clear_color.b, clear_color.a };
-	render_draw_queue(list, &camera, &projection, 0, 1, layer_filter, material_variant, w, h);
+	render_draw_queue(list, cameras, projections, 0, view_count, layer_filter, material_variant, w, h);
 
 	skr_pass_t pass = {};
 	pass.color       = &to_rendertarget->gpu_tex;
@@ -1400,7 +1394,8 @@ void render_list_draw_now(render_list_t list, tex_t to_rendertarget, matrix came
 	pass.clear_depth = 1.0f;
 	pass.viewport    = viewport;
 	pass.scissor     = scissor;
-	pass.view_count  = 1;
+	pass.view_count       = view_count;
+	pass.views_correlated = view_count == 2; // XR L/R eyes; assume uncorrelated for other counts
 	render_pass_add_draw(&pass);
 	skr_pass_submit(&pass);
 }
