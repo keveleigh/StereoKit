@@ -74,6 +74,12 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void render_list_draw_now(IntPtr list, IntPtr to_rendertarget, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, Color clear_color, RenderClear clear, Rect viewport_pct, RenderLayer layer_filter, int material_variant);
 
+		// render_to single-matrix overload — same trick as
+		// render_list_draw_now above. Lets the single-view RenderTo
+		// path avoid a temporary array allocation.
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void render_to(IntPtr to_rendertarget, int to_target_index, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, RenderLayer layer_filter, int material_variant, RenderClear clear, Rect viewport);
+
 		// tex_create_mem with byte array
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern IntPtr tex_create_mem([In] byte[] data, UIntPtr data_size, [MarshalAs(UnmanagedType.Bool)] bool srgb_data, int priority);

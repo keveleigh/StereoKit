@@ -144,7 +144,7 @@ namespace StereoKit
 		/// across multiple views in a single pass, with one camera +
 		/// projection per view. Each view writes to its corresponding
 		/// layer of the (array) render target. The number of views is
-		/// capped by Renderer.MaxViews.</summary>
+		/// capped at 6.</summary>
 		/// <param name="toRenderTarget">An array or cubemap rendertarget
 		/// with at least `cameras.Length` layers.</param>
 		/// <param name="cameras">View transforms, one per view. Length

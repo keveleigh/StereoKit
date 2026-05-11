@@ -1660,6 +1660,7 @@ SK_API bool32_t         compute_set_texture      (compute_t compute, const char 
 SK_API bool32_t         compute_set_storage      (compute_t compute, const char *name, compute_buffer_t  buffer);
 SK_API bool32_t         compute_set_constant     (compute_t compute, const char *name, material_buffer_t buffer);
 SK_API void             compute_dispatch         (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
+SK_API void             compute_dispatch_now     (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
 SK_API int32_t          compute_get_param_count  (compute_t compute);
 SK_API void             compute_get_param_info   (compute_t compute, int32_t index, char **out_name, material_param_ *out_type);
 SK_API void             compute_addref           (compute_t compute);
@@ -2058,7 +2059,7 @@ SK_API void                  render_screenshot     (const char *file_utf8, int32
 //TODO: for v0.4, reorder parameters, context in particular should be next to callback
 SK_API void                  render_screenshot_capture  (void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees, tex_format_ tex_format sk_default(tex_format_rgba32), void *context sk_default(nullptr));
 SK_API void                  render_screenshot_viewpoint(void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter sk_default(render_layer_all), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default(rect_t{}), tex_format_ tex_format sk_default(tex_format_rgba32), void* context sk_default(nullptr));
-SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const sk_ref(matrix) camera, const sk_ref(matrix) projection, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
+SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
 SK_API void                  render_get_device     (void **device, void **context);
 SK_API render_list_t         render_get_primary_list(void);
 

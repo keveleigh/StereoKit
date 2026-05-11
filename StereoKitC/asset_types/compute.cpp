@@ -7,6 +7,7 @@
 #include "shader.h"
 #include "texture.h"
 #include "assets.h"
+#include "../systems/render.h"
 
 namespace sk {
 
@@ -291,6 +292,12 @@ bool32_t compute_set_constant(compute_t compute, const char *name, material_buff
 ///////////////////////////////////////////
 
 void compute_dispatch(compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
+	render_queue_compute(compute, group_count_x, group_count_y, group_count_z);
+}
+
+///////////////////////////////////////////
+
+void compute_dispatch_now(compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z) {
 	// Resolve texture fallbacks at dispatch time so that textures
 	// that finish loading between set and dispatch use the correct
 	// data instead of a stale fallback.

@@ -460,6 +460,7 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         compute_set_constant(IntPtr compute, [MarshalAs(UnmanagedType.LPUTF8Str)] string name, IntPtr buffer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_dispatch(IntPtr compute, uint group_count_x, uint group_count_y, uint group_count_z);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_dispatch_now(IntPtr compute, uint group_count_x, uint group_count_y, uint group_count_z);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          compute_get_param_count(IntPtr compute);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_get_param_info(IntPtr compute, int index, out IntPtr out_name, out MaterialParam out_type);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         compute_addref(IntPtr compute);
@@ -646,7 +647,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_screenshot([MarshalAs(UnmanagedType.LPUTF8Str)] string file_utf8, int file_quality_100, Pose viewpoint, int width, int height, float field_of_view_degrees);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_screenshot_capture([MarshalAs(UnmanagedType.FunctionPtr)] RenderOnScreenshotCallback render_on_screenshot_callback, Pose viewpoint, int width, int height, float field_of_view_degrees, TexFormat tex_format, IntPtr context);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_screenshot_viewpoint([MarshalAs(UnmanagedType.FunctionPtr)] RenderOnScreenshotCallback render_on_screenshot_callback, Matrix camera, Matrix projection, int width, int height, RenderLayer layer_filter, RenderClear clear, Rect viewport, TexFormat tex_format, IntPtr context);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_to(IntPtr to_rendertarget, int to_target_index, in Matrix camera, in Matrix projection, RenderLayer layer_filter, int material_variant, RenderClear clear, Rect viewport);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_to(IntPtr to_rendertarget, int to_target_index, [In] Matrix[] in_arr_cameras, [In] Matrix[] in_arr_projections, int view_count, RenderLayer layer_filter, int material_variant, RenderClear clear, Rect viewport);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_get_device(IntPtr device, IntPtr context);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_get_primary_list();
 
