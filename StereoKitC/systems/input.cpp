@@ -280,8 +280,6 @@ void input_step() {
 	// Make controllers from our inputs
 	///////////////////////////////////////////
 
-	track_state_ pos_tracked, rot_tracked;
-
 	// Left
 	local.controllers[handed_left].aim          = input_pose  (input_pose_l_aim);
 	local.controllers[handed_left].palm         = input_pose  (input_pose_l_palm);
@@ -294,9 +292,12 @@ void input_step() {
 	local.controllers[handed_left].stick        = input_xy    (input_xy_l_stick);
 
 	pose_state_ l_grip_state = input_pose_state(input_pose_l_grip);
-	local.controllers[handed_left].tracked      = button_make_state((local.controllers[handed_left].tracked & button_state_active) > 0, pos_tracked != track_state_lost || rot_tracked != track_state_lost);
 	local.controllers[handed_left].tracked_pos  = (l_grip_state & pose_state_pos_known) > 0 ? track_state_known : (l_grip_state & pose_state_pos_inferred) > 0 ? track_state_inferred : track_state_lost;
 	local.controllers[handed_left].tracked_rot  = (l_grip_state & pose_state_rot_known) > 0 ? track_state_known : (l_grip_state & pose_state_rot_inferred) > 0 ? track_state_inferred : track_state_lost;
+	local.controllers[handed_left].tracked      = button_make_state(
+		(local.controllers[handed_left].tracked & button_state_active) > 0,
+		local.controllers[handed_left].tracked_pos != track_state_lost ||
+		local.controllers[handed_left].tracked_rot != track_state_lost);
 
 	// Right
 	local.controllers[handed_right].aim         = input_pose  (input_pose_r_aim);
@@ -310,9 +311,12 @@ void input_step() {
 	local.controllers[handed_right].stick       = input_xy    (input_xy_r_stick);
 
 	pose_state_ r_grip_state = input_pose_state(input_pose_r_grip);
-	local.controllers[handed_right].tracked     = button_make_state((local.controllers[handed_right].tracked & button_state_active) > 0, pos_tracked != track_state_lost);
 	local.controllers[handed_right].tracked_pos = (r_grip_state & pose_state_pos_known) > 0 ? track_state_known : (r_grip_state & pose_state_pos_inferred) > 0 ? track_state_inferred : track_state_lost;
 	local.controllers[handed_right].tracked_rot = (r_grip_state & pose_state_rot_known) > 0 ? track_state_known : (r_grip_state & pose_state_rot_inferred) > 0 ? track_state_inferred : track_state_lost;
+	local.controllers[handed_right].tracked     = button_make_state(
+		(local.controllers[handed_right].tracked & button_state_active) > 0,
+		local.controllers[handed_right].tracked_pos != track_state_lost ||
+		local.controllers[handed_right].tracked_rot != track_state_lost);
 
 	// Both
 	local.controller_menubtn = button_make_state(
