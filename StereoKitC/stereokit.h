@@ -1255,6 +1255,10 @@ typedef enum tex_type_ {
 	  Create it with a format that supports storage images, such as
 	  tex_format_rgba128.*/
 	tex_type_compute       = 1 << 7,
+	/*A volumetric (3D) texture, sized with width, height, and depth.
+	  Volume textures are mutually exclusive with Cubemap and array
+	  textures, and don't pair with a zbuffer.*/
+	tex_type_volume        = 1 << 8,
 	/*A standard color image that also generates mip-maps
 	  automatically.*/
 	tex_type_image         = tex_type_image_nomips | tex_type_mips,
@@ -1357,6 +1361,7 @@ SK_API void         tex_on_load_remove      (tex_t texture, void (*asset_on_load
 SK_API void         tex_set_colors          (tex_t texture, int32_t width, int32_t height, void *data);
 SK_API void         tex_set_color_arr       (tex_t texture, int32_t width, int32_t height, void** array_data, int32_t array_count,                    int32_t multisample sk_default(1), spherical_harmonics_t* out_sh_lighting_info sk_default(nullptr));
 SK_API void         tex_set_color_arr_mips  (tex_t texture, int32_t width, int32_t height, void** array_data, int32_t array_count, int32_t mip_count, int32_t multisample sk_default(1), spherical_harmonics_t* out_sh_lighting_info sk_default(nullptr));
+SK_API void         tex_set_colors_3d       (tex_t texture, int32_t width, int32_t height, int32_t depth, void *data);
 SK_API void         tex_set_mem             (tex_t texture, void* data, size_t data_size, bool32_t srgb_data sk_default(true), bool32_t blocking sk_default(false), int32_t priority sk_default(10));
 SK_API void         tex_add_zbuffer         (tex_t texture, tex_format_ format sk_default(tex_format_depthstencil));
 SK_API void         tex_set_zbuffer         (tex_t texture, tex_t depth_texture);
@@ -1369,6 +1374,7 @@ SK_API tex_t        tex_gen_cubemap_sh      (const sk_ref(spherical_harmonics_t)
 SK_API tex_format_  tex_get_format          (tex_t texture);
 SK_API int32_t      tex_get_width           (tex_t texture);
 SK_API int32_t      tex_get_height          (tex_t texture);
+SK_API int32_t      tex_get_depth           (tex_t texture);
 SK_API void         tex_set_sample          (tex_t texture, tex_sample_ sample sk_default(tex_sample_linear));
 SK_API tex_sample_  tex_get_sample          (tex_t texture);
 SK_API void             tex_set_sample_comp (tex_t texture, tex_sample_comp_ compare sk_default(tex_sample_comp_none));
@@ -1654,6 +1660,7 @@ SK_API bool32_t         compute_set_texture      (compute_t compute, const char 
 SK_API bool32_t         compute_set_storage      (compute_t compute, const char *name, compute_buffer_t  buffer);
 SK_API bool32_t         compute_set_constant     (compute_t compute, const char *name, material_buffer_t buffer);
 SK_API void             compute_dispatch         (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
+SK_API void             compute_dispatch_now     (compute_t compute, uint32_t group_count_x, uint32_t group_count_y, uint32_t group_count_z);
 SK_API int32_t          compute_get_param_count  (compute_t compute);
 SK_API void             compute_get_param_info   (compute_t compute, int32_t index, char **out_name, material_param_ *out_type);
 SK_API void             compute_addref           (compute_t compute);
@@ -2052,15 +2059,30 @@ SK_API void                  render_screenshot     (const char *file_utf8, int32
 //TODO: for v0.4, reorder parameters, context in particular should be next to callback
 SK_API void                  render_screenshot_capture  (void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees, tex_format_ tex_format sk_default(tex_format_rgba32), void *context sk_default(nullptr));
 SK_API void                  render_screenshot_viewpoint(void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter sk_default(render_layer_all), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default(rect_t{}), tex_format_ tex_format sk_default(tex_format_rgba32), void* context sk_default(nullptr));
-SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const sk_ref(matrix) camera, const sk_ref(matrix) projection, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
+SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
 SK_API void                  render_get_device     (void **device, void **context);
 SK_API render_list_t         render_get_primary_list(void);
 
 ///////////////////////////////////////////
 
 
+/* Controls whether a RenderList holds asset references for the items it
+   contains. Tracked lists are safe to keep around across frames at the cost
+   of an addref/releaseref pair per item. */
+typedef enum render_list_refs_ {
+	/* The list calls addref on each item's mesh/material when added, and
+	   releaseref when cleared. This keeps assets alive for as long as the
+	   list holds them, and is the safe default. */
+	render_list_refs_tracked = 0,
+	/* The list does not addref or releaseref its items. The caller is
+	   responsible for ensuring referenced assets remain valid until the
+	   list is cleared. Useful for per-frame lists that are filled and
+	   drained inside a single frame. */
+	render_list_refs_none    = 1,
+} render_list_refs_;
+
 SK_API render_list_t         render_list_find         (const char* id);
-SK_API render_list_t         render_list_create       (void);
+SK_API render_list_t         render_list_create       (render_list_refs_ refs sk_default(render_list_refs_tracked));
 SK_API void                  render_list_set_id       (      render_list_t list, const char* id);
 SK_API const char*           render_list_get_id       (const render_list_t list);
 SK_API void                  render_list_addref       (      render_list_t list);
@@ -2071,7 +2093,7 @@ SK_API int32_t               render_list_prev_count   (const render_list_t list)
 SK_API void                  render_list_add_mesh     (      render_list_t list, mesh_t  mesh,  material_t material,          matrix world_transform, color128 color_linear, render_layer_ layer);
 SK_API void                  render_list_add_model    (      render_list_t list, model_t model,                               matrix world_transform, color128 color_linear, render_layer_ layer);
 SK_API void                  render_list_add_model_mat(      render_list_t list, model_t model, material_t material_override, matrix world_transform, color128 color_linear, render_layer_ layer);
-SK_API void                  render_list_draw_now     (      render_list_t list, tex_t to_rendertarget, matrix camera, matrix projection, color128 clear_color sk_default({ 0,0,0,0 }), render_clear_ clear sk_default(render_clear_all), rect_t viewport_pct sk_default({}), render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0));
+SK_API void                  render_list_draw_now     (      render_list_t list, tex_t to_rendertarget, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, color128 clear_color sk_default({ 0,0,0,0 }), render_clear_ clear sk_default(render_clear_all), rect_t viewport_pct sk_default({}), render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0));
 
 SK_API void                  render_list_push         (      render_list_t list);
 SK_API void                  render_list_pop          (void);
@@ -3361,6 +3383,7 @@ SK_CONST char *default_id_tex_rough            = "default/tex_rough";
 SK_CONST char *default_id_tex_devtex           = "default/tex_devtex";
 SK_CONST char *default_id_tex_error            = "default/tex_error";
 SK_CONST char *default_id_cubemap              = "default/cubemap";
+SK_CONST char *default_id_tex_3d               = "default/tex_3d";
 SK_CONST char *default_id_font                 = "default/font";
 SK_CONST char *default_id_mesh_quad            = "default/mesh_quad";
 SK_CONST char *default_id_mesh_screen_quad     = "default/mesh_screen_quad";

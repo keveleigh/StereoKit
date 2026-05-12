@@ -681,6 +681,10 @@ namespace StereoKit
 		/// Create it with a format that supports storage images, such as
 		/// tex_format_rgba128.</summary>
 		Compute      = 1 << 7,
+		/// <summary>A volumetric (3D) texture, sized with width, height, and depth.
+		/// Volume textures are mutually exclusive with Cubemap and array
+		/// textures, and don't pair with a zbuffer.</summary>
+		Volume       = 1 << 8,
 		/// <summary>A standard color image that also generates mip-maps
 		/// automatically.</summary>
 		Image        = ImageNomips | Mips,
@@ -1077,6 +1081,21 @@ namespace StereoKit
 		/// thumbnails of 3D objects, or other similar cases. In this mode,
 		/// parallel lines remain parallel regardless of how far they travel.</summary>
 		Ortho        = 1,
+	}
+
+	/// <summary>Controls whether a RenderList holds asset references for the items it
+	/// contains. Tracked lists are safe to keep around across frames at the cost
+	/// of an addref/releaseref pair per item.</summary>
+	public enum RenderListRefs {
+		/// <summary>The list calls addref on each item's mesh/material when added, and
+		/// releaseref when cleared. This keeps assets alive for as long as the
+		/// list holds them, and is the safe default.</summary>
+		Tracked      = 0,
+		/// <summary>The list does not addref or releaseref its items. The caller is
+		/// responsible for ensuring referenced assets remain valid until the
+		/// list is cleared. Useful for per-frame lists that are filled and
+		/// drained inside a single frame.</summary>
+		None         = 1,
 	}
 
 	/// <summary>When used with a hierarchy modifying function that will push/pop items onto a

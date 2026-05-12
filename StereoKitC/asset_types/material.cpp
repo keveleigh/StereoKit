@@ -1066,9 +1066,12 @@ void material_check_dirty(material_t material) {
 			// Update sk_renderer texture binding
 			skr_material_set_tex(&material->gpu_mat, meta->resources[i].name, &physical_tex->gpu_tex);
 
-			// Update the _i info param with texture dimensions
+			// Update the _i info param with texture dimensions. The third
+			// component is the highest mip index — read it from the actual
+			// GPU texture, not log2(width), so partial mip chains don't lie
+			// to the shader.
 			id_hash_t tex_info_hash = hash_string_with("_i", meta->resources[i].name_hash);
-			vec4      info          = { (float)physical_tex->width, (float)physical_tex->height, (float)(uint32_t)log2(physical_tex->width), 0 };
+			vec4      info          = { (float)physical_tex->width, (float)physical_tex->height, physical_tex->gpu_tex.mip_levels > 0 ? (float)(physical_tex->gpu_tex.mip_levels - 1) : 0, 0 };
 			material_set_param_id(material, tex_info_hash, material_param_vector4, &info);
 		}
 	}
