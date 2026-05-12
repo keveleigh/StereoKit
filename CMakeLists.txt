@@ -516,6 +516,8 @@ set(SK_SRC_XR_EXTS
   StereoKitC/xr_backends/extensions/fb_colorspace.cpp
   StereoKitC/xr_backends/extensions/fb_haptic.h
   StereoKitC/xr_backends/extensions/fb_haptic.cpp
+  StereoKitC/xr_backends/extensions/fb_render_model.h
+  StereoKitC/xr_backends/extensions/fb_render_model.cpp
   StereoKitC/xr_backends/extensions/vulkan_enable.h
   StereoKitC/xr_backends/extensions/vulkan_enable.cpp
   StereoKitC/xr_backends/extensions/hand_mesh.h
