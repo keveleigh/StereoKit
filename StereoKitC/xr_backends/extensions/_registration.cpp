@@ -21,6 +21,7 @@
 #include "eye_interaction.h"
 #include "fb_colorspace.h"
 #include "fb_haptic.h"
+#include "fb_render_model.h"
 #include "vulkan_enable.h"
 #include "hand_tracking.h"
 #include "hand_mesh.h"
@@ -68,6 +69,7 @@ bool ext_registration() {
 	xr_ext_msft_bridge_register();
 	xr_ext_interaction_render_model_register();
 	xr_ext_render_model_register();
+	xr_fb_render_model_register();
 
 	// Input extensions all must go before the oxri/input system
 	xr_ext_palm_pose_register                    ();
