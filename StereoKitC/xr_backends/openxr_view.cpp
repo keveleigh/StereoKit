@@ -35,6 +35,28 @@ namespace sk {
 
 ///////////////////////////////////////////
 
+// Counter mirrors sk_renderer's frame counter so the ring slot we read
+// matches the frame whose timing skr_renderer_get_cpu_time_us reports. Both
+// counters advance exclusively at skr_renderer_frame_end, so once both have
+// started ticking, their modular phase is fixed.
+static uint64_t xr_cpu_dead_ring [SKR_MAX_FRAMES_IN_FLIGHT];  // ticks per completed frame
+static uint32_t xr_cpu_dead_frame;                            // mirrors _skr_vk.frame
+static uint64_t xr_cpu_dead_accum_ticks;                      // accumulator for current frame
+
+void openxr_cpu_dead_commit() {
+	xr_cpu_dead_ring[xr_cpu_dead_frame % SKR_MAX_FRAMES_IN_FLIGHT] = xr_cpu_dead_accum_ticks;
+	xr_cpu_dead_accum_ticks = 0;
+	xr_cpu_dead_frame++;
+}
+
+uint64_t openxr_cpu_dead_time_us() {
+	// Match sk_renderer's read offset: it reads (flight_idx + 1) % N, which
+	// is the same slot index our (frame + 1) % N selects.
+	return (uint64_t)stm_us(xr_cpu_dead_ring[(xr_cpu_dead_frame + 1) % SKR_MAX_FRAMES_IN_FLIGHT]);
+}
+
+///////////////////////////////////////////
+
 struct swapchain_t {
 	XrSwapchain          handle;
 	int32_t              width;
@@ -758,7 +780,10 @@ bool openxr_render_frame() {
 	{
 		profiler_zone_name("xrWaitFrame");
 
+		uint64_t dead_start = stm_now();
 		XrResult xrWaitFrameResult = xrWaitFrame(xr_session, &wait_info, &frame_state);
+		xr_cpu_dead_accum_ticks += stm_diff(stm_now(), dead_start);
+
 		if (xrWaitFrameResult == XR_ERROR_SESSION_LOST) {
 			sk_quit(quit_reason_session_lost);
 		}
@@ -1010,6 +1035,7 @@ bool openxr_display_locate(device_display_t* display, XrTime at_time) {
 bool openxr_display_swapchain_acquire(device_display_t* display, color128 color, render_layer_ render_filter) {
 	// We need to ask which swapchain image to use for rendering! Which one
 	// will we get? Who knows! It's up to the runtime to decide.
+	uint64_t                    dead_start   = stm_now();
 	uint32_t                    color_id;
 	XrSwapchainImageAcquireInfo acquire_info = { XR_TYPE_SWAPCHAIN_IMAGE_ACQUIRE_INFO };
 	if (XR_FAILED(xrAcquireSwapchainImage(display->swapchain_color.handle, &acquire_info, &color_id))) return false;
@@ -1028,6 +1054,7 @@ bool openxr_display_swapchain_acquire(device_display_t* display, color128 color,
 	if (display->swapchain_depth.handle) {
 		if (XR_FAILED(xrWaitSwapchainImage(display->swapchain_depth.handle, &wait_info))) return false;
 	}
+	xr_cpu_dead_accum_ticks += stm_diff(stm_now(), dead_start);
 
 	if (display->multisample <= 1) {
 		render_pipeline_surface_set_tex(display->render_surface, display->swapchain_color.textures[color_id]);

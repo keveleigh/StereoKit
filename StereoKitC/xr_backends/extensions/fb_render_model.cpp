@@ -160,6 +160,19 @@ bool xr_fb_render_model_load(xr_fb_model_t* ref_model) {
 		model_set_id(ref_model->model, name);
 
 		sk_free(buffer.buffer);
+
+		// StereoKit's glTF loader applies a 180-degree-about-Y "correction" to
+		// root node transforms (model_gltf.cpp), assuming the asset is authored
+		// in glTF's spec +Z-forward convention and needs flipping to fit a -Z-
+		// forward world. XR render models are authored against OpenXR's grip
+		// pose, not glTF's "forward face" recommendation, so that correction
+		// just rotates them away from where the runtime expects. Undo it on
+		// every root node by re-applying the same 180-Y rotation (self-inverse).
+		matrix undo = matrix_trs(vec3_zero, quat_from_angles(0, 180, 0));
+		for (model_node_id n = model_node_get_root(ref_model->model); n != -1; n = model_node_sibling(ref_model->model, n)) {
+			model_node_set_transform_local(ref_model->model, n,
+				model_node_get_transform_local(ref_model->model, n) * undo);
+		}
 	}
 
 	ref_model->key     = props.modelKey;
@@ -202,10 +215,11 @@ void xr_fb_render_model_draw_controller(handed_ hand) {
 	model_t m = xr_fb_render_model_get(hand);
 	if (m == nullptr) return;
 
+	// Models are authored at the OpenXR grip pose, and the glTF-spec axis
+	// correction was already stripped at load time, so we can apply the grip
+	// transform directly with no extra fixup.
 	const controller_t* c = input_controller(hand);
-	matrix fixup     = matrix_trs(vec3_zero, quat_from_angles(0, 180, 0));
-	matrix transform = fixup * matrix_trs(c->pose.position, c->pose.orientation);
-	render_add_model(m, transform);
+	render_add_model(m, matrix_trs(c->pose.position, c->pose.orientation));
 }
 
 } // namespace sk
