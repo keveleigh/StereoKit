@@ -624,6 +624,7 @@ typedef enum standby_mode_ {
 typedef struct sk_settings_t {
 	const char    *app_name;
 	const char    *assets_folder;
+	const char    *default_font_family;
 	app_mode_      mode;
 	display_blend_ blend_preference;
 	bool32_t       no_flatscreen_fallback;
@@ -3082,12 +3083,12 @@ SK_API bool32_t              world_raycast                   (ray_t ray, ray_t *
 SK_API void                  world_set_occlusion             (occlusion_caps_ flags);
 SK_API occlusion_caps_       world_get_occlusion             (void);
 SK_API occlusion_caps_       world_occlusion_capabilities    (void);
-SK_DEPRECATED SK_API void    world_set_occlusion_enabled     (bool32_t enabled);
-SK_DEPRECATED SK_API bool32_t world_get_occlusion_enabled    (void);
+SK_API SK_DEPRECATED void    world_set_occlusion_enabled     (bool32_t enabled);
+SK_API SK_DEPRECATED bool32_t world_get_occlusion_enabled    (void);
 SK_API void                  world_set_raycast_enabled       (bool32_t enabled);
 SK_API bool32_t              world_get_raycast_enabled       (void);
-SK_DEPRECATED SK_API void    world_set_occlusion_material    (material_t material);
-SK_DEPRECATED SK_API material_t world_get_occlusion_material (void);
+SK_API SK_DEPRECATED void    world_set_occlusion_material    (material_t material);
+SK_API SK_DEPRECATED material_t world_get_occlusion_material (void);
 SK_API void                  world_set_refresh_type          (world_refresh_ refresh_type);
 SK_API world_refresh_        world_get_refresh_type          (void);
 SK_API void                  world_set_refresh_radius        (float radius_meters);

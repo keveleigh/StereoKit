@@ -161,6 +161,7 @@ int main() {
 	settings.app_name      = "StereoKit C";
 	settings.assets_folder = "Assets";
 	settings.mode          = app_mode_xr;
+	settings.default_font_family = "builtin, sans-serif";
 	if (!sk_init(settings))
 		return 1;
 
