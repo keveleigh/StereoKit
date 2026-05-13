@@ -1915,6 +1915,8 @@ namespace StereoKit
 		Compute,
 		/// <summary>A ComputeBuffer</summary>
 		ComputeBuffer,
+		/// <summary>A MaterialBuffer</summary>
+		MaterialBuffer,
 	}
 
 	/// <summary>This describes how a UI element moves when being dragged around by a user!</summary>

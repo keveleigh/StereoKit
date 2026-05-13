@@ -1004,21 +1004,25 @@ int material_get_param_count(material_t material) {
 ///////////////////////////////////////////
 
 material_buffer_t material_buffer_create(int32_t size) {
-	_material_buffer_t* buffer = sk_malloc_t(_material_buffer_t, 1);
-	buffer->size = size;
-	buffer->refs = 1;
-	void* data = sk_calloc(size);
-	if (skr_buffer_create(data, (uint32_t)size, 1, skr_buffer_type_constant, skr_use_dynamic, &buffer->buffer) != skr_err_success) {
-		log_err("Failed to create material buffer");
-	}
+	skr_buffer_t buffer = {};
+	void*        data   = sk_calloc(size);
+	skr_err_     err    = skr_buffer_create(data, (uint32_t)size, 1, skr_buffer_type_constant, skr_use_dynamic, &buffer);
 	sk_free(data);
-	return buffer;
+	if (err != skr_err_success) {
+		log_err("Failed to create material buffer");
+		return nullptr;
+	}
+
+	material_buffer_t result = (material_buffer_t)assets_allocate(asset_type_material_buffer);
+	result->size   = size;
+	result->buffer = buffer;
+	return result;
 }
 
 ///////////////////////////////////////////
 
 void material_buffer_addref(material_buffer_t buffer) {
-	atomic_increment(&buffer->refs);
+	assets_addref(&buffer->header);
 }
 
 ///////////////////////////////////////////
@@ -1026,15 +1030,13 @@ void material_buffer_addref(material_buffer_t buffer) {
 void material_buffer_destroy(material_buffer_t buffer) {
 	skr_buffer_destroy(&buffer->buffer);
 	*buffer = {};
-	sk_free(buffer);
 }
 
 ///////////////////////////////////////////
 
 void material_buffer_release(material_buffer_t buffer) {
-	if (buffer && atomic_decrement(&buffer->refs) == 0) {
-		material_buffer_destroy(buffer);
-	}
+	if (buffer == nullptr) return;
+	assets_releaseref(&buffer->header);
 }
 
 ///////////////////////////////////////////
