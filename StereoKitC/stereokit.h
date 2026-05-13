@@ -3341,6 +3341,8 @@ typedef enum asset_type_ {
 	asset_type_compute,
 	/*A ComputeBuffer*/
 	asset_type_compute_buffer,
+	/*A MaterialBuffer*/
+	asset_type_material_buffer,
 } asset_type_;
 
 typedef void* asset_t;

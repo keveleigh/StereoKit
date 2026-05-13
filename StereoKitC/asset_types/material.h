@@ -26,11 +26,12 @@ struct _material_t {
 };
 
 struct _material_buffer_t {
-	int32_t      refs;
-	int32_t      size;
-	skr_buffer_t buffer;
+	asset_header_t header;
+	int32_t        size;
+	skr_buffer_t   buffer;
 };
 
+void   material_buffer_destroy (material_buffer_t buffer);
 void   material_destroy        (material_t material);
 void   material_check_dirty    (material_t material);
 tex_t  material_get_default_tex(material_t material, const char *name);
