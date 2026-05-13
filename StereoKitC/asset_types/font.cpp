@@ -652,23 +652,106 @@ void font_update_fonts() {
 
 ///////////////////////////////////////////
 
-font_t font_create_family(const char* font_family) {
-	font_fallback_info_t* info;
-	int32_t               info_count;
-	fontfile_from_css(font_family, &info, &info_count);
+enum fam_kind_ { fam_kind_family, fam_kind_builtin, fam_kind_path };
+struct fam_token_t { stref_t text; fam_kind_ kind; };
 
-	if (info_count == 0) {
-		log_errf("No font files provided for the font_family %s.", font_family);
+static int32_t font_source_add_token(const fam_token_t &t) {
+	if (t.kind == fam_kind_builtin)
+		return font_source_add_data("sk/builtin/aileron", aileron_font_ttf, aileron_font_ttf_len);
+
+	char*   path = stref_copy(t.text);
+	int32_t id   = font_source_add(path);
+		
+	sk_free(path);
+	return id;
+}
+
+font_t font_create_family(const char* font_family) {
+	if (font_family == nullptr || font_family[0] == '\0') {
+		log_err("font_create_family: no font family provided.");
 		return nullptr;
 	}
-	const char** files = sk_malloc_t(const char*, info_count);
+
+	// Cache identical requests by hashing the full input.
+	char file_id[64];
+	snprintf(file_id, sizeof(file_id), "sk/font/%" PRIu64, hash_string(font_family));
+	font_t cached = font_find(file_id);
+	if (cached != nullptr) return cached;
+
+	// Walk comma-separated tokens via stref. Each token is classified as the
+	// "builtin" sentinel (the bundled Aileron, case-sensitive), a file path
+	// (contains / or \, or ends in a recognized font extension), or a family
+	// name (resolved via fontfile_from_css). A bare '.' is not enough to
+	// classify as a path, since family names like "PT Sans 1.1" contain dots.
+	array_t<fam_token_t> tokens       = {};
+	int32_t              family_count = 0;
+	stref_t              line         = stref_make(font_family);
+	stref_t              word         = {};
+	while (stref_nextword(line, word, ',')) {
+		stref_trim(word);
+		if (word.length == 0) continue;
+
+		fam_token_t t = {};
+		t.text = word;
+		if (stref_equals(word, "builtin")) {
+			t.kind = fam_kind_builtin;
+		} else if (stref_indexof(word, '/') >= 0 || stref_indexof(word, '\\') >= 0) {
+			t.kind = fam_kind_path;
+		} else if (stref_indexof(word, '.') >= 0) {
+			char* tmp = stref_copy(word);
+			t.kind = font_is_valid_extension(tmp) ? fam_kind_path : fam_kind_family;
+			sk_free(tmp);
+			if (t.kind == fam_kind_family) family_count++;
+		} else {
+			t.kind = fam_kind_family;
+			family_count++;
+		}
+		tokens.add(t);
+	}
+
+	// If any family-name tokens are present, hand the original input to
+	// fontfile_from_css. Unknown tokens (builtin, paths) just don't match on
+	// any backend and are silently dropped from the resolved list.
+	font_fallback_info_t* info       = nullptr;
+	int32_t               info_count = 0;
+	if (family_count > 0) fontfile_from_css(font_family, &info, &info_count);
+
+	// Construct the font. Position rules: the leading run of special tokens
+	// (builtin/path, before any family name) takes priority over the css-
+	// resolved set. Anything from the first family token onwards is treated
+	// as trailing - css-resolved family files first, then any remaining
+	// specials in their original order.
+	font_t result = (font_t)assets_allocate(asset_type_font);
+	assets_set_id(&result->header, file_id);
+
+	int32_t leading_end = tokens.count;
+	for (int32_t i = 0; i < tokens.count; i++) {
+		if (tokens[i].kind == fam_kind_family) { leading_end = i; break; }
+	}
+
+	for (int32_t i = 0; i < leading_end; i++) {
+		int32_t id = font_source_add_token(tokens[i]);
+		if (id >= 0) result->font_ids.add(id);
+	}
 	for (int32_t i = 0; i < info_count; i++) {
-		files[i] = string_copy(info[i].filepath);
+		int32_t id = font_source_add(info[i].filepath);
+		if (id >= 0) result->font_ids.add(id);
+	}
+	for (int32_t i = leading_end; i < tokens.count; i++) {
+		if (tokens[i].kind == fam_kind_family) continue;
+		int32_t id = font_source_add_token(tokens[i]);
+		if (id >= 0) result->font_ids.add(id);
 	}
 
 	free(info);
-	font_t font = font_create_files(files, info_count);
-	return font;
+	tokens.free();
+
+	if (!font_setup(result)) {
+		font_release(result);
+		return nullptr;
+	}
+	font_list.add(result);
+	return result;
 }
 
 } // namespace sk
