@@ -38,6 +38,15 @@ jobs:
       run: ./bin/intermediate/Win32_x64_Fast/Release/SKTests.exe
       shell: bash
 
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Run Tests
+      working-directory: Examples/StereoKitTest
+      run: dotnet run -c Release -- -headless -test
+
   native-macos:
     runs-on: macos-14
     env:
@@ -58,6 +67,14 @@ jobs:
       run: |
         cmake --preset MacOS_Arm64_Release_Fast
         cmake --build --preset MacOS_Arm64_Release_Fast
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 10.0.x
+
+    - name: Build Sample Project
+      run: dotnet build Examples/StereoKitTest/StereoKitTest.csproj -c Release
 
   native-linux-android-dotnet:
     runs-on: ubuntu-22.04
@@ -117,8 +134,9 @@ jobs:
 
     - name: Setup .NET
       uses: actions/setup-dotnet@v4
-      with: 
-        dotnet-version: 7.0.x
+      with:
+        dotnet-version: 10.0.x
 
-    - name: Build Sample Project
-      run: dotnet build Examples/StereoKitTest/StereoKitTest.csproj -c Debug
+    - name: Run Tests
+      working-directory: Examples/StereoKitTest
+      run: dotnet run -c Release -- -headless -test
