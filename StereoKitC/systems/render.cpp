@@ -1238,6 +1238,10 @@ void render_list_add_to(render_list_t list, const render_item_t *item) {
 static void render_list_execute(render_list_t list, render_layer_ filter, int32_t material_variant, int32_t queue_start, int32_t queue_end) {
 	list->state = render_list_state_rendering;
 
+	// Clear the sk_renderer render list before populating it
+	skr_render_list_t* gpu_list = &local.gpu_render_list;
+	skr_render_list_clear(gpu_list);
+
 	if (list->queue.count == 0) {
 		list->state = render_list_state_rendered;
 		return;
@@ -1258,10 +1262,6 @@ static void render_list_execute(render_list_t list, render_layer_ filter, int32_
 	// Calculate sort_id range for queue filtering
 	uint64_t sort_id_start = render_sort_id_from_queue(queue_start);
 	uint64_t sort_id_end   = render_sort_id_from_queue(queue_end);
-
-	// Clear and populate the sk_renderer render list
-	skr_render_list_t* gpu_list = &local.gpu_render_list;
-	skr_render_list_clear(gpu_list);
 
 	for (int32_t i = 0; i < list->queue.count; i++) {
 		render_item_t *item = &list->queue[i];
