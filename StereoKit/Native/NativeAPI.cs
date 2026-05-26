@@ -236,7 +236,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Bounds       mesh_get_bounds(IntPtr mesh);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mesh_has_skin(IntPtr mesh);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_skin(IntPtr mesh, [In] ushort[] in_arr_bone_ids_4, int bone_id_4_count, [In] Vec4[] in_arr_bone_weights, int bone_weight_count, in Matrix bone_resting_transforms, int bone_count);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_skin(IntPtr mesh, [In] ushort[] in_arr_bone_ids_4, int bone_id_4_count, [In] Vec4[] in_arr_bone_weights, int bone_weight_count, [In] Matrix[] in_arr_bone_resting_transforms, int bone_count);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_update_skin(IntPtr mesh, [In] Matrix[] in_arr_bone_transforms, int bone_count);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mesh_ray_intersect(IntPtr mesh, Ray model_space_ray, Cull cull_mode, out Ray out_pt, IntPtr out_opt_start_inds);
