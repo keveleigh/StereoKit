@@ -36,6 +36,8 @@ float     skui_input_blink;
 const float    skui_pressed_depth  = 0.4f;
 const color128 skui_color_border   = { 1,1,1,1 };
 const float    skui_aura_radius    = 0.02f;
+const float    skui_img_text_gap   = 0.75f; // button image<->label gap, fraction of text size
+const float    skui_img_optic_size = 0.2f;  // button image optical oversize, fraction of text size
 
 ///////////////////////////////////////////
 
@@ -199,65 +201,83 @@ void ui_image(sprite_t image, vec2 size) {
 
 ///////////////////////////////////////////
 template<typename C>
-void _ui_button_img_surface(const C* text, sprite_t image, ui_btn_layout_ image_layout, align_ text_layout, vec3 window_relative_pos, vec2 size, float finger_offset, color128 image_tint) {
-	float  pad2       = skui_settings.padding * 2;
-	float  depth      = finger_offset + 2 * mm2m;
-	vec3   image_at   = {};
-	float  image_size;
-	pivot_ image_pivot = pivot_x_left;
-	vec3   text_at;
-	vec2   text_size;
-	pivot_ text_pivot;
-	float aspect = image != nullptr ? sprite_get_aspect(image) : 1.0f;
-	float font_size = text_style_get_baseline(ui_get_text_style());
+void _ui_button_img_surface(const C* text, sprite_t image, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, float finger_offset, color128 image_tint) {
+	const float  pad        = skui_settings.padding;
+	const float  pad2       = pad * 2;
+	const float  depth      = finger_offset + 2 * mm2m;
+	const float  aspect     = image != nullptr ? sprite_get_aspect(image) : 1.0f;
+	const float  font_size  = text_style_get_baseline(ui_get_text_style());
+	const float  img_gap    = font_size * skui_img_text_gap;
+	vec3         image_at   = {};
+	float        image_size = 0;
+	vec3         text_at    = {};
+	vec2         text_size  = {};
+	pivot_       text_pivot = pivot_center;
+	align_       text_align = align_center;
+	// image_size is the sprite's height; sprite_draw renders it aspect*image_size wide.
 	switch (image_layout) {
 	default:
-	case ui_btn_layout_left:
-		image_pivot = pivot_center;
-		image_size  = fminf(size.y - pad2, font_size);
-		image_at    = window_relative_pos - vec3{ size.y/2.0f, size.y/2.0f, depth };
-
-		text_pivot = pivot_center_right;
-		text_at    = window_relative_pos - vec3{ size.x-skui_settings.padding, size.y/2, depth };
-		text_size  = { size.x - ((size.y+image_size)/2.0f + pad2), size.y - pad2 };
-		break;
-	case ui_btn_layout_right:
-		image_pivot = pivot_center;
-		image_at    = window_relative_pos - vec3{ size.x-(size.y/2), size.y / 2, depth };
-		image_size  = fminf(size.y - pad2, font_size);
+	case ui_btn_layout_left: {
+		// Image centered in a size.y square at the left edge; stays centered when tall.
+		image_size = font_size;
+		image_at   = window_relative_pos - vec3{ size.y/2, size.y/2, depth };
+		const float image_w = aspect * image_size;
 
 		text_pivot = pivot_center_left;
-		text_at    = window_relative_pos - vec3{ skui_settings.padding, size.y / 2, depth };
-		text_size  = { size.x - ((size.y+image_size)/2.0f + pad2), size.y - pad2 };
-		break;
+		text_align = align_center_left;
+		text_at    = window_relative_pos - vec3{ size.y/2 + image_w/2 + img_gap, size.y/2, depth };
+		text_size  = { size.x - pad - img_gap - size.y/2 - image_w/2, size.y - pad2 };
+	} break;
+	case ui_btn_layout_right: {
+		// Mirror of 'left': image centered in a square column at the right.
+		image_size = font_size;
+		image_at   = window_relative_pos - vec3{ size.x - size.y/2, size.y/2, depth };
+		const float image_w = aspect * image_size;
+
+		text_pivot = pivot_center_right;
+		text_align = align_center_right;
+		text_at    = window_relative_pos - vec3{ size.x - size.y/2 - image_w/2 - img_gap, size.y/2, depth };
+		text_size  = { size.x - pad - img_gap - size.y/2 - image_w/2, size.y - pad2 };
+	} break;
 	case ui_btn_layout_none:
 		image_size = 0;
 
 		text_pivot = pivot_top_left;
-		text_at    = window_relative_pos - vec3{ skui_settings.padding, skui_settings.padding, depth };
+		text_at    = window_relative_pos - vec3{ pad, pad, depth };
 		text_size  = vec2{ size.x - pad2, size.y - pad2 };
 		break;
 	case ui_btn_layout_center_no_text:
-	case ui_btn_layout_center:
-		image_pivot = pivot_center;
-		image_size  = fminf(size.y - pad2, (size.x - pad2) / aspect);
-		image_at    = window_relative_pos - vec3{ size.x/2, size.y / 2, depth }; 
+		// Image alone, sized to fit the padded area and centered.
+		image_size = fminf(size.y - pad2, (size.x - pad2) / aspect);
+		image_at   = window_relative_pos - vec3{ size.x/2, size.y/2, depth };
+		break;
+	case ui_btn_layout_center: {
+		// Image stacked over a label, group-centered. When the button is too
+		// short, image, gap and label scale down together so both stay visible.
+		const float content_h = size.y - pad2;
+		const float comfort_h = font_size*2 + img_gap;
+		const float scale     = fminf(1.0f, content_h / comfort_h);
+		const float gap       = img_gap   * scale;
+		const float text_h    = font_size * scale;
+		image_size      = fminf(content_h - gap - text_h, (size.x - pad2) / aspect);
+		const float top = (size.y - (image_size + gap + text_h)) * 0.5f;
+		image_at        = window_relative_pos - vec3{ size.x/2, top + image_size/2, depth };
 
 		text_pivot = pivot_top_center;
-		float y = size.y / 2 + image_size / 2;
-		text_at    = window_relative_pos - vec3{size.x/2, y, depth};
-		text_size  = { size.x-pad2, (size.y-skui_settings.padding*0.25f)-y };
-		break;
+		text_at    = window_relative_pos - vec3{ size.x/2, top + image_size + gap, depth };
+		text_size  = { size.x - pad2, text_h };
+	} break;
 	}
 
 	if (image_size>0 && image) {
-		color128 final_color = image_tint;
-		if (!ui_is_enabled()) final_color = final_color * color128{ .5f, .5f, .5f, 1 };
-	
-		sprite_draw(image, matrix_ts(image_at, { image_size, image_size, image_size }), image_pivot, color_to_32( final_color ));
+		const color128 final_color = ui_is_enabled() ? image_tint : image_tint * color128{ .5f, .5f, .5f, 1 };
+
+		// Drawn a touch larger than its layout slot, for optical weight.
+		const float draw_size = image_size + font_size * skui_img_optic_size;
+		sprite_draw(image, matrix_ts(image_at, { draw_size, draw_size, draw_size }), pivot_center, color_to_32( final_color ));
 	}
 	if (image_layout != ui_btn_layout_center_no_text)
-		ui_text_in(text, text_pivot, text_layout, text_fit_squeeze, text_at, text_size, vec2_zero);
+		ui_text_in(text, text_pivot, text_align, text_fit_squeeze, text_at, text_size, vec2_zero);
 }
 
 ///////////////////////////////////////////
@@ -267,15 +287,24 @@ vec2 _ui_button_img_size(const C* text, sprite_t image, ui_btn_layout_ image_lay
 	text_style_t style   = ui_get_text_style();
 	vec2         size    = {};
 	float        text_sz = text_style_get_baseline(style);
+	float        aspect  = image != nullptr ? sprite_get_aspect(image) : 1;
+	float        img_gap = text_sz * skui_img_text_gap;
 	if (image_layout == ui_btn_layout_center_no_text) {
 		size = { text_sz, text_sz };
 	} else if (image_layout == ui_btn_layout_none) {
 		size = text_size_layout(text, style);
-	} else {
+	} else if (image_layout == ui_btn_layout_center) {
+		// Image stacked over text. Like everything else, auto-size reserves a
+		// single line of height; ask for a taller button explicitly to give the
+		// stacked image room. Width is the wider of the image or the text.
 		vec2  txt_size   = text_size_layout(text, style);
-		float aspect     = image != nullptr ? sprite_get_aspect(image) : 1;
 		float image_size = text_sz * aspect;
-		size = vec2{ txt_size.x + image_size + skui_settings.gutter, text_sz };
+		size = vec2{ fmaxf(txt_size.x, image_size), text_sz };
+	} else {
+		// left / right: image sized to the text line, laid out beside the text.
+		vec2  txt_size   = text_size_layout(text, style);
+		float image_size = text_sz * aspect;
+		size = vec2{ txt_size.x + image_size + img_gap, text_sz };
 	}
 	return size;
 }
@@ -296,7 +325,7 @@ bool32_t ui_button_img_at_g(const C* text, sprite_t image, ui_btn_layout_ image_
 
 	float min_activation = 1 - (finger_offset / skui_settings.depth);
 	ui_draw_element(ui_vis_button, window_relative_pos, vec3{ size.x,size.y,finger_offset }, fmaxf(min_activation, ui_get_anim_focus(id, focus, state)));
-	_ui_button_img_surface(text, image, image_layout, align_center, window_relative_pos, size, finger_offset, image_tint);
+	_ui_button_img_surface(text, image, image_layout, window_relative_pos, size, finger_offset, image_tint);
 
 	if (state & button_state_just_active)
 		ui_play_sound_on_off(ui_vis_button, id, window_relative_pos - vec3{ size.x/2.f, size.y/2.f, 0 });
@@ -368,7 +397,7 @@ bool32_t ui_toggle_img_at_g(const C* text, bool32_t& pressed, sprite_t toggle_of
 
 	float min_activation = 1 - (finger_offset / skui_settings.depth);
 	ui_draw_element(ui_vis_toggle, window_relative_pos, vec3{ size.x,size.y,finger_offset }, fmaxf(min_activation, ui_get_anim_focus(id, focus, state)));
-	_ui_button_img_surface(text, pressed?toggle_on:toggle_off, image_layout, align_center, window_relative_pos, size, finger_offset, color128{1,1,1,1});
+	_ui_button_img_surface(text, pressed?toggle_on:toggle_off, image_layout, window_relative_pos, size, finger_offset, color128{1,1,1,1});
 
 	if (state & button_state_just_active)
 		ui_play_sound_on_off(ui_vis_button, id, window_relative_pos - vec3{ size.x/2.f, size.y/2.f, 0 });
@@ -436,7 +465,7 @@ bool32_t ui_button_round_at_g(const C *text, sprite_t image, vec3 window_relativ
 	ui_draw_element(ui_vis_button_round, window_relative_pos, { diameter, diameter, finger_offset }, fmaxf(min_activation, ui_get_anim_focus(id, focus, state)));
 
 	float sprite_scale = fmaxf(1, sprite_get_aspect(image));
-	float sprite_size  = (diameter * 0.7f) / sprite_scale;
+	float sprite_size  = (diameter * 0.6f) / sprite_scale;
 	sprite_draw(image, matrix_ts(window_relative_pos + vec3{ -diameter/2, -diameter/2, -(finger_offset + 2*mm2m) }, vec3{ sprite_size, sprite_size, 1 }), pivot_center);
 
 	if (state & button_state_just_active)
