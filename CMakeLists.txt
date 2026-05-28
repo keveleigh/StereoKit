@@ -221,6 +221,14 @@ if (SK_BUILD_OPENXR_LOADER)
   )
   target_compile_options(openxr_loader PRIVATE $<$<CXX_COMPILER_ID:GNU>:-w> $<$<CXX_COMPILER_ID:Clang>:-w> $<$<CXX_COMPILER_ID:MSVC>:/W0>)
   
+  # OpenXR-SDK pins the loader to the dynamic CRT (/MD) when it's built as a
+  # static lib, which collides (LNK2038) with our static-CRT build. Re-assert
+  # our runtime on the target so both sides match.
+  if (CMAKE_MSVC_RUNTIME_LIBRARY)
+    set_target_properties(openxr_loader PROPERTIES
+      MSVC_RUNTIME_LIBRARY "${CMAKE_MSVC_RUNTIME_LIBRARY}")
+  endif()
+
   set(OPENXR_LIB openxr_loader)
 endif()
 
