@@ -25,6 +25,14 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.24.0")
   cmake_policy(SET CMP0135 NEW)
 endif()
 
+# CMP0091 (CMake 3.15+): pick the MSVC runtime through the
+# CMAKE_MSVC_RUNTIME_LIBRARY abstraction instead of hard-coding /MD or /MT into
+# the default *_FLAGS_<CONFIG>. Our presets rely on this, and NEW keeps the MSVC
+# runtime flag from leaking onto non-MSVC toolchains (e.g. MinGW GCC).
+if (CMAKE_VERSION VERSION_GREATER_EQUAL "3.15.0")
+  cmake_policy(SET CMP0091 NEW)
+endif()
+
 project(StereoKit VERSION "0.4.0" LANGUAGES CXX C)
 
 # Add this repository's cmake modules to CMAKE_MODULE_PATH
