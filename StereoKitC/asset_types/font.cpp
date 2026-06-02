@@ -173,11 +173,14 @@ bool font_source_load_data(font_source_t* font) {
 		return false;
 	}
 
-	// Check if cmap format is supported by stb_truetype (0, 4, 6, 12, 13)
-	// Formats 2, 10, 14, etc. will cause assertions when calling glyph functions
+	// Reject fonts whose cmap format isn't supported by stb_truetype (0, 4,
+	// 6, 12, 13). Formats 2, 10, 14, etc. would cause assertions or bad reads
+	// when calling glyph functions, so we don't accept them as a source.
 	uint8_t      *data       = (uint8_t*)font->file;
 	uint16_t      cmap_fmt   = (data[font->info.index_map] << 8) | data[font->info.index_map + 1];
 	bool          cmap_ok    = cmap_fmt == 0 || cmap_fmt == 4 || cmap_fmt == 6 || cmap_fmt == 12 || cmap_fmt == 13;
+	if (!cmap_ok)
+		return false;
 
 	font->scale = stbtt_ScaleForPixelHeight(&font->info, (float)font_resolution);
 
@@ -197,8 +200,8 @@ bool font_source_load_data(font_source_t* font) {
 	font->render_ascender  = ceilf(y1      * font->scale);
 	font->render_descender = ceilf(abs(y0) * font->scale);
 
-	// Get cap height from 'T' if cmap is supported, otherwise use ascender
-	if (cmap_ok && stbtt_FindGlyphIndex(&font->info, 'T') != 0) {
+	// Get cap height from 'T' if the font has it, otherwise use ascender
+	if (stbtt_FindGlyphIndex(&font->info, 'T') != 0) {
 		stbtt_GetCodepointBitmapBox(&font->info, 'T', font->scale, font->scale, &x0, &y0, &x1, &y1);
 		font->cap_height = (float)(y1-y0);
 	} else {
@@ -252,7 +255,7 @@ bool font_setup(font_t font) {
 	font->atlas_data = sk_malloc_t(uint8_t, font->atlas.w * font->atlas.h);
 	memset(font->atlas_data, 0, font->atlas.w * font->atlas.h);
 
-	for (char32_t i = 65; i < 128; i++) font_add_character(font, i);
+	for (char32_t i = 65; i < 127; i++) font_add_character(font, i);
 	for (char32_t i = 32; i < 65;  i++) font_add_character(font, i);
 	font_update_cache(font);
 
@@ -584,7 +587,11 @@ void font_update_texture(font_t font) {
 
 font_glyph_t font_find_glyph(font_t font, char32_t character) {
 	for (int32_t i = 0; i < font->font_ids.count; i++) {
-		int32_t glyph = stbtt_FindGlyphIndex(&font_sources[font->font_ids[i]].info, character);
+		font_source_t *src = &font_sources[font->font_ids[i]];
+		// A source with no data never loaded successfully - skip it rather
+		// than letting stb_truetype dereference a null font pointer.
+		if (src->info.data == nullptr) continue;
+		int32_t glyph = stbtt_FindGlyphIndex(&src->info, character);
 		if (glyph > 0) {
 			return { glyph, font->font_ids[i] };
 		}

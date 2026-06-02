@@ -22,26 +22,26 @@ namespace StereoKit
 			if (libraryName != dll)
 				return 0;
 
+			string arch     = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
+			string basePath = AppContext.BaseDirectory;
+
+			// On macOS, MoltenVK must be present in the process before sk_renderer
+			// initializes, so volk/sk_app's dlopen("libMoltenVK.dylib") (by leaf
+			// name) finds the already-loaded image.
+			if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+				NativeLibrary.TryLoad(Path.Combine(basePath, "runtimes", $"osx-{arch}", "native", "libMoltenVK.dylib"), out _);
+
 			// The default resolver handles runtimes/{rid}/native/ automatically
 			if (NativeLibrary.TryLoad(libraryName, assembly, searchPath, out nint handle))
 				return handle;
 
 			// Fallback: try platform-specific paths from the app base directory
-			string arch = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "arm64" : "x64";
-			string basePath = AppContext.BaseDirectory;
-
 			if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
 				NativeLibrary.TryLoad(Path.Combine(basePath, "runtimes", $"win-{arch}", "native", "StereoKitC.dll"), out handle);
 			else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
 				NativeLibrary.TryLoad(Path.Combine(basePath, "runtimes", $"linux-{arch}", "native", "libStereoKitC.so"), out handle);
 			else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
-			{
-				// Pre-load MoltenVK so native dlopen("libMoltenVK.dylib")
-				// from volk/sk_app can find it already in the process.
-				string osxNative = Path.Combine(basePath, "runtimes", $"osx-{arch}", "native");
-				NativeLibrary.TryLoad(Path.Combine(osxNative, "libMoltenVK.dylib"), out _);
-				NativeLibrary.TryLoad(Path.Combine(osxNative, "libStereoKitC.dylib"), out handle);
-			}
+				NativeLibrary.TryLoad(Path.Combine(basePath, "runtimes", $"osx-{arch}", "native", "libStereoKitC.dylib"), out handle);
 
 			return handle;
 		}
