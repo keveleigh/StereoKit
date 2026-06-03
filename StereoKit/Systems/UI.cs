@@ -692,6 +692,15 @@ namespace StereoKit
 		}
 
 		/// <inheritdoc cref="Radio(string, bool, Sprite, Sprite, UIBtnLayout)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Radio(string text, bool active, Sprite imageOff, Sprite imageOn, Color imageTint, UIBtnLayout imageLayout = UIBtnLayout.Left)
+		{
+			bool value = active;
+			return NativeAPI.ui_toggle_img_16(text, ref value, imageOff?._inst ?? IntPtr.Zero, imageOn?._inst ?? IntPtr.Zero, imageLayout, Vec2.Zero, imageTint, Align.None) && !active;
+		}
+
+		/// <inheritdoc cref="Radio(string, bool, Sprite, Sprite, UIBtnLayout)"/>
 		/// <param name="size">The layout size for this element in Hierarchy
 		/// space. If an axis is left as zero, it will be auto-calculated. For
 		/// X this is the remaining width of the current layout, and for Y this
@@ -703,6 +712,15 @@ namespace StereoKit
 		{
 			bool value = active;
 			return NativeAPI.ui_toggle_img_16(text, ref value, imageOff?._inst ?? IntPtr.Zero, imageOn?._inst ?? IntPtr.Zero, imageLayout, size, new Color(1,1,1,1), textAlign) && !active;
+		}
+
+		/// <inheritdoc cref="Radio(string, bool, Sprite, Sprite, UIBtnLayout, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Radio(string text, bool active, Sprite imageOff, Sprite imageOn, Color imageTint, UIBtnLayout imageLayout, Vec2 size, Align textAlign = Align.None)
+		{
+			bool value = active;
+			return NativeAPI.ui_toggle_img_16(text, ref value, imageOff?._inst ?? IntPtr.Zero, imageOn?._inst ?? IntPtr.Zero, imageLayout, size, imageTint, textAlign) && !active;
 		}
 
 		/// <inheritdoc cref="Radio(string, bool, Sprite, Sprite, UIBtnLayout)"/>
@@ -717,6 +735,15 @@ namespace StereoKit
 		{
 			bool value = active;
 			return NativeAPI.ui_toggle_img_at_16(text, ref value, imageOff?._inst ?? IntPtr.Zero, imageOn?._inst ?? IntPtr.Zero, imageLayout, topLeftCorner, size, new Color(1,1,1,1), textAlign) && !active;
+		}
+
+		/// <inheritdoc cref="RadioAt(string, bool, Sprite, Sprite, UIBtnLayout, Vec3, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool RadioAt(string text, bool active, Sprite imageOff, Sprite imageOn, Color imageTint, UIBtnLayout imageLayout, Vec3 topLeftCorner, Vec2 size, Align textAlign = Align.None)
+		{
+			bool value = active;
+			return NativeAPI.ui_toggle_img_at_16(text, ref value, imageOff?._inst ?? IntPtr.Zero, imageOn?._inst ?? IntPtr.Zero, imageLayout, topLeftCorner, size, imageTint, textAlign) && !active;
 		}
 
 		/// <summary>A pressable round button! This button has a square layout,
@@ -783,6 +810,12 @@ namespace StereoKit
 		public static bool Toggle(string text, ref bool value, Sprite image, UIBtnLayout imageLayout = UIBtnLayout.Left)
 			=> Toggle(text, ref value, image, image, imageLayout);
 
+		/// <inheritdoc cref="Toggle(string, ref bool, Sprite, UIBtnLayout)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Toggle(string text, ref bool value, Sprite image, Color imageTint, UIBtnLayout imageLayout = UIBtnLayout.Left)
+			=> Toggle(text, ref value, image, image, imageTint, imageLayout);
+
 
 		/// <summary>A toggleable button! A button will expand to fit the
 		/// text provided to it, vertically and horizontally. Text is re-used 
@@ -805,6 +838,12 @@ namespace StereoKit
 		/// the toggle value itself!</returns>
 		public static bool Toggle(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, UIBtnLayout imageLayout = UIBtnLayout.Left)
 			=> NativeAPI.ui_toggle_img_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, Vec2.Zero, new Color(1,1,1,1), Align.None);
+
+		/// <inheritdoc cref="Toggle(string, ref bool, Sprite, Sprite, UIBtnLayout)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Toggle(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, Color imageTint, UIBtnLayout imageLayout = UIBtnLayout.Left)
+			=> NativeAPI.ui_toggle_img_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, Vec2.Zero, imageTint, Align.None);
 
 		/// <summary>A toggleable button! A button will expand to fit the
 		/// text provided to it, vertically and horizontally. Text is re-used 
@@ -832,6 +871,12 @@ namespace StereoKit
 		/// generally what you want.</param>
 		public static bool Toggle(string text, ref bool value, Sprite image, UIBtnLayout imageLayout, Vec2 size, Align textAlign = Align.None)
 			=> Toggle(text, ref value, image, image, imageLayout, size, textAlign);
+
+		/// <inheritdoc cref="Toggle(string, ref bool, Sprite, UIBtnLayout, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Toggle(string text, ref bool value, Sprite image, Color imageTint, UIBtnLayout imageLayout, Vec2 size, Align textAlign = Align.None)
+			=> Toggle(text, ref value, image, image, imageTint, imageLayout, size, textAlign);
 
 		/// <summary>A toggleable button! A button will expand to fit the
 		/// text provided to it, vertically and horizontally. Text is re-used 
@@ -861,6 +906,12 @@ namespace StereoKit
 		/// generally what you want.</param>
 		public static bool Toggle(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, UIBtnLayout imageLayout, Vec2 size, Align textAlign = Align.None)
 			=> NativeAPI.ui_toggle_img_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, size, new Color(1,1,1,1), textAlign);
+
+		/// <inheritdoc cref="Toggle(string, ref bool, Sprite, Sprite, UIBtnLayout, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool Toggle(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, Color imageTint, UIBtnLayout imageLayout, Vec2 size, Align textAlign = Align.None)
+			=> NativeAPI.ui_toggle_img_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, size, imageTint, textAlign);
 
 		/// <inheritdoc cref="Toggle(string, ref bool)"/>
 		/// <param name="size">The layout size for this element in Hierarchy
@@ -916,6 +967,12 @@ namespace StereoKit
 		public static bool ToggleAt(string text, ref bool value, Sprite image, UIBtnLayout imageLayout, Vec3 topLeftCorner, Vec2 size, Align textAlign = Align.None)
 			=> ToggleAt(text, ref value, image, image, imageLayout, topLeftCorner, size, textAlign);
 
+		/// <inheritdoc cref="ToggleAt(string, ref bool, Sprite, UIBtnLayout, Vec3, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool ToggleAt(string text, ref bool value, Sprite image, Color imageTint, UIBtnLayout imageLayout, Vec3 topLeftCorner, Vec2 size, Align textAlign = Align.None)
+			=> ToggleAt(text, ref value, image, image, imageTint, imageLayout, topLeftCorner, size, textAlign);
+
 		/// <summary>A variant of UI.Toggle that doesn't use the layout system,
 		/// and instead goes exactly where you put it.</summary>
 		/// <param name="text">Text to display on the Toggle and id for
@@ -941,6 +998,12 @@ namespace StereoKit
 		/// generally what you want.</param>
 		public static bool ToggleAt(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, UIBtnLayout imageLayout, Vec3 topLeftCorner, Vec2 size, Align textAlign = Align.None)
 		=> NativeAPI.ui_toggle_img_at_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, topLeftCorner, size, new Color(1,1,1,1), textAlign);
+
+		/// <inheritdoc cref="ToggleAt(string, ref bool, Sprite, Sprite, UIBtnLayout, Vec3, Vec2, Align)"/>
+		/// <param name="imageTint">The Sprite's color will be multiplied by
+		/// this tint. The default is White(1,1,1,1).</param>
+		public static bool ToggleAt(string text, ref bool value, Sprite toggleOff, Sprite toggleOn, Color imageTint, UIBtnLayout imageLayout, Vec3 topLeftCorner, Vec2 size, Align textAlign = Align.None)
+		=> NativeAPI.ui_toggle_img_at_16(text, ref value, toggleOff?._inst ?? IntPtr.Zero, toggleOn?._inst ?? IntPtr.Zero, imageLayout, topLeftCorner, size, imageTint, textAlign);
 
 		/// <summary>This adds a non-interactive Model to the UI panel layout.
 		/// </summary>
