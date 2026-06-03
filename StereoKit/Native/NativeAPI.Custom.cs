@@ -144,11 +144,7 @@ namespace StereoKit
 		// UI text functions with ref Vec2 scroll, opt/nullable
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]
-		public static extern bool ui_text_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Vec2 opt_ref_scroll, UIScroll scroll_direction, float height, Align text_align, TextFit fit);
-
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]
-		public static extern bool ui_text_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Vec2 opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
+		public static extern bool ui_text_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Vec2 opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
 
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]

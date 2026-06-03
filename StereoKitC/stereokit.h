@@ -1896,6 +1896,9 @@ SK_DEPRECATED typedef enum text_align_ {
   without an axis listed in their names, 'TopLeft', 'BottomCenter',
   etc.*/
 typedef enum align_ {
+	/*No alignment specified. For elements that have a natural default
+	  alignment (such as image buttons), this falls back to that default.*/
+	align_none = 0,
 	/*On the x axis, this item should start on the left.*/
 	align_x_left = 1 << 0,
 	/*On the y axis, this item should start at the top.*/

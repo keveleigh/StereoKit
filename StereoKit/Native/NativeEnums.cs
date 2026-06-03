@@ -1090,6 +1090,9 @@ namespace StereoKit
 	/// etc.</summary>
 	[Flags]
 	public enum Align {
+		/// <summary>No alignment specified. For elements that have a natural default
+		/// alignment (such as image buttons), this falls back to that default.</summary>
+		None         = 0,
 		/// <summary>On the x axis, this item should start on the left.</summary>
 		XLeft        = 1 << 0,
 		/// <summary>On the y axis, this item should start at the top.</summary>

@@ -148,7 +148,7 @@ void on_log(void*, log_ log_level, const char* log_c_str) {
 void log_window() {
 	ui_window_begin("Log", &log_pose, vec2{40*cm2m, 0*cm2m});
 	for (auto &log_str : log_list) {
-		ui_label(log_str.c_str(), false);
+		ui_label(log_str.c_str(), vec2{}, false);
 	}
 	ui_window_end();
 }
