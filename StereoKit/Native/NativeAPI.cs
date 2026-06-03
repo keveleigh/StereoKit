@@ -1076,46 +1076,32 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_slider_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, ref Vec2 ref_value, Vec2 min, Vec2 max, Vec2 button_size_visual, Vec2 button_size_interact, UIConfirm confirm_method, out UISliderData out_slider_data);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_volume_at([MarshalAs(UnmanagedType.LPUTF8Str)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_hand, IntPtr out_opt_focus_state);
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern BtnState     ui_volume_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_hand, IntPtr out_opt_focus_state);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_label([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] bool use_padding);
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern void         ui_label_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] bool use_padding);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_label_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding);
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern void         ui_label_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_label([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding, Align text_align);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern void         ui_label_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_text([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, float height, Align text_align, TextFit fit);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_text([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_text_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, float height, Align text_align, TextFit fit);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_text_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_text_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_text_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Vec2 size, Align text_align, TextFit fit);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_text_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Align text_align, TextFit fit, Vec3 window_relative_pos, Vec2 size);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_text_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr opt_ref_scroll, UIScroll scroll_direction, Align text_align, TextFit fit, Vec3 window_relative_pos, Vec2 size);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button([MarshalAs(UnmanagedType.LPUTF8Str)] string text);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_16([MarshalAs(UnmanagedType.LPWStr)] string text);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec2 size);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec3 window_relative_pos, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec2 size);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec3 window_relative_pos, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec3 window_relative_pos, Vec2 size);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_img([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr image, UIBtnLayout image_layout, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec3 window_relative_pos, Vec2 size);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_img_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr image, UIBtnLayout image_layout, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_img([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr image, UIBtnLayout image_layout, Color image_tint);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_img_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr image, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_img_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr image, UIBtnLayout image_layout, Color image_tint);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_img_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr image, UIBtnLayout image_layout, Vec2 size, Color image_tint);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_img_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr image, UIBtnLayout image_layout, Vec2 size, Color image_tint);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_img_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr image, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_img_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr image, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_img_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr image, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_button_round([MarshalAs(UnmanagedType.LPUTF8Str)] string id, IntPtr image, float diameter);
 		[return: MarshalAs(UnmanagedType.Bool)]
@@ -1125,29 +1111,21 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_button_round_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, IntPtr image, Vec3 window_relative_pos, float diameter);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec2 size);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec3 window_relative_pos, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec2 size);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec3 window_relative_pos, Vec2 size, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec3 window_relative_pos, Vec2 size);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_img([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, Vec3 window_relative_pos, Vec2 size);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_img_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_img([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_img_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_img_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_img_sz([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec2 size);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_img_sz_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec2 size);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_toggle_img_at([MarshalAs(UnmanagedType.LPUTF8Str)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_img_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_toggle_img_at_16([MarshalAs(UnmanagedType.LPWStr)] string text, [MarshalAs(UnmanagedType.Bool)] ref bool pressed, IntPtr toggle_off, IntPtr toggle_on, UIBtnLayout image_layout, Vec3 window_relative_pos, Vec2 size, Color image_tint, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_hslider([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref float value, float min, float max, float step, float width, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]

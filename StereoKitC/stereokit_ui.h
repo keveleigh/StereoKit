@@ -401,44 +401,32 @@ SK_API void     ui_slider_behavior      (vec3 window_relative_pos, vec2 size, id
 SK_API button_state_ ui_volume_at        (const char     *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
 SK_API button_state_ ui_volume_at_16     (const char16_t *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
 
-SK_API void     ui_label             (const char*     text, bool32_t use_padding sk_default(true));
-SK_API void     ui_label_16          (const char16_t* text, bool32_t use_padding sk_default(true));
-SK_API void     ui_label_sz          (const char*     text, vec2 size, bool32_t use_padding sk_default(true));
-SK_API void     ui_label_sz_16       (const char16_t* text, vec2 size, bool32_t use_padding sk_default(true));
-SK_API bool32_t ui_text              (const char*     text, vec2* opt_ref_scroll sk_default(nullptr), ui_scroll_ scroll_direction sk_default(ui_scroll_vertical), float height sk_default(0), align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
-SK_API bool32_t ui_text_16           (const char16_t* text, vec2* opt_ref_scroll sk_default(nullptr), ui_scroll_ scroll_direction sk_default(ui_scroll_vertical), float height sk_default(0), align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
-SK_API bool32_t ui_text_sz           (const char*     text, vec2* opt_ref_scroll, ui_scroll_ scroll_direction, vec2 size, align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
-SK_API bool32_t ui_text_sz_16        (const char16_t* text, vec2* opt_ref_scroll, ui_scroll_ scroll_direction, vec2 size, align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
+SK_API void     ui_label             (const char*     text, vec2 size sk_default(vec2{}), bool32_t use_padding sk_default(true), align_ text_align sk_default(align_none));
+SK_API void     ui_label_16          (const char16_t* text, vec2 size sk_default(vec2{}), bool32_t use_padding sk_default(true), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_text              (const char*     text, vec2* opt_ref_scroll sk_default(nullptr), ui_scroll_ scroll_direction sk_default(ui_scroll_vertical), vec2 size sk_default(vec2{}), align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
+SK_API bool32_t ui_text_16           (const char16_t* text, vec2* opt_ref_scroll sk_default(nullptr), ui_scroll_ scroll_direction sk_default(ui_scroll_vertical), vec2 size sk_default(vec2{}), align_ text_align sk_default(align_top_left), text_fit_ fit sk_default(text_fit_wrap));
 SK_API bool32_t ui_text_at           (const char*     text, vec2* opt_ref_scroll, ui_scroll_ scroll_direction,            align_ text_align, text_fit_ fit, vec3 window_relative_pos, vec2 size);
 SK_API bool32_t ui_text_at_16        (const char16_t* text, vec2* opt_ref_scroll, ui_scroll_ scroll_direction,            align_ text_align, text_fit_ fit, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_button            (const char*     text);
-SK_API bool32_t ui_button_16         (const char16_t* text);
-SK_API bool32_t ui_button_sz         (const char*     text, vec2 size);
-SK_API bool32_t ui_button_sz_16      (const char16_t* text, vec2 size);
-SK_API bool32_t ui_button_at         (const char*     text, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_button_at_16      (const char16_t* text, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_button_img        (const char*     text, sprite_t image, ui_btn_layout_ image_layout, color128 image_tint sk_default(color128{ 1,1,1,1 }));
-SK_API bool32_t ui_button_img_16     (const char16_t* text, sprite_t image, ui_btn_layout_ image_layout, color128 image_tint sk_default(color128{ 1,1,1,1 }));
-SK_API bool32_t ui_button_img_sz     (const char*     text, sprite_t image, ui_btn_layout_ image_layout, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }));
-SK_API bool32_t ui_button_img_sz_16  (const char16_t* text, sprite_t image, ui_btn_layout_ image_layout, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }));
-SK_API bool32_t ui_button_img_at     (const char*     text, sprite_t image, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }));
-SK_API bool32_t ui_button_img_at_16  (const char16_t* text, sprite_t image, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }));
+SK_API bool32_t ui_button            (const char*     text, vec2 size sk_default(vec2{}), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_16         (const char16_t* text, vec2 size sk_default(vec2{}), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_at         (const char*     text, vec3 window_relative_pos, vec2 size, align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_at_16      (const char16_t* text, vec3 window_relative_pos, vec2 size, align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_img        (const char*     text, sprite_t image, ui_btn_layout_ image_layout, vec2 size sk_default(vec2{}), color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_img_16     (const char16_t* text, sprite_t image, ui_btn_layout_ image_layout, vec2 size sk_default(vec2{}), color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_img_at     (const char*     text, sprite_t image, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_button_img_at_16  (const char16_t* text, sprite_t image, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
 SK_API bool32_t ui_button_round      (const char*     id,   sprite_t image, float diameter sk_default(0));
 SK_API bool32_t ui_button_round_16   (const char16_t* id,   sprite_t image, float diameter sk_default(0));
 SK_API bool32_t ui_button_round_at   (const char*     id,   sprite_t image, vec3 window_relative_pos, float diameter);
 SK_API bool32_t ui_button_round_at_16(const char16_t* id,   sprite_t image, vec3 window_relative_pos, float diameter);
-SK_API bool32_t ui_toggle            (const char*     text, sk_ref(bool32_t) pressed);
-SK_API bool32_t ui_toggle_16         (const char16_t* text, sk_ref(bool32_t) pressed);
-SK_API bool32_t ui_toggle_sz         (const char*     text, sk_ref(bool32_t) pressed, vec2 size);
-SK_API bool32_t ui_toggle_sz_16      (const char16_t* text, sk_ref(bool32_t) pressed, vec2 size);
-SK_API bool32_t ui_toggle_at         (const char     *text, sk_ref(bool32_t) pressed, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_toggle_at_16      (const char16_t *text, sk_ref(bool32_t) pressed, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_toggle_img        (const char*     text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout);
-SK_API bool32_t ui_toggle_img_16     (const char16_t* text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout);
-SK_API bool32_t ui_toggle_img_sz     (const char*     text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec2 size);
-SK_API bool32_t ui_toggle_img_sz_16  (const char16_t* text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec2 size);
-SK_API bool32_t ui_toggle_img_at     (const char*     text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size);
-SK_API bool32_t ui_toggle_img_at_16  (const char16_t* text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size);
+SK_API bool32_t ui_toggle            (const char*     text, sk_ref(bool32_t) pressed, vec2 size sk_default(vec2{}), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_16         (const char16_t* text, sk_ref(bool32_t) pressed, vec2 size sk_default(vec2{}), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_at         (const char     *text, sk_ref(bool32_t) pressed, vec3 window_relative_pos, vec2 size, align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_at_16      (const char16_t *text, sk_ref(bool32_t) pressed, vec3 window_relative_pos, vec2 size, align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_img        (const char*     text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec2 size sk_default(vec2{}), color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_img_16     (const char16_t* text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec2 size sk_default(vec2{}), color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_img_at     (const char*     text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
+SK_API bool32_t ui_toggle_img_at_16  (const char16_t* text, sk_ref(bool32_t) pressed, sprite_t toggle_off, sprite_t toggle_on, ui_btn_layout_ image_layout, vec3 window_relative_pos, vec2 size, color128 image_tint sk_default(color128{ 1,1,1,1 }), align_ text_align sk_default(align_none));
 SK_API bool32_t ui_hslider           (const char*     id,   sk_ref(float)  value, float  min, float  max, float  step sk_default(0), float width  sk_default(0), ui_confirm_ confirm_method sk_default(ui_confirm_push), ui_notify_ notify_on sk_default(ui_notify_change));
 SK_API bool32_t ui_hslider_16        (const char16_t* id,   sk_ref(float)  value, float  min, float  max, float  step sk_default(0), float width  sk_default(0), ui_confirm_ confirm_method sk_default(ui_confirm_push), ui_notify_ notify_on sk_default(ui_notify_change));
 SK_API bool32_t ui_hslider_f64       (const char*     id,   sk_ref(double) value, double min, double max, double step sk_default(0), float width  sk_default(0), ui_confirm_ confirm_method sk_default(ui_confirm_push), ui_notify_ notify_on sk_default(ui_notify_change));
@@ -496,6 +484,43 @@ SK_CONST char* ui_default_id_spr_close       = "sk/ui/close";
 SK_CONST char* ui_default_id_spr_list        = "sk/ui/list";
 SK_CONST char* ui_default_id_spr_grid        = "sk/ui/grid";
 
+// The _sz variants were removed! These are porting helpers.
+#define ui_label_sz         ui_label
+#define ui_label_sz_16      ui_label_16
+#define ui_text_sz          ui_text
+#define ui_text_sz_16       ui_text_16
+#define ui_button_sz        ui_button
+#define ui_button_sz_16     ui_button_16
+#define ui_button_img_sz    ui_button_img
+#define ui_button_img_sz_16 ui_button_img_16
+#define ui_toggle_sz        ui_toggle
+#define ui_toggle_sz_16     ui_toggle_16
+#define ui_toggle_img_sz    ui_toggle_img
+#define ui_toggle_img_sz_16 ui_toggle_img_16
+#pragma deprecated(ui_label_sz)
+#pragma deprecated(ui_label_sz_16)
+#pragma deprecated(ui_text_sz)
+#pragma deprecated(ui_text_sz_16)
+#pragma deprecated(ui_button_sz)
+#pragma deprecated(ui_button_sz_16)
+#pragma deprecated(ui_button_img_sz)
+#pragma deprecated(ui_button_img_sz_16)
+#pragma deprecated(ui_toggle_sz)
+#pragma deprecated(ui_toggle_sz_16)
+#pragma deprecated(ui_toggle_img_sz)
+#pragma deprecated(ui_toggle_img_sz_16)
+#pragma clang deprecated(ui_label_sz)
+#pragma clang deprecated(ui_label_sz_16)
+#pragma clang deprecated(ui_text_sz)
+#pragma clang deprecated(ui_text_sz_16)
+#pragma clang deprecated(ui_button_sz)
+#pragma clang deprecated(ui_button_sz_16)
+#pragma clang deprecated(ui_button_img_sz)
+#pragma clang deprecated(ui_button_img_sz_16)
+#pragma clang deprecated(ui_toggle_sz)
+#pragma clang deprecated(ui_toggle_sz_16)
+#pragma clang deprecated(ui_toggle_img_sz)
+#pragma clang deprecated(ui_toggle_img_sz_16)
 
 #ifdef __cplusplus
 } // namespace sk
