@@ -1131,33 +1131,17 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_hslider_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref float value, float min, float max, float step, float width, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_hslider_f64([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref double value, double min, double max, double step, float width, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_hslider_f64_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref double value, double min, double max, double step, float width, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_hslider_at([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref float value, float min, float max, float step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_hslider_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref float value, float min, float max, float step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_hslider_at_f64([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref double value, double min, double max, double step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_hslider_at_f64_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref double value, double min, double max, double step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_vslider([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref float value, float min, float max, float step, float height, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_vslider_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref float value, float min, float max, float step, float height, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_vslider_f64([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref double value, double min, double max, double step, float height, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_vslider_f64_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref double value, double min, double max, double step, float height, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_vslider_at([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref float value, float min, float max, float step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_vslider_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref float value, float min, float max, float step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_vslider_at_f64([MarshalAs(UnmanagedType.LPUTF8Str)] string id, ref double value, double min, double max, double step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_vslider_at_f64_16([MarshalAs(UnmanagedType.LPWStr)] string id, ref double value, double min, double max, double step, Vec3 window_relative_pos, Vec2 size, UIConfirm confirm_method, UINotify notify_on);
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_input([MarshalAs(UnmanagedType.LPUTF8Str)] string id, [MarshalAs(UnmanagedType.LPUTF8Str)] string buffer, int buffer_size, Vec2 size, TextContext type);
 		[return: MarshalAs(UnmanagedType.Bool)]

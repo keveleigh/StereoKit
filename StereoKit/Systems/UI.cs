@@ -1112,7 +1112,12 @@ namespace StereoKit
 		/// return value.</param>
 		/// <returns>Returns true any time the value changes.</returns>
 		public static bool HSlider(string id, ref double value, double min, double max, double step = 0, float width = 0, UIConfirm confirmMethod = UIConfirm.Push, UINotify notifyOn = UINotify.Change)
-			=> NativeAPI.ui_hslider_f64_16(id, ref value, min, max, step, width, confirmMethod, notifyOn);
+		{
+			float v      = (float)value;
+			bool  result = NativeAPI.ui_hslider_16(id, ref v, (float)min, (float)max, (float)step, width, confirmMethod, notifyOn);
+			value = v;
+			return result;
+		}
 
 		/// <summary>A variant of UI.HSlider that doesn't use the layout
 		/// system, and instead goes exactly where you put it.</summary>
@@ -1164,7 +1169,12 @@ namespace StereoKit
 		/// return value.</param>
 		/// <returns>Returns true any time the value changes.</returns>
 		public static bool HSliderAt(string id, ref double value, double min, double max, double step, Vec3 topLeftCorner, Vec2 size, UIConfirm confirmMethod = UIConfirm.Push, UINotify notifyOn = UINotify.Change)
-			=> NativeAPI.ui_hslider_at_f64_16(id, ref value, min, max, step, topLeftCorner, size, confirmMethod, notifyOn);
+		{
+			float v      = (float)value;
+			bool  result = NativeAPI.ui_hslider_at_16(id, ref v, (float)min, (float)max, (float)step, topLeftCorner, size, confirmMethod, notifyOn);
+			value = v;
+			return result;
+		}
 
 		/// <summary>A vertical slider element! You can stick your finger
 		/// in it, and slide the value up and down.</summary>
@@ -1212,7 +1222,12 @@ namespace StereoKit
 		/// return value.</param>
 		/// <returns>Returns true any time the value changes.</returns>
 		public static bool VSlider(string id, ref double value, double min, double max, double step = 0, float height = 0, UIConfirm confirmMethod = UIConfirm.Push, UINotify notifyOn = UINotify.Change)
-			=> NativeAPI.ui_vslider_f64_16(id, ref value, min, max, step, height, confirmMethod, notifyOn);
+		{
+			float v      = (float)value;
+			bool  result = NativeAPI.ui_vslider_16(id, ref v, (float)min, (float)max, (float)step, height, confirmMethod, notifyOn);
+			value = v;
+			return result;
+		}
 
 		/// <summary>A variant of UI.VSlider that doesn't use the layout
 		/// system, and instead goes exactly where you put it.</summary>
@@ -1263,7 +1278,14 @@ namespace StereoKit
 		/// return value.</param>
 		/// <returns>Returns true any time the value changes.</returns>
 		public static bool VSliderAt(string id, ref double value, double min, double max, double step, Vec3 topLeftCorner, Vec2 size, UIConfirm confirmMethod = UIConfirm.Push, UINotify notifyOn = UINotify.Change)
-			=> NativeAPI.ui_vslider_at_f64_16(id, ref value, min, max, step, topLeftCorner, size, confirmMethod, notifyOn);
+		{
+			// See HSlider(ref double, ...) — the slider's visual mapping is
+			// float-bound, so we demote and roundtrip.
+			float v      = (float)value;
+			bool  result = NativeAPI.ui_vslider_at_16(id, ref v, (float)min, (float)max, (float)step, topLeftCorner, size, confirmMethod, notifyOn);
+			value = v;
+			return result;
+		}
 
 		/// <summary>This begins a new UI group with its own layout! Much like
 		/// a window, except with a more flexible handle, and no header. You
