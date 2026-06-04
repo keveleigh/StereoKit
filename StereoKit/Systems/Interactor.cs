@@ -66,6 +66,34 @@ namespace StereoKit
 		/// may be something else!</summary>
 		public Pose     Motion  => NativeAPI.interactor_get_motion (_inst);
 
+		/// <summary>A line, or a point? These interactors behave slightly
+		/// differently with respect to distance checks and directionality. See
+		/// `InteractorType` for more details. This is set at creation time and
+		/// does not change.</summary>
+		public InteractorType       Type       => NativeAPI.interactor_get_type(_inst);
+		/// <summary>What type of interaction events does this interactor fire?
+		/// Interaction elements use this bitflag as a filter to avoid
+		/// interacting with certain interactors. This is set at creation time
+		/// and does not change.</summary>
+		public InteractorEvent      Events     => NativeAPI.interactor_get_events(_inst);
+		/// <summary>How does this interactor activate elements? Does it use the
+		/// physical position of the interactor, or its activation state? This is
+		/// set at creation time and does not change.</summary>
+		public InteractorActivation Activation => NativeAPI.interactor_get_activation(_inst);
+		/// <summary>An identifier that uniquely indicates a shared source for
+		/// inputs. Interactors that share a source will deactivate each other
+		/// when one becomes active, for example the poke, pinch, and aim
+		/// interactors of a single hand. A negative id indicates a unique source
+		/// that does not check against others. This is set at creation time and
+		/// does not change.</summary>
+		public int                  InputSourceId => NativeAPI.interactor_get_input_source_id(_inst);
+		/// <summary>How many axes of secondary motion can this interactor
+		/// provide? Secondary motion is input that comes from somewhere other
+		/// than the interactor's own movement through space. For example, a
+		/// mouse's scroll wheel is 1 axis, and a controller's analog thumbstick
+		/// is 2 axes (X/Y). This should be 0-3.</summary>
+		public int                  SecondaryDims => NativeAPI.interactor_get_secondary_dims(_inst);
+
 		/// <summary>Update the interactor with data for the current frame!
 		/// This should be called as soon as possible at the start of the frame
 		/// before any UI is done, otherwise the UI will not properly react.</summary>
@@ -127,7 +155,10 @@ namespace StereoKit
 		/// <param name="capsuleRadius">The radius of the interactor's capsule,
 		/// in meters.</param>
 		/// <param name="secondaryMotionDimensions">How many axes of secondary
-		/// motion can this interactor provide? This should be 0-3.</param>
+		/// motion can this interactor provide? Secondary motion is input from a
+		/// source other than the interactor's own movement, such as a mouse's
+		/// scroll wheel (1 axis) or a controller's analog thumbstick (2 axes,
+		/// X/Y). This should be 0-3.</param>
 		/// <returns>The Interactor that was just created.</returns>
 		public static Interactor Create(InteractorType shapeType, InteractorEvent events, InteractorActivation activationType, int inputSourceId, float capsuleRadius, int secondaryMotionDimensions)
 			=> new Interactor(NativeAPI.interactor_create(shapeType, events, activationType, inputSourceId, capsuleRadius, secondaryMotionDimensions));

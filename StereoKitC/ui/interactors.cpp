@@ -508,6 +508,41 @@ pose_t interactor_get_motion(interactor_t interactor) {
 
 ///////////////////////////////////////////
 
+interactor_type_ interactor_get_type(interactor_t interactor) {
+	_interactor_t* actor = _interactor_get(interactor);
+	return actor ? actor->shape_type : interactor_type_point;
+}
+
+///////////////////////////////////////////
+
+interactor_event_ interactor_get_events(interactor_t interactor) {
+	_interactor_t* actor = _interactor_get(interactor);
+	return actor ? actor->events : (interactor_event_)0;
+}
+
+///////////////////////////////////////////
+
+interactor_activation_ interactor_get_activation(interactor_t interactor) {
+	_interactor_t* actor = _interactor_get(interactor);
+	return actor ? actor->activation_type : interactor_activation_state;
+}
+
+///////////////////////////////////////////
+
+int32_t interactor_get_input_source_id(interactor_t interactor) {
+	_interactor_t* actor = _interactor_get(interactor);
+	return actor ? actor->input_source_id : 0;
+}
+
+///////////////////////////////////////////
+
+int32_t interactor_get_secondary_dims(interactor_t interactor) {
+	_interactor_t* actor = _interactor_get(interactor);
+	return actor ? actor->secondary_motion_dimensions : 0;
+}
+
+///////////////////////////////////////////
+
 bool32_t interactor_check_box(const _interactor_t* actor, bounds_t box, vec3* out_at, float* out_distance) {
 	*out_distance = FLT_MAX;
 	*out_at       = vec3_zero;

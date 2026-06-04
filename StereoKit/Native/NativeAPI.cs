@@ -769,6 +769,11 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         interactor_get_focus_bounds(int interactor, out Pose out_pose_world, out Bounds out_bounds_local, out Vec3 out_at_local);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pose         interactor_get_motion(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorType interactor_get_type(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorEvent interactor_get_events(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorActivation interactor_get_activation(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get_input_source_id(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get_secondary_dims(int interactor);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_count();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get(int index);
 

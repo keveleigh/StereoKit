@@ -2510,6 +2510,11 @@ SK_API id_hash_t             interactor_get_focused             (const interacto
 SK_API id_hash_t             interactor_get_active              (const interactor_t interactor);
 SK_API bool32_t              interactor_get_focus_bounds        (const interactor_t interactor, pose_t* out_pose_world, bounds_t* out_bounds_local, vec3* out_at_local);
 SK_API pose_t                interactor_get_motion              (const interactor_t interactor);
+SK_API interactor_type_      interactor_get_type                (const interactor_t interactor);
+SK_API interactor_event_     interactor_get_events              (const interactor_t interactor);
+SK_API interactor_activation_ interactor_get_activation         (const interactor_t interactor);
+SK_API int32_t               interactor_get_input_source_id     (const interactor_t interactor);
+SK_API int32_t               interactor_get_secondary_dims      (const interactor_t interactor);
 
 SK_API int32_t               interactor_count                   (void);
 SK_API interactor_t          interactor_get                     (int32_t index);
