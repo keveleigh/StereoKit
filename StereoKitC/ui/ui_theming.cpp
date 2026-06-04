@@ -258,7 +258,7 @@ void ui_theming_init() {
 	ui_set_element_color(ui_vis_toggle,               ui_color_common);
 	ui_set_element_color(ui_vis_button_round,         ui_color_common);
 	ui_set_element_color(ui_vis_input,                ui_color_common);
-	ui_set_element_color(ui_vis_carat,                ui_color_text);
+	ui_set_element_color(ui_vis_caret,                ui_color_text);
 
 	ui_set_element_sound(ui_vis_default,              skui_snd_interact, skui_snd_uninteract);
 	ui_set_element_sound(ui_vis_handle,               skui_snd_grab,     skui_snd_ungrab);
@@ -1024,14 +1024,14 @@ mesh_t theme_mesh_slider_pinch = nullptr;
 mesh_t theme_mesh_slider_push  = nullptr;
 mesh_t theme_mesh_separator    = nullptr;
 mesh_t theme_mesh_aura         = nullptr;
-mesh_t theme_mesh_carat        = nullptr;
+mesh_t theme_mesh_caret        = nullptr;
 
 material_t theme_mat_opaque          = nullptr;
 material_t theme_mat_opaque_same_z   = nullptr;
 material_t theme_mat_transparent     = nullptr;
 material_t theme_mat_transparent_noq = nullptr;
 material_t theme_mat_aura            = nullptr;
-material_t theme_mat_carat           = nullptr;
+material_t theme_mat_caret           = nullptr;
 
 void ui_theme_visuals_update() {
 	color32 white_corner = {255,255,255,255};
@@ -1108,7 +1108,7 @@ void ui_theme_visuals_update() {
 	float aura_mesh_radius = skui_aura_radius * 0.75f;
 	ui_default_aura_mesh(&theme_mesh_aura, 0, fminf(ui_line_height(), skui_settings.rounding) + aura_mesh_radius, skui_aura_radius - aura_mesh_radius, 7, 5);
 
-	if (theme_mesh_carat == nullptr) theme_mesh_carat = mesh_find(default_id_mesh_cube);
+	if (theme_mesh_caret == nullptr) theme_mesh_caret = mesh_find(default_id_mesh_cube);
 
 	if (theme_mat_transparent == nullptr) {
 		theme_mat_transparent = material_copy_id(default_id_material_ui_quadrant);
@@ -1132,7 +1132,7 @@ void ui_theme_visuals_update() {
 		material_set_queue_offset(theme_mat_opaque_same_z, -10);
 
 		theme_mat_aura  = material_find(default_id_material_ui_aura);
-		theme_mat_carat = material_find(default_id_material_unlit);
+		theme_mat_caret = material_find(default_id_material_unlit);
 	}
 
 	if (needs_id) {
@@ -1172,7 +1172,7 @@ void ui_theme_visuals_assign() {
 	ui_set_element_visual(ui_vis_slider_push,          theme_mesh_slider_push,  theme_mat_transparent);
 	ui_set_element_visual(ui_vis_separator,            theme_mesh_separator,    theme_mat_transparent);
 	ui_set_element_visual(ui_vis_aura,                 theme_mesh_aura,         theme_mat_aura);
-	ui_set_element_visual(ui_vis_carat,                theme_mesh_carat,        theme_mat_carat);
+	ui_set_element_visual(ui_vis_caret,                theme_mesh_caret,        theme_mat_caret);
 }
 
 ///////////////////////////////////////////
@@ -1192,14 +1192,14 @@ void ui_theme_visuals_release() {
 	mesh_release(theme_mesh_slider_push ); theme_mesh_slider_push  = nullptr;
 	mesh_release(theme_mesh_separator   ); theme_mesh_separator    = nullptr;
 	mesh_release(theme_mesh_aura        ); theme_mesh_aura         = nullptr;
-	mesh_release(theme_mesh_carat       ); theme_mesh_carat        = nullptr;
+	mesh_release(theme_mesh_caret       ); theme_mesh_caret        = nullptr;
 
 	material_release(theme_mat_opaque         ); theme_mat_opaque          = nullptr;
 	material_release(theme_mat_opaque_same_z  ); theme_mat_opaque_same_z   = nullptr;
 	material_release(theme_mat_transparent    ); theme_mat_transparent     = nullptr;
 	material_release(theme_mat_transparent_noq); theme_mat_transparent_noq = nullptr;
 	material_release(theme_mat_aura           ); theme_mat_aura            = nullptr;
-	material_release(theme_mat_carat          ); theme_mat_carat           = nullptr;
+	material_release(theme_mat_caret          ); theme_mat_caret           = nullptr;
 }
 
 }
