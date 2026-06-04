@@ -28,8 +28,8 @@ ui_move_ skui_system_move_type;
 
 id_hash_t skui_input_target;
 bool32_t  skui_input_target_confirmed;
-int32_t   skui_input_carat;
-int32_t   skui_input_carat_end;
+int32_t   skui_input_caret;
+int32_t   skui_input_caret_end;
 float     skui_input_blink;
 
 // Button activation animations all use the same values
@@ -38,7 +38,7 @@ const color128 skui_color_border   = { 1,1,1,1 };
 const float    skui_aura_radius    = 0.02f;
 const float    skui_img_text_gap   = 0.75f; // button image<->label gap, fraction of text size
 const float    skui_img_optic_size = 0.2f;  // button image optical oversize, fraction of text size
-const float    skui_carat_height   = 1.2f;  // input carat/selection height, fraction of the text line height
+const float    skui_caret_height   = 1.2f;  // input caret/selection height, fraction of the text line height
 
 ///////////////////////////////////////////
 
@@ -50,8 +50,8 @@ bool ui_init() {
 	profiler_zone();
 
 	skui_input_target        = 0;
-	skui_input_carat         = 0;
-	skui_input_carat_end     = 0;
+	skui_input_caret         = 0;
+	skui_input_caret_end     = 0;
 	skui_input_blink         = 0;
 	skui_system_move_type    = ui_move_face_user;
 	skui_enable_far_interact = true;
@@ -508,7 +508,7 @@ bool32_t ui_input_at_g(const C* id, C* buffer, int32_t buffer_size, vec3 window_
 		platform_keyboard_show(true,type);
 		skui_input_blink  = time_totalf_unscaled();
 		skui_input_target = id_hash;
-		skui_input_carat  = skui_input_carat_end = (int32_t)utf_charlen(buffer);
+		skui_input_caret  = skui_input_caret_end = (int32_t)utf_charlen(buffer);
 	}
 
 	// Unfocus this if the user starts interacting with something else
@@ -524,26 +524,26 @@ bool32_t ui_input_at_g(const C* id, C* buffer, int32_t buffer_size, vec3 window_
 			uint32_t add = '\0';
 
 			if (curr == key_backspace) {
-				if (skui_input_carat != skui_input_carat_end) {
-					int32_t start = mini(skui_input_carat, skui_input_carat_end);
-					int32_t count = maxi(skui_input_carat, skui_input_carat_end) - start;
+				if (skui_input_caret != skui_input_caret_end) {
+					int32_t start = mini(skui_input_caret, skui_input_caret_end);
+					int32_t count = maxi(skui_input_caret, skui_input_caret_end) - start;
 					utf_remove_chars(utf_advance_chars(buffer, start), count);
-					skui_input_carat_end = skui_input_carat = start;
+					skui_input_caret_end = skui_input_caret = start;
 					result = true;
-				} else if (skui_input_carat > 0) {
-					skui_input_carat_end = skui_input_carat = skui_input_carat - 1;
-					utf_remove_chars(utf_advance_chars(buffer, skui_input_carat), 1);
+				} else if (skui_input_caret > 0) {
+					skui_input_caret_end = skui_input_caret = skui_input_caret - 1;
+					utf_remove_chars(utf_advance_chars(buffer, skui_input_caret), 1);
 					result = true;
 				}
 			} else if (curr == 0x7f) {
-				if (skui_input_carat != skui_input_carat_end) {
-					int32_t start = mini(skui_input_carat, skui_input_carat_end);
-					int32_t count = maxi(skui_input_carat, skui_input_carat_end) - start;
+				if (skui_input_caret != skui_input_caret_end) {
+					int32_t start = mini(skui_input_caret, skui_input_caret_end);
+					int32_t count = maxi(skui_input_caret, skui_input_caret_end) - start;
 					utf_remove_chars(utf_advance_chars(buffer, start), count);
-					skui_input_carat_end = skui_input_carat = start;
+					skui_input_caret_end = skui_input_caret = start;
 					result = true;
-				} else if (skui_input_carat >= 0) {
-					utf_remove_chars(utf_advance_chars(buffer, skui_input_carat), 1);
+				} else if (skui_input_caret >= 0) {
+					utf_remove_chars(utf_advance_chars(buffer, skui_input_caret), 1);
 					result = true;
 				}
 			} else if (curr == 0x0D) { // Enter, carriage return
@@ -561,25 +561,25 @@ bool32_t ui_input_at_g(const C* id, C* buffer, int32_t buffer_size, vec3 window_
 
 			if (add != '\0') {
 				// Remove any selected
-				if (skui_input_carat != skui_input_carat_end) {
-					int32_t start = mini(skui_input_carat, skui_input_carat_end);
-					int32_t count = maxi(skui_input_carat, skui_input_carat_end) - start;
+				if (skui_input_caret != skui_input_caret_end) {
+					int32_t start = mini(skui_input_caret, skui_input_caret_end);
+					int32_t count = maxi(skui_input_caret, skui_input_caret_end) - start;
 					utf_remove_chars(utf_advance_chars(buffer, start), count);
-					skui_input_carat_end = skui_input_carat = start;
+					skui_input_caret_end = skui_input_caret = start;
 				}
-				if (utf_insert_char(buffer, buffer_size, utf_advance_chars(buffer, skui_input_carat), add)) {
-					skui_input_carat += 1;
-					skui_input_carat_end = skui_input_carat;
+				if (utf_insert_char(buffer, buffer_size, utf_advance_chars(buffer, skui_input_caret), add)) {
+					skui_input_caret += 1;
+					skui_input_caret_end = skui_input_caret;
 					result = true;
 				}
 			}
 
 			curr = input_text_consume();
 		}
-		if      (input_key(key_shift) & button_state_active && input_key(key_left ) & button_state_just_active) { skui_input_blink = time_totalf_unscaled(); skui_input_carat = maxi(0, skui_input_carat - 1); }
-		else if (input_key(key_left ) & button_state_just_active)                                               { skui_input_blink = time_totalf_unscaled(); if (skui_input_carat_end == skui_input_carat) skui_input_carat = maxi(0, skui_input_carat - 1); skui_input_carat_end = skui_input_carat; }
-		if      (input_key(key_shift) & button_state_active && input_key(key_right) & button_state_just_active) { skui_input_blink = time_totalf_unscaled(); skui_input_carat = mini((int32_t)utf_charlen(buffer), skui_input_carat + 1); }
-		else if (input_key(key_right) & button_state_just_active)                                               { skui_input_blink = time_totalf_unscaled(); if (skui_input_carat_end == skui_input_carat) skui_input_carat = mini((int32_t)utf_charlen(buffer), skui_input_carat + 1); skui_input_carat_end = skui_input_carat; }
+		if      (input_key(key_shift) & button_state_active && input_key(key_left ) & button_state_just_active) { skui_input_blink = time_totalf_unscaled(); skui_input_caret = maxi(0, skui_input_caret - 1); }
+		else if (input_key(key_left ) & button_state_just_active)                                               { skui_input_blink = time_totalf_unscaled(); if (skui_input_caret_end == skui_input_caret) skui_input_caret = maxi(0, skui_input_caret - 1); skui_input_caret_end = skui_input_caret; }
+		if      (input_key(key_shift) & button_state_active && input_key(key_right) & button_state_just_active) { skui_input_blink = time_totalf_unscaled(); skui_input_caret = mini((int32_t)utf_charlen(buffer), skui_input_caret + 1); }
+		else if (input_key(key_right) & button_state_just_active)                                               { skui_input_blink = time_totalf_unscaled(); if (skui_input_caret_end == skui_input_caret) skui_input_caret = mini((int32_t)utf_charlen(buffer), skui_input_caret + 1); skui_input_caret_end = skui_input_caret; }
 	}
 
 	// Render the input UI
@@ -610,38 +610,38 @@ bool32_t ui_input_at_g(const C* id, C* buffer, int32_t buffer_size, vec3 window_
 		float        baseline  = text_style_get_baseline (style);
 		float        ascender  = text_style_get_ascender (style);
 		float        descender = text_style_get_descender(style);
-		float        line_h    = (ascender + descender) * skui_carat_height;
-		float        carat_sz  = baseline * 0.1f;
+		float        line_h    = (ascender + descender) * skui_caret_height;
+		float        caret_sz  = baseline * 0.1f;
 
-		int32_t carat_at      = skui_input_carat;
-		vec2    carat_pos     = text_char_at_o(draw_text, style, carat_at, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
+		int32_t caret_at      = skui_input_caret;
+		vec2    caret_pos     = text_char_at_o(draw_text, style, caret_at, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
 		float   scroll_margin = text_bounds.x - baseline;
-		while (carat_pos.x < -scroll_margin && *draw_text != '\0' && carat_at >= 0) {
+		while (caret_pos.x < -scroll_margin && *draw_text != '\0' && caret_at >= 0) {
 			draw_text += 1;
-			carat_at  -= 1;
-			carat_pos = text_char_at_o(draw_text, style, carat_at, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
+			caret_at  -= 1;
+			caret_pos = text_char_at_o(draw_text, style, caret_at, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
 		}
 
 		// Center the box on the glyph run (text_char_at_o reports a point above
 		// the baseline), then lift to a top-edge anchor since ui_draw_* extends down.
-		float center_y = carat_pos.y - baseline - descender + (ascender - descender) * 0.5f;
+		float center_y = caret_pos.y - baseline - descender + (ascender - descender) * 0.5f;
 		float top_y    = center_y + line_h * 0.5f;
 
 		// Display a selection box for highlighted text
-		if (skui_input_carat != skui_input_carat_end) {
-			int32_t end       = maxi(0, carat_at + (skui_input_carat_end - skui_input_carat));
-			vec2    carat_end = text_char_at_o(draw_text, style, end, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
-			float   left      =       fmaxf(carat_pos.x, carat_end.x);
-			float   right     = fmaxf(fminf(carat_pos.x, carat_end.x), -text_bounds.x);
+		if (skui_input_caret != skui_input_caret_end) {
+			int32_t end       = maxi(0, caret_at + (skui_input_caret_end - skui_input_caret));
+			vec2    caret_end = text_char_at_o(draw_text, style, end, &text_bounds, text_fit_clip, pivot_top_left, align_center_left);
+			float   left      =       fmaxf(caret_pos.x, caret_end.x);
+			float   right     = fmaxf(fminf(caret_pos.x, caret_end.x), -text_bounds.x);
 
 			vec3 sz  = vec3{ -(right - left), line_h, line_h * 0.01f };
-			vec3 pos = (window_relative_pos + vec3{ left - skui_settings.padding, top_y, -(text_depth - carat_sz*0.5f) });
+			vec3 pos = (window_relative_pos + vec3{ left - skui_settings.padding, top_y, -(text_depth - caret_sz*0.5f) });
 			ui_draw_cube(pos, sz, ui_color_complement, 0);
 		}
 
-		// Show a blinking text carat
+		// Show a blinking text caret
 		if ((int)((time_totalf_unscaled()-skui_input_blink)*2)%2==0) {
-			ui_draw_element(ui_vis_carat, window_relative_pos + vec3{ carat_pos.x - skui_settings.padding, top_y, -(text_depth) }, vec3{ carat_sz, line_h, carat_sz }, 0);
+			ui_draw_element(ui_vis_caret, window_relative_pos + vec3{ caret_pos.x - skui_settings.padding, top_y, -(text_depth) }, vec3{ caret_sz, line_h, caret_sz }, 0);
 		}
 	}
 

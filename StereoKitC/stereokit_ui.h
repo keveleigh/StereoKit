@@ -125,8 +125,11 @@ typedef enum ui_vis_ {
 	ui_vis_button_round,
 	/*Refers to UI.PanelBegin/End elements.*/
 	ui_vis_panel,
-	/*Refers to the text position indicator carat on text input elements.*/
-	ui_vis_carat,
+	/*Refers to the text position indicator caret on text input elements.*/
+	ui_vis_caret,
+	/*Deprecated misspelling of `ui_vis_caret`, kept for backwards
+	compatibility.*/
+	ui_vis_carat = ui_vis_caret,
 	/*Refers to the grabbable area indicator outside a window.*/
 	ui_vis_aura,
 	/*A maximum enum value to allow for iterating through enum values.*/
