@@ -77,14 +77,12 @@ class TestInteractorModes : ITest
 
 		// Live readout of the interactors the current mode produced. Empty
 		// means the mode (or device) isn't providing any.
-		int count = Interactor.Count;
-		UI.Label($"Active interactors: {count}");
-		for (int i = 0; i < count; i++)
+		UI.Label("Active interactors: ");
+		foreach (Interactor actor in Interactor.All)
 		{
-			Interactor actor   = Interactor.Get(i);
-			bool       tracked = actor.Tracked.IsActive();
-			bool       focused = actor.Focused != IdHash.None;
-			UI.Label($"  #{i}  {(tracked ? "tracked" : "lost")}{(focused ? ", focusing" : "")}");
+			bool tracked = actor.Tracked.IsActive();
+			bool focused = actor.Focused != IdHash.None;
+			UI.Label($"#{actor.InputSourceId} {actor.Type}: {(tracked ? "tracked" : "lost")}{(focused ? ", focusing" : "")}");
 		}
 
 		UI.WindowEnd();

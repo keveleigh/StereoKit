@@ -305,36 +305,32 @@ namespace StereoKit
 			=> NativeAPI.ui_hspace(horizontalSpace);
 
 		/// <inheritdoc cref="VolumeAt(string, Bounds, UIConfirm)"/>
-		/// <param name="hand">This will be the last unpreoccupied hand found
-		/// inside the volume, and is the hand controlling the interaction.
-		/// </param>
-		/// <param name="focusState">The focus state tells if the element has
-		/// a hand inside of the volume that qualifies for focus.</param>
-		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Handed hand, out BtnState focusState)
-		{
-			BtnState result = NativeAPI.ui_volume_at_16(id, bounds, interactType, out int handInt, out focusState);
-			hand = (Handed)handInt;
-			return result;
-		}
+		/// <param name="interactor">The `Interactor` that is interacting with
+		/// the volume. If nothing is interacting, this will be an empty
+		/// Interactor.</param>
+		/// <param name="focusState">The focus state tells if the element has an
+		/// interactor inside of the volume that qualifies for focus.</param>
+		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Interactor interactor, out BtnState focusState)
+			=> NativeAPI.ui_volume_at_16(id, bounds, interactType, out interactor, out focusState);
 
 		/// <inheritdoc cref="VolumeAt(string, Bounds, UIConfirm)"/>
-		/// <param name="hand">This will be the last unpreoccupied hand found
-		/// inside the volume, and is the hand controlling the interaction.
-		/// </param>
-		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Handed hand)
-			=> VolumeAt(id, bounds, interactType, out hand, out _);
-		/// <summary>A volume for helping to build one handed interactions.
-		/// This checks for the presence of a hand inside the bounds, and if
-		/// found, return that hand along with activation and focus 
-		/// information defined by the interactType.</summary>
+		/// <param name="interactor">The `Interactor` that is interacting with
+		/// the volume. If nothing is interacting, this will be an empty
+		/// Interactor.</param>
+		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Interactor interactor)
+			=> VolumeAt(id, bounds, interactType, out interactor, out _);
+		/// <summary>A volume for helping to build interactions. This checks for
+		/// the presence of an interactor inside the bounds, and if found,
+		/// returns that interactor along with activation and focus information
+		/// defined by the interactType.</summary>
 		/// <param name="id">An id for tracking element state. MUST be unique
 		/// within current hierarchy.</param>
 		/// <param name="bounds">Size and position of the volume, relative to
 		/// the current Hierarchy.</param>
 		/// <param name="interactType">UIConfirm.Pinch will activate when the
-		/// hand performs a 'pinch' gesture. UIConfirm.Push will activate 
-		/// when the hand enters the volume, and behave the same as element's
-		/// focusState.</param>
+		/// interactor performs a 'pinch' gesture inside the volume.
+		/// UIConfirm.Push will activate when the interactor enters the volume,
+		/// and behave the same as the element's focusState.</param>
 		/// <returns>Based on the interactType, this is a BtnState that tells
 		/// the activation state of the interaction.</returns>
 		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType)

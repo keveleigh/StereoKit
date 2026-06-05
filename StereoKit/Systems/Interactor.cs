@@ -3,6 +3,9 @@
 // Copyright (c) 2025 Nick Klingensmith
 // Copyright (c) 2025 Qualcomm Technologies, Inc.
 
+using System.Collections;
+using System.Collections.Generic;
+
 namespace StereoKit
 {
 	/// <summary>Interactors are essentially capsules that allow interaction
@@ -14,7 +17,7 @@ namespace StereoKit
 	{
 		private int _inst;
 
-		private Interactor(int inst)
+		internal Interactor(int inst)
 		{
 			_inst = inst;
 		}
@@ -163,11 +166,54 @@ namespace StereoKit
 		public static Interactor Create(InteractorType shapeType, InteractorEvent events, InteractorActivation activationType, int inputSourceId, float capsuleRadius, int secondaryMotionDimensions)
 			=> new Interactor(NativeAPI.interactor_create(shapeType, events, activationType, inputSourceId, capsuleRadius, secondaryMotionDimensions));
 
-		/// <summary>The number of interactors currently in the system. Can be used with `Get`.</summary>
-		public static int Count => NativeAPI.interactor_count();
-		/// <summary>Returns the `Interactor` at the given index. Should be used with `Count`.</summary>
-		/// <param name="index">The index.</param>
-		/// <returns>An Interactor.</returns>
-		public static Interactor Get(int index) => new Interactor(NativeAPI.interactor_get(index));
+		/// <summary>An enumerable collection of all the Interactors currently
+		/// in the system. Use this to inspect or visualize every Interactor,
+		/// including any custom ones you've added.</summary>
+		public static InteractorCollection All => new InteractorCollection();
+	}
+
+	/// <summary>An enumerable collection of all the Interactors in the system.
+	/// Retrieved via `Interactor.All`.</summary>
+	public struct InteractorCollection : IEnumerable<Interactor>
+	{
+		/// <summary>The number of Interactors currently in the system.</summary>
+		public int Count => NativeAPI.interactor_count();
+		/// <summary>Retrieves the Interactor at the given index.</summary>
+		/// <param name="index">This should be in the range of [0, Count).</param>
+		/// <returns>The Interactor at the given index.</returns>
+		public Interactor this[int index] => new Interactor(NativeAPI.interactor_get(index));
+
+		/// <summary>Gets an enumerator for the collection. This returns a
+		/// concrete struct enumerator so that `foreach` over the collection
+		/// stays allocation-free.</summary>
+		/// <returns>An enumerator.</returns>
+		public Enumerator GetEnumerator() => new Enumerator(NativeAPI.interactor_count());
+		// These keep the collection usable as an IEnumerable (LINQ, etc.), but
+		// they box the enumerator. A plain `foreach` binds to the concrete
+		// GetEnumerator above and avoids that.
+		IEnumerator<Interactor> IEnumerable<Interactor>.GetEnumerator() => GetEnumerator();
+		IEnumerator             IEnumerable.GetEnumerator()             => GetEnumerator();
+
+		/// <summary>An allocation-free struct enumerator for an
+		/// `InteractorCollection`.</summary>
+		public struct Enumerator : IEnumerator<Interactor>
+		{
+			int _index;
+			int _count;
+			internal Enumerator(int count) { _index = -1; _count = count; }
+
+			/// <summary>The Interactor at the enumerator's current position.</summary>
+			public Interactor Current => new Interactor(NativeAPI.interactor_get(_index));
+			object IEnumerator.Current => Current;
+
+			/// <summary>Advances to the next Interactor.</summary>
+			/// <returns>False once the end of the collection is reached.</returns>
+			public bool MoveNext() => ++_index < _count;
+			/// <summary>Resets the enumerator to before the first element.</summary>
+			public void Reset() => _index = -1;
+			/// <summary>Nothing to dispose, this is here to satisfy the
+			/// IEnumerator interface.</summary>
+			public void Dispose() { }
+		}
 	}
 }

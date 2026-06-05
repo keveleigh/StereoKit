@@ -46,7 +46,7 @@ inline bounds_t size_box(vec3 top_left, vec3 dimensions) {
 ///////////////////////////////////////////
 
 template<typename C>
-button_state_ ui_volume_at_g(const C *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand, button_state_ *out_opt_focus_state) {
+button_state_ ui_volume_at_g(const C *id, bounds_t bounds, ui_confirm_ interact_type, interactor_t *out_opt_interactor, button_state_ *out_opt_focus_state) {
 	id_hash_t     id_hash = ui_stack_hash(id);
 	button_state_ result  = button_state_inactive;
 	button_state_ focus   = button_state_inactive;
@@ -65,12 +65,12 @@ button_state_ ui_volume_at_g(const C *id, bounds_t bounds, ui_confirm_ interact_
 			: (bool32_t)((actor->pinch_state & button_state_active) != 0));
 	}
 
-	if (out_opt_hand        != nullptr) *out_opt_hand        = (handed_)interactor;
+	if (out_opt_interactor  != nullptr) *out_opt_interactor  = interactor;
 	if (out_opt_focus_state != nullptr) *out_opt_focus_state = focus;
 	return result;
 }
-button_state_ ui_volume_at   (const char     *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand, button_state_ *out_opt_focus_state) { return ui_volume_at_g<char    >(id, bounds, interact_type, out_opt_hand, out_opt_focus_state); }
-button_state_ ui_volume_at_16(const char16_t *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand, button_state_ *out_opt_focus_state) { return ui_volume_at_g<char16_t>(id, bounds, interact_type, out_opt_hand, out_opt_focus_state); }
+button_state_ ui_volume_at   (const char     *id, bounds_t bounds, ui_confirm_ interact_type, interactor_t *out_opt_interactor, button_state_ *out_opt_focus_state) { return ui_volume_at_g<char    >(id, bounds, interact_type, out_opt_interactor, out_opt_focus_state); }
+button_state_ ui_volume_at_16(const char16_t *id, bounds_t bounds, ui_confirm_ interact_type, interactor_t *out_opt_interactor, button_state_ *out_opt_focus_state) { return ui_volume_at_g<char16_t>(id, bounds, interact_type, out_opt_interactor, out_opt_focus_state); }
 
 ///////////////////////////////////////////
 
