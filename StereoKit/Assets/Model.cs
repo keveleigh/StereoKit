@@ -742,15 +742,39 @@ namespace StereoKit
 
 		internal ModelNodeCollection(Model model) { _model = model; }
 
-		/// <summary>Gets an enumerator for the collection.</summary>
+		/// <summary>Gets an enumerator for the collection. This returns a
+		/// concrete struct enumerator so that `foreach` over the collection
+		/// stays allocation-free.</summary>
 		/// <returns>An enumerator.</returns>
-		public IEnumerator<ModelNode> GetEnumerator()
+		public Enumerator GetEnumerator() => new Enumerator(_model, Count);
+		// These keep the collection usable as an IEnumerable (LINQ, etc.), but
+		// they box the enumerator. A plain `foreach` binds to the concrete
+		// GetEnumerator above and avoids that.
+		IEnumerator<ModelNode> IEnumerable<ModelNode>.GetEnumerator() => GetEnumerator();
+		IEnumerator            IEnumerable.GetEnumerator()            => GetEnumerator();
+
+		/// <summary>An allocation-free struct enumerator for a
+		/// `ModelNodeCollection`.</summary>
+		public struct Enumerator : IEnumerator<ModelNode>
 		{
-			int count = Count;
-			for (int i = 0; i < count; i++)
-				yield return new ModelNode(_model, NativeAPI.model_node_index(_model._inst, i));
+			Model _model;
+			int   _index;
+			int   _count;
+			internal Enumerator(Model model, int count) { _model = model; _index = -1; _count = count; }
+
+			/// <summary>The ModelNode at the enumerator's current position.</summary>
+			public ModelNode Current => new ModelNode(_model, NativeAPI.model_node_index(_model._inst, _index));
+			object IEnumerator.Current => Current;
+
+			/// <summary>Advances to the next ModelNode.</summary>
+			/// <returns>False once the end of the collection is reached.</returns>
+			public bool MoveNext() => ++_index < _count;
+			/// <summary>Resets the enumerator to before the first element.</summary>
+			public void Reset() => _index = -1;
+			/// <summary>Nothing to dispose, this is here to satisfy the
+			/// IEnumerator interface.</summary>
+			public void Dispose() { }
 		}
-		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 
 		/// <summary>This adds a root node to the `Model`'s node hierarchy! If
 		/// There is already an initial root node, this node will still be a
@@ -794,15 +818,39 @@ namespace StereoKit
 
 		internal ModelVisualCollection(Model model) { _model = model; }
 
-		/// <summary>Gets an enumerator for the collection.</summary>
+		/// <summary>Gets an enumerator for the collection. This returns a
+		/// concrete struct enumerator so that `foreach` over the collection
+		/// stays allocation-free.</summary>
 		/// <returns>An enumerator.</returns>
-		public IEnumerator<ModelNode> GetEnumerator()
+		public Enumerator GetEnumerator() => new Enumerator(_model, Count);
+		// These keep the collection usable as an IEnumerable (LINQ, etc.), but
+		// they box the enumerator. A plain `foreach` binds to the concrete
+		// GetEnumerator above and avoids that.
+		IEnumerator<ModelNode> IEnumerable<ModelNode>.GetEnumerator() => GetEnumerator();
+		IEnumerator            IEnumerable.GetEnumerator()            => GetEnumerator();
+
+		/// <summary>An allocation-free struct enumerator for a
+		/// `ModelVisualCollection`.</summary>
+		public struct Enumerator : IEnumerator<ModelNode>
 		{
-			int count = Count;
-			for (int i = 0; i < count; i++)
-				yield return new ModelNode(_model, NativeAPI.model_node_visual_index(_model._inst, i));
+			Model _model;
+			int   _index;
+			int   _count;
+			internal Enumerator(Model model, int count) { _model = model; _index = -1; _count = count; }
+
+			/// <summary>The ModelNode at the enumerator's current position.</summary>
+			public ModelNode Current => new ModelNode(_model, NativeAPI.model_node_visual_index(_model._inst, _index));
+			object IEnumerator.Current => Current;
+
+			/// <summary>Advances to the next ModelNode.</summary>
+			/// <returns>False once the end of the collection is reached.</returns>
+			public bool MoveNext() => ++_index < _count;
+			/// <summary>Resets the enumerator to before the first element.</summary>
+			public void Reset() => _index = -1;
+			/// <summary>Nothing to dispose, this is here to satisfy the
+			/// IEnumerator interface.</summary>
+			public void Dispose() { }
 		}
-		IEnumerator IEnumerable.GetEnumerator() => GetEnumerator();
 	}
 
 	/// <summary>A link to a Model's animation! You can use this to get some
