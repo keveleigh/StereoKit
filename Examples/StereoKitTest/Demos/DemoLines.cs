@@ -104,7 +104,8 @@ class DemoLines : ITest
 		Hand hand = Input.Hand(handed);
 		Vec3 tip  = Vec3.Lerp(prevTip, hand.pinchPt, 0.3f);
 
-		if (hand.IsJustPinched && !UI.IsInteracting(handed)) { 
+		InteractorSource handSource = handed == Handed.Right ? InteractorSource.HandRight : InteractorSource.HandLeft;
+		if (hand.IsJustPinched && !Interactor.IsInteracting(handSource)) {
 			if (drawPoints.Count > 0)
 				drawList.Add(drawPoints.ToArray());
 			drawPoints.Clear();

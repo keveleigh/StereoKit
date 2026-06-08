@@ -10,11 +10,12 @@ struct _interactor_t {
 	interactor_event_      events;
 	interactor_activation_ activation_type;
 	interactor_type_       shape_type;
-	// A unique ID per-source used to prevent multiple interactors from
-	// re-using a source when it's already interacting with an element. A
-	// negative id indicates this source is unique, and does not need to check
-	// on other interactors.
-	int32_t                input_source_id;
+	// The physical source this interactor's input comes from. Interactors that
+	// share a source won't interact at the same time, this is how the poke,
+	// pinch, and aim interactors of a single hand avoid fighting over an
+	// element. `interactor_source_unique` (0) opts out, indicating a source
+	// that does not need to check against other interactors.
+	interactor_source_     source;
 	// While generally static, this does change for some interactors! For
 	// example, with hand far-rays, the minimum distance reduces as the hand
 	// get further from the head.

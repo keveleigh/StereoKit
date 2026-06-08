@@ -82,7 +82,7 @@ class TestInteractorModes : ITest
 		{
 			bool tracked = actor.Tracked.IsActive();
 			bool focused = actor.Focused != IdHash.None;
-			UI.Label($"#{actor.InputSourceId} {actor.Type}: {(tracked ? "tracked" : "lost")}{(focused ? ", focusing" : "")}");
+			UI.Label($"{actor.Source} {actor.Type}: {(tracked ? "tracked" : "lost")}{(focused ? ", focusing" : "")}");
 		}
 
 		UI.WindowEnd();

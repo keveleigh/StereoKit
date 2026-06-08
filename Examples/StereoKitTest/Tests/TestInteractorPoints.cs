@@ -70,7 +70,7 @@ class TestInteractorPoints : ITest
 		prevDefault = Interaction.DefaultInteractors;
 		Interaction.DefaultInteractors = DefaultInteractors.None;
 
-		actorPt = Interactor.Create(InteractorType.Point, InteractorEvent.Poke, InteractorActivation.Position, -1, 0.006f, 0);
+		actorPt = Interactor.Create(InteractorType.Point, InteractorEvent.Poke, InteractorActivation.Position, InteractorSource.Unique, 0.006f, 0);
 
 		// This puts us alll the way back to test == 0, so we know we've
 		// executed all our interactor tests.

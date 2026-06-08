@@ -82,7 +82,7 @@ void demo_lines_draw() {
 	vec3          tip  = hand->fingers[1][4].position;
 	tip = line_prev_tip + (tip-line_prev_tip) * 0.3f;
 
-	if ((hand->pinch_state & button_state_just_active) && !ui_is_interacting(handed_right)) {
+	if ((hand->pinch_state & button_state_just_active) && !interactor_is_interacting(interactor_source_any)) {
 		
 		if (line_draw.size() > 0)
 			line_list.push_back(line_draw);

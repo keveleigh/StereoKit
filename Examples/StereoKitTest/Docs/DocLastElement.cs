@@ -7,7 +7,7 @@ class DocLastElement : ITest
 
 	public void Step()
 	{
-		/// :CodeSample: UI.LastElementHandActive UI.LastElementHandFocused UI.LastElementActive UI.LastElementFocused
+		/// :CodeSample: UI.LastElementSourceActive UI.LastElementSourceFocused UI.LastElementActive UI.LastElementFocused
 		/// ### Checking UI element status
 		/// It can sometimes be nice to know how the user is interacting with a
 		/// particular UI element! The UI.LastElementX functions can be used to
@@ -23,10 +23,10 @@ class DocLastElement : ITest
 
 		UI.HSlider("Slider", ref sliderVal, 0, 1, 0.1f, 0, UIConfirm.Pinch);
 		UI.Text("Element Info:", Align.TopCenter);
-		if (UI.LastElementHandActive (Handed.Left ).IsActive()) UI.Label("Left Active");
-		if (UI.LastElementHandActive (Handed.Right).IsActive()) UI.Label("Right Active");
-		if (UI.LastElementHandFocused(Handed.Left ).IsActive()) UI.Label("Left Focused");
-		if (UI.LastElementHandFocused(Handed.Right).IsActive()) UI.Label("Right Focused");
+		if (UI.LastElementSourceActive (InteractorSource.HandLeft  | InteractorSource.ControllerLeft ).IsActive()) UI.Label("Left Active");
+		if (UI.LastElementSourceActive (InteractorSource.HandRight | InteractorSource.ControllerRight).IsActive()) UI.Label("Right Active");
+		if (UI.LastElementSourceFocused(InteractorSource.HandLeft  | InteractorSource.ControllerLeft ).IsActive()) UI.Label("Left Focused");
+		if (UI.LastElementSourceFocused(InteractorSource.HandRight | InteractorSource.ControllerRight).IsActive()) UI.Label("Right Focused");
 		if (UI.LastElementFocused                  .IsActive()) UI.Label("Focused");
 		if (UI.LastElementActive                   .IsActive()) UI.Label("Active");
 

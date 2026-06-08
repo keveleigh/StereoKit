@@ -40,7 +40,7 @@ class TestInteractorVis : ITest
 		Interaction.DefaultInteractors = DefaultInteractors.None;
 		Interaction.DefaultDraw        = false;
 
-		ray = Interactor.Create(InteractorType.Line, InteractorEvent.Pinch | InteractorEvent.Poke, InteractorActivation.State, 42, 0.05f, 2);
+		ray = Interactor.Create(InteractorType.Line, InteractorEvent.Pinch | InteractorEvent.Poke, InteractorActivation.State, InteractorSource.Max, 0.05f, 2);
 
 		// The creation parameters are now readable back off the interactor.
 		Tests.Test(CreationParamsReadBack);
@@ -54,7 +54,7 @@ class TestInteractorVis : ITest
 		ray.Type          == InteractorType.Line                          &&
 		ray.Events        == (InteractorEvent.Pinch|InteractorEvent.Poke) &&
 		ray.Activation    == InteractorActivation.State                   &&
-		ray.InputSourceId == 42                                           &&
+		ray.Source        == InteractorSource.Max                         &&
 		ray.SecondaryDims == 2;
 
 	public void Shutdown()

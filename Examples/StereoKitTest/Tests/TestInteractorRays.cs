@@ -69,7 +69,7 @@ class TestInteractorRays : ITest
 		prevDefault = Interaction.DefaultInteractors;
 		Interaction.DefaultInteractors = DefaultInteractors.None;
 
-		ray = Interactor.Create(InteractorType.Line, InteractorEvent.Pinch | InteractorEvent.Poke, InteractorActivation.State, -1, 0.001f, 0);
+		ray = Interactor.Create(InteractorType.Line, InteractorEvent.Pinch | InteractorEvent.Poke, InteractorActivation.State, InteractorSource.Unique, 0.001f, 0);
 
 		// This puts us alll the way back to test == 0, so we know we've
 		// executed all our interactor tests.

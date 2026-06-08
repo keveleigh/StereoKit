@@ -157,10 +157,10 @@ namespace StereoKit
 
 		// UI button/slider behavior - opt/nullable
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
-		public static extern void ui_button_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, out int out_opt_hand);
+		public static extern void ui_button_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, out Interactor out_opt_interactor);
 
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
-		public static extern void ui_button_behavior_depth(Vec3 window_relative_pos, Vec2 size, IdHash id, float button_depth, float button_activation_depth, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, out int out_opt_hand);
+		public static extern void ui_button_behavior_depth(Vec3 window_relative_pos, Vec2 size, IdHash id, float button_depth, float button_activation_depth, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, out Interactor out_opt_interactor);
 
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]
 		public static extern BtnState ui_volume_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, Bounds bounds, UIConfirm interact_type, out Interactor out_opt_interactor, out BtnState out_opt_focus_state);
