@@ -80,7 +80,6 @@ sk_settings_t SKSettings
 vind_t uint
 vert_t Vertex
 model_node_id int
-interactor_t int
 sh_light_t SHLight
 openxr_handle_t ulong
 asset_t IntPtr

@@ -2444,9 +2444,11 @@ typedef enum interactor_event_ {
 } interactor_event_;
 SK_MakeFlag(interactor_event_);
 
-// TODO: is this redundant with interactor_type_?
-/*This describes how an interactor activates elements. Does it use the physical
-  position of the interactor, or the activation state?*/
+/*This describes how an interactor commits an interaction with an element - does
+  it activate from the physical position of the interactor (like a finger poking
+  through a button), or from its activation/button state (like a pinch or a
+  trigger click)? This is independent of `InteractorType`, which describes the
+  interactor's shape rather than what triggers it.*/
 typedef enum interactor_activation_ {
 	/*This interactor uses its `active` state to determine element
 	  activation.*/
@@ -2455,6 +2457,38 @@ typedef enum interactor_activation_ {
 	  activation.*/
 	interactor_activation_position,
 } interactor_activation_;
+
+/*A bit-flag describing the physical source an interactor's input comes from,
+  such as a specific hand, controller, or the mouse. Interactors that share a
+  source are mutually exclusive: while one is actively interacting, the others
+  won't begin a new interaction. This is how the poke, pinch, and aim
+  interactors of a single hand avoid fighting over the same element. The bits
+  at and above `InteractorSource.Max` are free for your own custom sources.*/
+typedef enum interactor_source_ {
+	/*A unique, independent source. Interactors with this source never group
+	  with any other interactor, and are invisible to source queries like
+	  `Interactor.IsInteracting`. This is the default 'shares nothing' source.*/
+	interactor_source_unique           = 0,
+	/*The left hand.*/
+	interactor_source_hand_left        = 1 << 0,
+	/*The right hand.*/
+	interactor_source_hand_right       = 1 << 1,
+	/*The left motion controller.*/
+	interactor_source_controller_left  = 1 << 2,
+	/*The right motion controller.*/
+	interactor_source_controller_right = 1 << 3,
+	/*Gaze or eye tracking based input.*/
+	interactor_source_gaze             = 1 << 4,
+	/*A mouse pointer.*/
+	interactor_source_mouse            = 1 << 5,
+	/*Matches with all sources!*/
+	interactor_source_any              = 0x7FFFFFFF,
+	/*The first bit available for your own custom interactor sources. Bits at
+	  and above this are unused by StereoKit, so you can define your own
+	  relative to it, for example `(InteractorSource)((int)InteractorSource.Max << 1)`.*/
+	interactor_source_max              = 1 << 6,
+} interactor_source_;
+SK_MakeFlag(interactor_source_);
 
 /*A bit-flag for the current state of a button input.*/
 typedef enum button_state_ {
@@ -2496,7 +2530,7 @@ typedef enum default_interactors_ {
 
 typedef int32_t interactor_t;
 
-SK_API interactor_t          interactor_create                  (interactor_type_ shape_type, interactor_event_ events, interactor_activation_ activation_type, int32_t input_source_id, float capsule_radius, int32_t secondary_motion_dimensions);
+SK_API interactor_t          interactor_create                  (interactor_type_ shape_type, interactor_event_ events, interactor_activation_ activation_type, interactor_source_ source, float capsule_radius, int32_t secondary_motion_dimensions);
 SK_API void                  interactor_destroy                 (      interactor_t interactor);
 SK_API void                  interactor_update                  (      interactor_t interactor, vec3 capsule_start, vec3 capsule_end, pose_t motion, vec3 motion_anchor, vec3 secondary_motion, button_state_ active, button_state_ tracked);
 SK_API void                  interactor_set_min_distance        (      interactor_t interactor, float min_distance);
@@ -2513,11 +2547,13 @@ SK_API pose_t                interactor_get_motion              (const interacto
 SK_API interactor_type_      interactor_get_type                (const interactor_t interactor);
 SK_API interactor_event_     interactor_get_events              (const interactor_t interactor);
 SK_API interactor_activation_ interactor_get_activation         (const interactor_t interactor);
-SK_API int32_t               interactor_get_input_source_id     (const interactor_t interactor);
+SK_API interactor_source_    interactor_get_source              (const interactor_t interactor);
 SK_API int32_t               interactor_get_secondary_dims      (const interactor_t interactor);
 
 SK_API int32_t               interactor_count                   (void);
 SK_API interactor_t          interactor_get                     (int32_t index);
+
+SK_API bool32_t              interactor_is_interacting          (interactor_source_ source);
 
 SK_API void                  interaction_set_default_interactors(default_interactors_ default_interactors);
 SK_API default_interactors_  interaction_get_default_interactors();

@@ -158,6 +158,14 @@ namespace StereoKit
 		/// previously added using LayoutPush, or LayoutPushCut.</summary>
 		public static void LayoutPop() => NativeAPI.ui_layout_pop();
 
+		// Maps the legacy Handed concept onto interactor sources: a side covers
+		// its hand and controller, and the right side also covers the mouse
+		// (which historically reported as the right hand). Used to back the
+		// deprecated hand-based functions with the interactor source system.
+		static InteractorSource HandToSource(Handed hand) => hand == Handed.Left
+			? InteractorSource.HandLeft  | InteractorSource.ControllerLeft
+			: InteractorSource.HandRight | InteractorSource.ControllerRight | InteractorSource.Mouse;
+
 		/// <summary>Tells if the hand was involved in the active state of the
 		/// most recently called UI element using an id. Active state is
 		/// frequently a single frame in the case of Buttons, but could be many
@@ -166,7 +174,8 @@ namespace StereoKit
 		/// <returns>A BtnState that indicated the hand was "just active" this
 		/// frame, is currently "active" or if it "just became inactive" this
 		/// frame.</returns>
-		public static BtnState LastElementHandActive(Handed hand) => NativeAPI.ui_last_element_hand_active(hand);
+		[Obsolete("Use UI.LastElementSourceActive(InteractorSource) instead.")]
+		public static BtnState LastElementHandActive(Handed hand) => NativeAPI.ui_last_element_source_active(HandToSource(hand));
 		/// <summary>Tells if the hand was involved in the focus state of the
 		/// most recently called UI element using an id. Focus occurs when the
 		/// hand is in or near an element, in such a way that indicates the
@@ -175,13 +184,36 @@ namespace StereoKit
 		/// <returns>A BtnState that indicated the hand was "just focused" this
 		/// frame, is currently "focused" or if it "just became focused" this
 		/// frame.</returns>
-		public static BtnState LastElementHandFocused(Handed hand) => NativeAPI.ui_last_element_hand_focused(hand);
+		[Obsolete("Use UI.LastElementSourceFocused(InteractorSource) instead.")]
+		public static BtnState LastElementHandFocused(Handed hand) => NativeAPI.ui_last_element_source_focused(HandToSource(hand));
 		/// <summary>Tells the Active state of the most recently called UI
 		/// element that used an id.</summary>
 		public static BtnState LastElementActive => NativeAPI.ui_last_element_active();
 		/// <summary>Tells the Focused state of the most recently called UI
 		/// element that used an id.</summary>
 		public static BtnState LastElementFocused => NativeAPI.ui_last_element_focused();
+		/// <summary>Tells if an interactor from the given source was involved in
+		/// the active state of the most recently called UI element using an id.
+		/// Active state is frequently a single frame in the case of Buttons, but
+		/// could be many in the case of Sliders or Handles. Sources can be
+		/// combined as a bit-flag to ask about several at once.</summary>
+		/// <param name="source">The source, or combination of sources, to check.
+		/// </param>
+		/// <returns>A BtnState that indicates the source was "just active" this
+		/// frame, is currently "active", or if it "just became inactive" this
+		/// frame.</returns>
+		public static BtnState LastElementSourceActive(InteractorSource source) => NativeAPI.ui_last_element_source_active(source);
+		/// <summary>Tells if an interactor from the given source was involved in
+		/// the focus state of the most recently called UI element using an id.
+		/// Focus occurs when the interactor is in or near an element, in such a
+		/// way that indicates the user may be about to interact with it. Sources
+		/// can be combined as a bit-flag to ask about several at once.</summary>
+		/// <param name="source">The source, or combination of sources, to check.
+		/// </param>
+		/// <returns>A BtnState that indicates the source was "just focused" this
+		/// frame, is currently "focused", or if it "just became unfocused" this
+		/// frame.</returns>
+		public static BtnState LastElementSourceFocused(InteractorSource source) => NativeAPI.ui_last_element_source_focused(source);
 
 		/// <summary>Tells if the user is currently interacting with a UI
 		/// element! This will be true if the hand has an active or focused UI
@@ -189,8 +221,9 @@ namespace StereoKit
 		/// <param name="hand">Which hand is interacting?</param>
 		/// <returns>True if the hand has an active or focused UI element.
 		/// False otherwise.</returns>
+		[Obsolete("Use Interactor.IsInteracting(InteractorSource) instead.")]
 		public static bool IsInteracting(Handed hand)
-			=> NativeAPI.ui_is_interacting(hand);
+			=> NativeAPI.interactor_is_interacting(HandToSource(hand));
 
 		/// <summary>This allows you to explicitly set a theme color, for finer
 		/// grained control over the UI appearance. Each theme type is still
@@ -305,36 +338,32 @@ namespace StereoKit
 			=> NativeAPI.ui_hspace(horizontalSpace);
 
 		/// <inheritdoc cref="VolumeAt(string, Bounds, UIConfirm)"/>
-		/// <param name="hand">This will be the last unpreoccupied hand found
-		/// inside the volume, and is the hand controlling the interaction.
-		/// </param>
-		/// <param name="focusState">The focus state tells if the element has
-		/// a hand inside of the volume that qualifies for focus.</param>
-		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Handed hand, out BtnState focusState)
-		{
-			BtnState result = NativeAPI.ui_volume_at_16(id, bounds, interactType, out int handInt, out focusState);
-			hand = (Handed)handInt;
-			return result;
-		}
+		/// <param name="interactor">The `Interactor` that is interacting with
+		/// the volume. If nothing is interacting, this will be
+		/// `Interactor.None`.</param>
+		/// <param name="focusState">The focus state tells if the element has an
+		/// interactor inside of the volume that qualifies for focus.</param>
+		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Interactor interactor, out BtnState focusState)
+			=> NativeAPI.ui_volume_at_16(id, bounds, interactType, out interactor, out focusState);
 
 		/// <inheritdoc cref="VolumeAt(string, Bounds, UIConfirm)"/>
-		/// <param name="hand">This will be the last unpreoccupied hand found
-		/// inside the volume, and is the hand controlling the interaction.
-		/// </param>
-		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Handed hand)
-			=> VolumeAt(id, bounds, interactType, out hand, out _);
-		/// <summary>A volume for helping to build one handed interactions.
-		/// This checks for the presence of a hand inside the bounds, and if
-		/// found, return that hand along with activation and focus 
-		/// information defined by the interactType.</summary>
+		/// <param name="interactor">The `Interactor` that is interacting with
+		/// the volume. If nothing is interacting, this will be
+		/// `Interactor.None`.</param>
+		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType, out Interactor interactor)
+			=> VolumeAt(id, bounds, interactType, out interactor, out _);
+		/// <summary>A volume for helping to build interactions. This checks for
+		/// the presence of an interactor inside the bounds, and if found,
+		/// returns that interactor along with activation and focus information
+		/// defined by the interactType.</summary>
 		/// <param name="id">An id for tracking element state. MUST be unique
 		/// within current hierarchy.</param>
 		/// <param name="bounds">Size and position of the volume, relative to
 		/// the current Hierarchy.</param>
 		/// <param name="interactType">UIConfirm.Pinch will activate when the
-		/// hand performs a 'pinch' gesture. UIConfirm.Push will activate 
-		/// when the hand enters the volume, and behave the same as element's
-		/// focusState.</param>
+		/// interactor performs a 'pinch' gesture inside the volume.
+		/// UIConfirm.Push will activate when the interactor enters the volume,
+		/// and behave the same as the element's focusState.</param>
 		/// <returns>Based on the interactType, this is a BtnState that tells
 		/// the activation state of the interaction.</returns>
 		public static BtnState VolumeAt(string id, Bounds bounds, UIConfirm interactType)
@@ -1833,10 +1862,11 @@ namespace StereoKit
 			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), out fingerOffset, out buttonState, out focusState, out _);
 
 		/// <inheritdoc cref="ButtonBehavior(Vec3, Vec2, string, out float, out BtnState, out BtnState)"/>
-		/// <param name="hand">Id of the hand that interacted with the button.
-		/// This will be -1 if no interaction has occurred.</param>
-		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out int hand)
-			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), out fingerOffset, out buttonState, out focusState, out hand);
+		/// <param name="interactor">The Interactor that interacted with the
+		/// button. If nothing is interacting, this will be `Interactor.None`.
+		/// </param>
+		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out Interactor interactor)
+			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), out fingerOffset, out buttonState, out focusState, out interactor);
 
 		/// <summary>This is the core functionality of StereoKit's buttons,
 		/// without any of the rendering parts! If you're trying to create your
@@ -1861,10 +1891,11 @@ namespace StereoKit
 		/// state for the button.</param>
 		/// <param name="focusState">This is the current frame's "focus" state
 		/// for the button.</param>
-		/// <param name="hand">Id of the hand that interacted with the button.
-		/// This will be -1 if no interaction has occurred.</param>
-		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, float buttonDepth, float buttonActivationDepth, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out int hand)
-			=> NativeAPI.ui_button_behavior_depth(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), buttonDepth, buttonActivationDepth, out fingerOffset, out buttonState, out focusState, out hand);
+		/// <param name="interactor">The Interactor that interacted with the
+		/// button. If nothing is interacting, this will be `Interactor.None`.
+		/// </param>
+		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, float buttonDepth, float buttonActivationDepth, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out Interactor interactor)
+			=> NativeAPI.ui_button_behavior_depth(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), buttonDepth, buttonActivationDepth, out fingerOffset, out buttonState, out focusState, out interactor);
 
 		/// <summary>This is the core functionality of StereoKit's slider
 		/// elements, without any of the rendering parts! If you're trying to

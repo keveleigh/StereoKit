@@ -383,26 +383,21 @@ SK_API void     ui_layout_push     (vec3 start, vec2 dimensions, bool32_t add_ma
 SK_API void     ui_layout_push_cut (ui_cut_ cut_to, float size, bool32_t add_margin sk_default(false));
 SK_API void     ui_layout_pop      (void);
 
-// TODO: v0.4 These functions use hands instead of interactors, they need replaced!
-SK_API bool32_t      ui_is_interacting           (handed_ hand);
-// TODO: v0.4 These functions use hands instead of interactors, they need replaced!
-SK_API button_state_ ui_last_element_hand_active (handed_ hand);
-// TODO: v0.4 These functions use hands instead of interactors, they need replaced!
-SK_API button_state_ ui_last_element_hand_focused(handed_ hand);
-
-SK_API button_state_ ui_last_element_active   (void);
-SK_API button_state_ ui_last_element_focused  (void);
+SK_API button_state_ ui_last_element_active        (void);
+SK_API button_state_ ui_last_element_focused       (void);
+SK_API button_state_ ui_last_element_source_active (interactor_source_ source);
+SK_API button_state_ ui_last_element_source_focused(interactor_source_ source);
 
 SK_API void     ui_nextline      (void);
 SK_API void     ui_sameline      (void);
 SK_API float    ui_line_height   (void);
 
-SK_API void     ui_button_behavior      (vec3 window_relative_pos, vec2 size, id_hash_t id, sk_ref(float) out_finger_offset, sk_ref(button_state_) out_button_state, sk_ref(button_state_) out_focus_state, int32_t* out_opt_hand sk_default(nullptr));
-SK_API void     ui_button_behavior_depth(vec3 window_relative_pos, vec2 size, id_hash_t id, float button_depth, float button_activation_depth, sk_ref(float) out_finger_offset, sk_ref(button_state_) out_button_state, sk_ref(button_state_) out_focus_state, int32_t* out_opt_hand sk_default(nullptr));
+SK_API void     ui_button_behavior      (vec3 window_relative_pos, vec2 size, id_hash_t id, sk_ref(float) out_finger_offset, sk_ref(button_state_) out_button_state, sk_ref(button_state_) out_focus_state, interactor_t* out_opt_interactor sk_default(nullptr));
+SK_API void     ui_button_behavior_depth(vec3 window_relative_pos, vec2 size, id_hash_t id, float button_depth, float button_activation_depth, sk_ref(float) out_finger_offset, sk_ref(button_state_) out_button_state, sk_ref(button_state_) out_focus_state, interactor_t* out_opt_interactor sk_default(nullptr));
 SK_API void     ui_slider_behavior      (vec3 window_relative_pos, vec2 size, id_hash_t id, vec2* ref_value, vec2 min, vec2 max, vec2 button_size_visual, vec2 button_size_interact, ui_confirm_ confirm_method, ui_slider_data_t* out_slider_data);
 
-SK_API button_state_ ui_volume_at        (const char     *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
-SK_API button_state_ ui_volume_at_16     (const char16_t *id, bounds_t bounds, ui_confirm_ interact_type, handed_ *out_opt_hand sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
+SK_API button_state_ ui_volume_at        (const char     *id, bounds_t bounds, ui_confirm_ interact_type, interactor_t *out_opt_interactor sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
+SK_API button_state_ ui_volume_at_16     (const char16_t *id, bounds_t bounds, ui_confirm_ interact_type, interactor_t *out_opt_interactor sk_default(nullptr), button_state_ *out_opt_focus_state sk_default(nullptr));
 
 SK_API void     ui_label             (const char*     text, vec2 size sk_default(vec2{}), bool32_t use_padding sk_default(true), align_ text_align sk_default(align_none));
 SK_API void     ui_label_16          (const char16_t* text, vec2 size sk_default(vec2{}), bool32_t use_padding sk_default(true), align_ text_align sk_default(align_none));

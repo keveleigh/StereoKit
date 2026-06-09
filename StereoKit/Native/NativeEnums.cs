@@ -1344,8 +1344,11 @@ namespace StereoKit
 		Pinch        = 1 << 3,
 	}
 
-	/// <summary>This describes how an interactor activates elements. Does it use the physical
-	/// position of the interactor, or the activation state?</summary>
+	/// <summary>This describes how an interactor commits an interaction with an element - does
+	/// it activate from the physical position of the interactor (like a finger poking
+	/// through a button), or from its activation/button state (like a pinch or a
+	/// trigger click)? This is independent of `InteractorType`, which describes the
+	/// interactor's shape rather than what triggers it.</summary>
 	public enum InteractorActivation {
 		/// <summary>This interactor uses its `active` state to determine element
 		/// activation.</summary>
@@ -1353,6 +1356,38 @@ namespace StereoKit
 		/// <summary>This interactor uses its motion position to determine the element
 		/// activation.</summary>
 		Position,
+	}
+
+	/// <summary>A bit-flag describing the physical source an interactor's input comes from,
+	/// such as a specific hand, controller, or the mouse. Interactors that share a
+	/// source are mutually exclusive: while one is actively interacting, the others
+	/// won't begin a new interaction. This is how the poke, pinch, and aim
+	/// interactors of a single hand avoid fighting over the same element. The bits
+	/// at and above `InteractorSource.Max` are free for your own custom sources.</summary>
+	[Flags]
+	public enum InteractorSource {
+		/// <summary>A unique, independent source. Interactors with this source never group
+		/// with any other interactor, and are invisible to source queries like
+		/// `Interactor.IsInteracting`. This is the default 'shares nothing' source.</summary>
+		Unique       = 0,
+		/// <summary>The left hand.</summary>
+		HandLeft     = 1 << 0,
+		/// <summary>The right hand.</summary>
+		HandRight    = 1 << 1,
+		/// <summary>The left motion controller.</summary>
+		ControllerLeft = 1 << 2,
+		/// <summary>The right motion controller.</summary>
+		ControllerRight = 1 << 3,
+		/// <summary>Gaze or eye tracking based input.</summary>
+		Gaze         = 1 << 4,
+		/// <summary>A mouse pointer.</summary>
+		Mouse        = 1 << 5,
+		/// <summary>Matches with all sources!</summary>
+		Any          = 0x7FFFFFFF,
+		/// <summary>The first bit available for your own custom interactor sources. Bits at
+		/// and above this are unused by StereoKit, so you can define your own
+		/// relative to it, for example `(InteractorSource)((int)InteractorSource.Max &lt;&lt; 1)`.</summary>
+		Max          = 1 << 6,
 	}
 
 	/// <summary>A bit-flag for the current state of a button input.</summary>

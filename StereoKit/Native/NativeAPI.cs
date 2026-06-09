@@ -754,28 +754,30 @@ namespace StereoKit
 
 		///////////////////////////////////////////
 
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_create(InteractorType shape_type, InteractorEvent events, InteractorActivation activation_type, int input_source_id, float capsule_radius, int secondary_motion_dimensions);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_destroy(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_update(int interactor, Vec3 capsule_start, Vec3 capsule_end, Pose motion, Vec3 motion_anchor, Vec3 secondary_motion, BtnState active, BtnState tracked);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_set_min_distance(int interactor, float min_distance);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        interactor_get_min_distance(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         interactor_get_capsule_start(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         interactor_get_capsule_end(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_set_radius(int interactor, float radius);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        interactor_get_radius(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     interactor_get_tracked(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IdHash       interactor_get_focused(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IdHash       interactor_get_active(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Interactor   interactor_create(InteractorType shape_type, InteractorEvent events, InteractorActivation activation_type, InteractorSource source, float capsule_radius, int secondary_motion_dimensions);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_destroy(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_update(Interactor interactor, Vec3 capsule_start, Vec3 capsule_end, Pose motion, Vec3 motion_anchor, Vec3 secondary_motion, BtnState active, BtnState tracked);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_set_min_distance(Interactor interactor, float min_distance);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        interactor_get_min_distance(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         interactor_get_capsule_start(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         interactor_get_capsule_end(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         interactor_set_radius(Interactor interactor, float radius);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        interactor_get_radius(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     interactor_get_tracked(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IdHash       interactor_get_focused(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IdHash       interactor_get_active(Interactor interactor);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         interactor_get_focus_bounds(int interactor, out Pose out_pose_world, out Bounds out_bounds_local, out Vec3 out_at_local);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pose         interactor_get_motion(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorType interactor_get_type(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorEvent interactor_get_events(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorActivation interactor_get_activation(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get_input_source_id(int interactor);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get_secondary_dims(int interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         interactor_get_focus_bounds(Interactor interactor, out Pose out_pose_world, out Bounds out_bounds_local, out Vec3 out_at_local);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Pose         interactor_get_motion(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorType interactor_get_type(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorEvent interactor_get_events(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorActivation interactor_get_activation(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern InteractorSource interactor_get_source(Interactor interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get_secondary_dims(Interactor interactor);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_count();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          interactor_get(int index);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Interactor   interactor_get(int index);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         interactor_is_interacting(InteractorSource source);
 
 		///////////////////////////////////////////
 
@@ -1067,20 +1069,18 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_layout_push(Vec3 start, Vec2 dimensions, [MarshalAs(UnmanagedType.Bool)] bool add_margin);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_layout_push_cut(UICut cut_to, float size, [MarshalAs(UnmanagedType.Bool)] bool add_margin);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_layout_pop();
-		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_is_interacting(Handed hand);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_hand_active(Handed hand);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_hand_focused(Handed hand);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_active();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_focused();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_source_active(InteractorSource source);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_last_element_source_focused(InteractorSource source);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_nextline();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_sameline();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        ui_line_height();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_button_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, IntPtr out_opt_hand);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_button_behavior_depth(Vec3 window_relative_pos, Vec2 size, IdHash id, float button_depth, float button_activation_depth, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, IntPtr out_opt_hand);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_button_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, IntPtr out_opt_interactor);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_button_behavior_depth(Vec3 window_relative_pos, Vec2 size, IdHash id, float button_depth, float button_activation_depth, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, IntPtr out_opt_interactor);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_slider_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, ref Vec2 ref_value, Vec2 min, Vec2 max, Vec2 button_size_visual, Vec2 button_size_interact, UIConfirm confirm_method, out UISliderData out_slider_data);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_volume_at([MarshalAs(UnmanagedType.LPUTF8Str)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_hand, IntPtr out_opt_focus_state);
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern BtnState     ui_volume_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_hand, IntPtr out_opt_focus_state);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BtnState     ui_volume_at([MarshalAs(UnmanagedType.LPUTF8Str)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_interactor, IntPtr out_opt_focus_state);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern BtnState     ui_volume_at_16([MarshalAs(UnmanagedType.LPWStr)] string id, Bounds bounds, UIConfirm interact_type, IntPtr out_opt_interactor, IntPtr out_opt_focus_state);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_label([MarshalAs(UnmanagedType.LPUTF8Str)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding, Align text_align);
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern void         ui_label_16([MarshalAs(UnmanagedType.LPWStr)] string text, Vec2 size, [MarshalAs(UnmanagedType.Bool)] bool use_padding, Align text_align);
 		[return: MarshalAs(UnmanagedType.Bool)]
