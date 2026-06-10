@@ -487,18 +487,7 @@ SK_CONST char* ui_default_id_spr_grid        = "sk/ui/grid";
 #define ui_toggle_sz_16     ui_toggle_16
 #define ui_toggle_img_sz    ui_toggle_img
 #define ui_toggle_img_sz_16 ui_toggle_img_16
-#pragma deprecated(ui_label_sz)
-#pragma deprecated(ui_label_sz_16)
-#pragma deprecated(ui_text_sz)
-#pragma deprecated(ui_text_sz_16)
-#pragma deprecated(ui_button_sz)
-#pragma deprecated(ui_button_sz_16)
-#pragma deprecated(ui_button_img_sz)
-#pragma deprecated(ui_button_img_sz_16)
-#pragma deprecated(ui_toggle_sz)
-#pragma deprecated(ui_toggle_sz_16)
-#pragma deprecated(ui_toggle_img_sz)
-#pragma deprecated(ui_toggle_img_sz_16)
+#if defined(__clang__)
 #pragma clang deprecated(ui_label_sz)
 #pragma clang deprecated(ui_label_sz_16)
 #pragma clang deprecated(ui_text_sz)
@@ -511,6 +500,22 @@ SK_CONST char* ui_default_id_spr_grid        = "sk/ui/grid";
 #pragma clang deprecated(ui_toggle_sz_16)
 #pragma clang deprecated(ui_toggle_img_sz)
 #pragma clang deprecated(ui_toggle_img_sz_16)
+#elif defined(_MSC_VER)
+// MSVC requires quotes here, otherwise the macros get expanded and the
+// pragma deprecates the functions they point to!
+#pragma deprecated("ui_label_sz")
+#pragma deprecated("ui_label_sz_16")
+#pragma deprecated("ui_text_sz")
+#pragma deprecated("ui_text_sz_16")
+#pragma deprecated("ui_button_sz")
+#pragma deprecated("ui_button_sz_16")
+#pragma deprecated("ui_button_img_sz")
+#pragma deprecated("ui_button_img_sz_16")
+#pragma deprecated("ui_toggle_sz")
+#pragma deprecated("ui_toggle_sz_16")
+#pragma deprecated("ui_toggle_img_sz")
+#pragma deprecated("ui_toggle_img_sz_16")
+#endif
 
 #ifdef __cplusplus
 } // namespace sk

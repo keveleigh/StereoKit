@@ -617,6 +617,11 @@ add_library(StereoKitC ${LIBRARY_TYPE}
 if (ANDROID)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 11)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)
+elseif (MSVC)
+  # C++/WinRT (isac_spatial_sound.cpp) needs C++20's <coroutine>, the
+  # <experimental/coroutine> it falls back to in C++17 is removed in VS2026.
+  set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 20)
+  set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)
 else()
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 17)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)

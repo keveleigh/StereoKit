@@ -177,7 +177,7 @@ void interact_mode_switch(interact_mode_ mode) {
 
 void interactor_show_ray(interactor_t interactor, float skip, bool hide_inactive, float *ref_visible_amt, float *ref_active_amt) {
 	_interactor_t* actor = _interactor_get(interactor);
-	if ((actor->tracked & button_state_active) == 0) return;
+	if (actor == nullptr || (actor->tracked & button_state_active) == 0) return;
 
 	bool  actor_visible = hide_inactive == false || actor->focused_prev != 0;
 	float visibility    = 1;
@@ -261,13 +261,15 @@ void interact_mode_hands_step(interact_mode_hands_t* ref_hands) {
 		const hand_t* hand = input_hand((handed_)i);
 
 		// Poke
-		interactor_t id         = ref_hands->poke[i];
+		interactor_t   id         = ref_hands->poke[i];
 		_interactor_t* interactor = _interactor_get(id);
-		interactor_set_radius(id, hand->fingers[1][4].radius);
-		interactor_update    (id,
-			(hand->tracked_state & button_state_just_active) ? hand->fingers[1][4].position : interactor->capsule_end_world, hand->fingers[1][4].position,
-			pose_t{ hand->fingers[1][4].position, hand->palm.orientation }, hand->fingers[1][4].position, vec3_zero,
-			button_state_inactive, hand->tracked_state);
+		if (interactor != nullptr) {
+			interactor_set_radius(id, hand->fingers[1][4].radius);
+			interactor_update    (id,
+				(hand->tracked_state & button_state_just_active) ? hand->fingers[1][4].position : interactor->capsule_end_world, hand->fingers[1][4].position,
+				pose_t{ hand->fingers[1][4].position, hand->palm.orientation }, hand->fingers[1][4].position, vec3_zero,
+				button_state_inactive, hand->tracked_state);
+		}
 
 		// Pinch
 		id = ref_hands->pinch[i];
@@ -375,6 +377,9 @@ void interact_mode_mouse_stop(interact_mode_mouse_t* ref_mouse) {
 void interact_mode_mouse_step(interact_mode_mouse_t *ref_mouse) {
 	if (ui_far_interact_enabled() == false) return;
 
+	_interactor_t* actor = _interactor_get(ref_mouse->interactor);
+	if (actor == nullptr) return;
+
 	const mouse_t* m = input_mouse();
 	ray_t ray;
 	bool  tracked = ray_from_mouse(m->pos, ray);
@@ -383,7 +388,7 @@ void interact_mode_mouse_step(interact_mode_mouse_t *ref_mouse) {
 	interactor_update(ref_mouse->interactor,
 		ray.pos, end,
 		pose_t{ end, quat_lookat(ray.pos, end) }, end, vec3{ m->scroll_change / -6000.0f, 0, 0 },
-		input_key(key_mouse_left), button_make_state(_interactor_get(ref_mouse->interactor)->tracked & button_state_active, tracked));
+		input_key(key_mouse_left), button_make_state(actor->tracked & button_state_active, tracked));
 }
 
 ///////////////////////////////////////////
@@ -446,12 +451,13 @@ pointer_t input_pointer(int32_t index, input_source_ filter) {
 		int32_t idx = index + start;
 		if (idx > 1) return {};
 
-		interactor_t actor_id = local.controllers.far[idx];
+		_interactor_t* actor = _interactor_get(local.controllers.far[idx]);
+		if (actor == nullptr) return {};
 		pointer_t result   = {};
-		result.orientation = interactor_get_motion (actor_id).orientation;
-		result.state       = _interactor_get       (actor_id)->pinch_state;
-		result.tracked     = interactor_get_tracked(actor_id);
-		result.ray         = { _interactor_get(actor_id)->capsule_start_world, result.orientation * vec3_forward };
+		result.orientation = actor->motion.orientation;
+		result.state       = actor->pinch_state;
+		result.tracked     = actor->tracked;
+		result.ray         = { actor->capsule_start_world, result.orientation * vec3_forward };
 		result.source      = idx == 0 ? input_source_hand_left : input_source_hand_right;
 		return result;
 	} break;
@@ -463,23 +469,25 @@ pointer_t input_pointer(int32_t index, input_source_ filter) {
 		int32_t idx = index + start;
 		if (idx > 1) return {};
 
-		interactor_t actor_id = local.hands.far[idx];
+		_interactor_t* actor = _interactor_get(local.hands.far[idx]);
+		if (actor == nullptr) return {};
 		pointer_t result   = {};
-		result.orientation = interactor_get_motion (actor_id).orientation;
-		result.state       = _interactor_get        (actor_id)->pinch_state;
-		result.tracked     = interactor_get_tracked(actor_id);
-		result.ray         = { _interactor_get(actor_id)->capsule_start_world, result.orientation * vec3_forward };
+		result.orientation = actor->motion.orientation;
+		result.state       = actor->pinch_state;
+		result.tracked     = actor->tracked;
+		result.ray         = { actor->capsule_start_world, result.orientation * vec3_forward };
 		result.source      = idx == 0 ? input_source_hand_left : input_source_hand_right;
 		return result;
 	} break;
 	case interact_mode_mouse: {
 		if (index > 0) return {};
-		interactor_t actor_id = local.mouse.interactor;
+		_interactor_t* actor = _interactor_get(local.mouse.interactor);
+		if (actor == nullptr) return {};
 		pointer_t result   = {};
-		result.orientation = interactor_get_motion (actor_id).orientation;
-		result.state       = _interactor_get        (actor_id)->pinch_state;
-		result.tracked     = interactor_get_tracked(actor_id);
-		result.ray         = { _interactor_get(actor_id)->capsule_start_world, result.orientation * vec3_forward };
+		result.orientation = actor->motion.orientation;
+		result.state       = actor->pinch_state;
+		result.tracked     = actor->tracked;
+		result.ray         = { actor->capsule_start_world, result.orientation * vec3_forward };
 		result.source      = input_source_hand_right;
 		return result;
 	} break;
