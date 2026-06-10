@@ -579,6 +579,7 @@ bool32_t interactor_check_box(const _interactor_t* actor, bounds_t box, vec3* ou
 		if (actor->shape_type == interactor_type_line)
 			*out_distance += vec3_distance(*out_at, start_local);
 	}
+
 	// Point interactors should always be intersecting from their position,
 	// even if they're just passing through. Some elements rely on this
 	// position for animation and activation.
