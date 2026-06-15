@@ -211,7 +211,7 @@ if (SK_BUILD_OPENXR_LOADER)
   CPMAddPackage( # We're scraping the comment after the NAME for some other scripts
     NAME openxr_loader # 1.1.49
     GITHUB_REPOSITORY KhronosGroup/OpenXR-SDK
-    GIT_TAG release-1.1.49
+    GIT_TAG release-1.1.60
     GIT_SHALLOW 1
     OPTIONS
     "BUILD_ALL_EXTENSIONS OFF" # Only need Vulkan, not Metal/OpenGL
@@ -516,6 +516,8 @@ set(SK_SRC_XR_BACKENDS
 set(SK_SRC_XR_EXTS
   StereoKitC/xr_backends/extensions/composition_depth.h
   StereoKitC/xr_backends/extensions/composition_depth.cpp
+  StereoKitC/xr_backends/extensions/view_config_views_change.h
+  StereoKitC/xr_backends/extensions/view_config_views_change.cpp
   StereoKitC/xr_backends/extensions/meta_detached_controllers.h
   StereoKitC/xr_backends/extensions/meta_detached_controllers.cpp
   StereoKitC/xr_backends/extensions/meta_environment_depth.h
