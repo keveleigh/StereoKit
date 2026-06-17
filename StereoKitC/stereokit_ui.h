@@ -19,6 +19,10 @@ typedef enum ui_move_ {
 	/*Do not allow user input to change the element's pose at all! You may also be
 	interested in UI.Push/PopSurface.*/
 	ui_move_none,
+	/*Behaves just like ui_move_exact, but opts out of uniform scaling. Use this
+	when a Handle is provided a scale value, but should only ever be translated
+	and rotated by multiple interactors, never scaled.*/
+	ui_move_exact_noscale,
 } ui_move_;
 
 /*A description of what type of window to draw! This is a bit flag, so it can
@@ -448,8 +452,8 @@ SK_API void     ui_hseparator        (void);
 SK_API void     ui_hspace            (float horizontal_space);
 SK_API void     ui_vspace            (float vertical_space);
 
-SK_API bool32_t ui_handle_begin      (const char     *text, sk_ref(pose_t) movement, bounds_t handle, bool32_t draw, ui_move_ move_type sk_default(ui_move_exact), ui_gesture_ allowed_gestures sk_default(ui_gesture_pinch));
-SK_API bool32_t ui_handle_begin_16   (const char16_t *text, sk_ref(pose_t) movement, bounds_t handle, bool32_t draw, ui_move_ move_type sk_default(ui_move_exact), ui_gesture_ allowed_gestures sk_default(ui_gesture_pinch));
+SK_API bool32_t ui_handle_begin      (const char     *text, sk_ref(pose_t) movement, float* opt_ref_scale, bounds_t handle, bool32_t draw, ui_move_ move_type sk_default(ui_move_exact), ui_gesture_ allowed_gestures sk_default(ui_gesture_pinch));
+SK_API bool32_t ui_handle_begin_16   (const char16_t *text, sk_ref(pose_t) movement, float* opt_ref_scale, bounds_t handle, bool32_t draw, ui_move_ move_type sk_default(ui_move_exact), ui_gesture_ allowed_gestures sk_default(ui_gesture_pinch));
 SK_API void     ui_handle_end        (void);
 SK_API void     ui_window_begin      (const char     *text, pose_t* opt_pose, vec2 size sk_default({ 0,0 }), ui_win_ window_type sk_default(ui_win_normal), ui_move_ move_type sk_default(ui_move_face_user));
 SK_API void     ui_window_begin_16   (const char16_t *text, pose_t* opt_pose, vec2 size sk_default({ 0,0 }), ui_win_ window_type sk_default(ui_win_normal), ui_move_ move_type sk_default(ui_move_face_user));

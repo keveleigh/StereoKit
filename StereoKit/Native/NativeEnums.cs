@@ -2134,6 +2134,10 @@ namespace StereoKit
 		/// <summary>Do not allow user input to change the element's pose at all! You may also be
 		/// interested in UI.Push/PopSurface.</summary>
 		None,
+		/// <summary>Behaves just like ui_move_exact, but opts out of uniform scaling. Use this
+		/// when a Handle is provided a scale value, but should only ever be translated
+		/// and rotated by multiple interactors, never scaled.</summary>
+		ExactNoscale,
 	}
 
 	/// <summary>A description of what type of window to draw! This is a bit flag, so it can

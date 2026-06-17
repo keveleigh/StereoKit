@@ -1403,7 +1403,39 @@ namespace StereoKit
 		/// <returns>Returns true for every frame the user is grabbing the
 		/// handle.</returns>
 		public static bool HandleBegin (string id, ref Pose pose, Bounds handle, bool drawHandle = false, UIMove moveType = UIMove.Exact, UIGesture allowedGestures = UIGesture.Pinch)
-			=> NativeAPI.ui_handle_begin_16(id, ref pose, handle, drawHandle, moveType, allowedGestures);
+			=> NativeAPI.ui_handle_begin_16(id, ref pose, IntPtr.Zero, handle, drawHandle, moveType, allowedGestures);
+
+		/// <summary>This is a variant of `UI.HandleBegin` that additionally
+		/// supports uniform scaling when two or more interactors grab the handle
+		/// at the same time. With a single interactor the handle behaves exactly
+		/// like the normal handle. With multiple interactors, their motion is
+		/// combined into a translation, rotation, and a uniform scale. Interactors
+		/// may freely join or leave the interaction without the handle jumping.
+		/// Providing a scale here enables scaling; pass `UIMove.ExactNoscale` as
+		/// the moveType if you want multi-interactor translate/rotate but no
+		/// scaling.</summary>
+		/// <param name="id">An id for tracking element state. MUST be unique
+		/// within current hierarchy.</param>
+		/// <param name="pose">The pose state for the handle! The user will be
+		/// able to grab this handle and move it around. The pose is relative
+		/// to the current hierarchy stack.</param>
+		/// <param name="handle">Size and location of the handle, relative to
+		/// the pose.</param>
+		/// <param name="scale">A uniform scale multiplier that gets accumulated
+		/// as the user scales the handle with multiple interactors. Seed this
+		/// with 1 (or your starting scale). Since the Pose has no scale of its
+		/// own, you should apply this value to both your content AND the `handle`
+		/// Bounds you pass in so the grab volume matches the visual.</param>
+		/// <param name="drawHandle">Should this function draw the handle
+		/// visual for you, or will you draw that yourself?</param>
+		/// <param name="moveType">Describes how the handle will move when
+		/// dragged around. Use `UIMove.ExactNoscale` to disable scaling.</param>
+		/// <param name="allowedGestures">Which hand gestures are used for
+		/// interacting with this Handle?</param>
+		/// <returns>Returns true for every frame the user is grabbing the
+		/// handle.</returns>
+		public static bool HandleBegin (string id, ref Pose pose, Bounds handle, ref float scale, bool drawHandle = false, UIMove moveType = UIMove.Exact, UIGesture allowedGestures = UIGesture.Pinch)
+			=> NativeAPI.ui_handle_begin_16(id, ref pose, ref scale, handle, drawHandle, moveType, allowedGestures);
 
 		/// <summary>Finishes a handle! Must be called after UI.HandleBegin()
 		/// and all elements have been drawn. Pops the pose transform pushed
@@ -1433,7 +1465,41 @@ namespace StereoKit
 		/// handle.</returns>
 		public static bool Handle(string id, ref Pose pose, Bounds handle, bool drawHandle = false, UIMove moveType = UIMove.Exact, UIGesture allowedGestures = UIGesture.Pinch)
 		{
-			bool result = NativeAPI.ui_handle_begin_16(id, ref pose, handle, drawHandle, moveType, allowedGestures);
+			bool result = NativeAPI.ui_handle_begin_16(id, ref pose, IntPtr.Zero, handle, drawHandle, moveType, allowedGestures);
+			NativeAPI.ui_handle_end();
+			return result;
+		}
+
+		/// <summary>This begins and ends a handle, like `UI.Handle`, but with
+		/// support for multi-interactor uniform scaling. With two or more
+		/// interactors grabbing the handle, their motion is combined into a
+		/// translation, rotation, and a uniform scale. Interactors may freely
+		/// join or leave the interaction without the handle jumping. Providing a
+		/// scale here enables scaling; pass `UIMove.ExactNoscale` as the moveType
+		/// if you want multi-interactor translate/rotate but no scaling.</summary>
+		/// <param name="id">An id for tracking element state. MUST be unique
+		/// within current hierarchy.</param>
+		/// <param name="pose">The pose state for the handle! The user will
+		/// be able to grab this handle and move it around. The pose is relative
+		/// to the current hierarchy stack.</param>
+		/// <param name="handle">Size and location of the handle, relative to
+		/// the pose.</param>
+		/// <param name="scale">A uniform scale multiplier that gets accumulated
+		/// as the user scales the handle with multiple interactors. Seed this
+		/// with 1 (or your starting scale). Since the Pose has no scale of its
+		/// own, you should apply this value to both your content AND the `handle`
+		/// Bounds you pass in so the grab volume matches the visual.</param>
+		/// <param name="drawHandle">Should this function draw the handle for
+		/// you, or will you draw that yourself?</param>
+		/// <param name="moveType">Describes how the handle will move when
+		/// dragged around. Use `UIMove.ExactNoscale` to disable scaling.</param>
+		/// <param name="allowedGestures">Which hand gestures are used for
+		/// interacting with this Handle?</param>
+		/// <returns>Returns true for every frame the user is grabbing the
+		/// handle.</returns>
+		public static bool Handle(string id, ref Pose pose, Bounds handle, ref float scale, bool drawHandle = false, UIMove moveType = UIMove.Exact, UIGesture allowedGestures = UIGesture.Pinch)
+		{
+			bool result = NativeAPI.ui_handle_begin_16(id, ref pose, ref scale, handle, drawHandle, moveType, allowedGestures);
 			NativeAPI.ui_handle_end();
 			return result;
 		}

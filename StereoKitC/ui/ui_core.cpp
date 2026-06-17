@@ -252,8 +252,8 @@ void ui_slider_behavior(vec3 window_relative_pos, vec2 size, id_hash_t id, vec2*
 
 ///////////////////////////////////////////
 
-bool32_t _ui_handle_begin(id_hash_t id, pose_t* handle_pose, bounds_t handle_bounds, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
-	bool result = interaction_handle(id, -2, handle_pose, handle_bounds, move_type, allowed_gestures);
+bool32_t _ui_handle_begin(id_hash_t id, pose_t* handle_pose, float* opt_ref_scale, bounds_t handle_bounds, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
+	bool result = interaction_handle(id, -2, handle_pose, handle_bounds, move_type, allowed_gestures, opt_ref_scale);
 	ui_push_surface(*handle_pose);
 
 	float color_blend = 0;
@@ -273,11 +273,11 @@ bool32_t _ui_handle_begin(id_hash_t id, pose_t* handle_pose, bounds_t handle_bou
 
 ///////////////////////////////////////////
 
-bool32_t ui_handle_begin(const char *text, pose_t& movement, bounds_t handle, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
-	return _ui_handle_begin(ui_stack_hash(text), &movement, handle, draw, move_type, allowed_gestures);
+bool32_t ui_handle_begin(const char *text, pose_t& movement, float* opt_ref_scale, bounds_t handle, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
+	return _ui_handle_begin(ui_stack_hash(text), &movement, opt_ref_scale, handle, draw, move_type, allowed_gestures);
 }
-bool32_t ui_handle_begin_16(const char16_t *text, pose_t& movement, bounds_t handle, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
-	return _ui_handle_begin(ui_stack_hash_16(text), &movement, handle, draw, move_type, allowed_gestures);
+bool32_t ui_handle_begin_16(const char16_t *text, pose_t& movement, float* opt_ref_scale, bounds_t handle, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
+	return _ui_handle_begin(ui_stack_hash_16(text), &movement, opt_ref_scale, handle, draw, move_type, allowed_gestures);
 }
 
 ///////////////////////////////////////////

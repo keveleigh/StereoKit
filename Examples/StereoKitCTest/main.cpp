@@ -267,7 +267,7 @@ void common_shutdown() {
 
 void ruler_window() {
 	static pose_t window_pose = pose_t{{0, 0, 0.5f}, quat_identity};
-	ui_handle_begin("Ruler", window_pose,
+	ui_handle_begin("Ruler", window_pose, nullptr,
 					bounds_t{vec3_zero, vec3{30*cm2m, 4*cm2m, 1*cm2m}},
 					true, ui_move_exact);
 	color32 color = color_to_32(color_hsv(0.6f, 0.5f, 1, 1));
