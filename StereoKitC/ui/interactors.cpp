@@ -249,10 +249,11 @@ static quat ui_multi_solve_rotation(const float m[3][3]) {
 
 ///////////////////////////////////////////
 
-// Orientation for a ui_move_face_user handle, facing the user's head. It looks
-// from `look_from_world` (blended toward handle_center_world as it nears the
-// face); the single path passes the grab pivot, the multi path handle_center.
-static quat ui_face_user_rotation(vec3 look_from_world, vec3 handle_center_world) {
+// Orientation for a ui_move_face_user handle: faces the user's head from
+// `look_from_world`, which should be ~the bounds center. Callers must build it
+// from a point that does NOT depend on the handle's own orientation, or the
+// facing feeds back into the pose and spins.
+static quat ui_face_user_rotation(vec3 look_from_world) {
 	pose_t head_world = input_head();
 	// On a flat screen, facing the window beats facing the 'user'.
 	if (device_display_get_type() == display_type_flatscreen)
@@ -261,12 +262,9 @@ static quat ui_face_user_rotation(vec3 look_from_world, vec3 handle_center_world
 	// The head pose sits at the eyes, so nudge back and down to the head center.
 	const float head_center_dist = 5    * cm2m;
 	const float head_height      = 7.5f * cm2m;
-	vec3  head_center_world = head_world.position + head_world.orientation * vec3{0, 0, head_center_dist};
-	vec3  face_point_world  = head_center_world + vec3{0, -head_height, 0};
-
-	float head_xz_lerp = fminf(1, vec2_distance_sq({ face_point_world.x, face_point_world.z }, { look_from_world.x, look_from_world.z }) / 0.1f);
-	vec3  look_from    = vec3_lerp(look_from_world, handle_center_world, head_xz_lerp);
-	return quat_lookat_up(look_from, face_point_world, vec3_up);
+	vec3 head_center_world = head_world.position + head_world.orientation * vec3{0, 0, head_center_dist};
+	vec3 face_point_world  = head_center_world + vec3{0, -head_height, 0};
+	return quat_lookat_up(look_from_world, face_point_world, vec3_up);
 }
 
 ///////////////////////////////////////////
@@ -342,25 +340,14 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 		actor_world->interaction_secondary_motion_total = vec3_zero;
 	}
 
+	// Both branches below produce a world-space target pose in these.
+	vec3 new_pos_world = vec3_zero;
+	quat new_rot_world = quat_identity;
 	if (active_count == 1) {
 		// A single interactor: classic one-handed 6DOF manipulation.
 		_interactor_t* actor_world = active_actors[0];
 
-		quat dest_rot_world = quat_identity;
-		switch (move_type) {
-		case ui_move_exact:
-		case ui_move_exact_noscale: {
-			dest_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation) * quat_difference(actor_world->interaction_start_motion.orientation, actor_world->motion.orientation);
-		} break;
-		case ui_move_face_user: {
-			dest_rot_world = ui_face_user_rotation(hierarchy_to_world_point(actor_world->interaction_start_el_pivot), hierarchy_to_world_point(handle_bounds.center));
-		} break;
-		case ui_move_pos_only: { dest_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation); } break;
-		default:               { dest_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation); log_err("Unimplemented move type!"); } break;
-		}
-
-		// Amplify the movement in and out, so that objects at a
-		// distance can be manipulated easier.
+		// Amplify the movement in and out, so distant objects are easier to move.
 		const float amplify_push = 1.5f;
 		const float amplify_pull = 2;
 		float       amplify_factor =
@@ -368,22 +355,37 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 			fmaxf(0.01f, vec3_distance(actor_world->interaction_start_motion.position, actor_world->interaction_start_motion_anchor));
 		amplify_factor = powf(amplify_factor, amplify_factor > 1 ? amplify_push : amplify_pull);
 
-		// Find secondary motion from scroll wheels/analog sticks, etc.
+		// Secondary motion from scroll wheels/analog sticks, etc.
 		vec3 secondary_motion = vec3_zero;
 		if      (actor_world->secondary_motion_dimensions == 1) { secondary_motion = actor_world->motion.orientation * vec3{ 0,0, actor_world->interaction_secondary_motion_total.x }; }
 		else if (actor_world->secondary_motion_dimensions == 2) { secondary_motion = actor_world->motion.orientation * vec3{ 0,0,-actor_world->interaction_secondary_motion_total.y }; }
 		else if (actor_world->secondary_motion_dimensions == 3) { secondary_motion = actor_world->motion.orientation * actor_world->interaction_secondary_motion_total; }
 
+		// Where the grabbed point lands this frame, from the interactor's input.
 		vec3 pivot_new_position_world = matrix_transform_pt(matrix_trs(actor_world->motion.position + secondary_motion, actor_world->motion.orientation, vec3_one * amplify_factor), actor_world->interaction_intersection_local);
-		vec3 handle_offset_world      = dest_rot_world * (matrix_extract_scale(handle_parent_to_world) * -actor_world->interaction_start_el_pivot);
-		vec3 dest_pos_world           = pivot_new_position_world + handle_offset_world;
 
-		// Transform from world space, to the space the handle is in
-		vec3 dest_pos_handle = matrix_transform_pt  (to_handle_parent_local, dest_pos_world);
-		quat dest_rot_handle = matrix_transform_quat(to_handle_parent_local, dest_rot_world);
+		switch (move_type) {
+		case ui_move_exact:
+		case ui_move_exact_noscale: {
+			new_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation) * quat_difference(actor_world->interaction_start_motion.orientation, actor_world->motion.orientation);
+		} break;
+		case ui_move_face_user: {
+			// Face from the bounds center, but build that look-from from the
+			// grab-time orientation and the (input-only) grab target so it can't
+			// feed back and spin. The offset below still uses the facing, which
+			// keeps the grabbed point pinned exactly under the hand.
+			quat grab_rot      = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation);
+			vec3 center_offset = grab_rot * (matrix_extract_scale(handle_parent_to_world) * (handle_bounds.center - actor_world->interaction_start_el_pivot));
+			new_rot_world = ui_face_user_rotation(pivot_new_position_world + center_offset);
+		} break;
+		case ui_move_pos_only: { new_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation); } break;
+		default:               { new_rot_world = matrix_transform_quat(handle_parent_to_world, actor_world->interaction_start_el.orientation); log_err("Unimplemented move type!"); } break;
+		}
 
-		ref_handle_pose->position    = vec3_lerp (ref_handle_pose->position,    dest_pos_handle, 0.6f);
-		ref_handle_pose->orientation = quat_slerp(ref_handle_pose->orientation, dest_rot_handle, 0.4f);
+		// Offset uses the facing (new_rot_world), so the grabbed point lands
+		// exactly at pivot_new_position_world - pinned under the hand.
+		vec3 handle_offset_world = new_rot_world * (matrix_extract_scale(handle_parent_to_world) * -actor_world->interaction_start_el_pivot);
+		new_pos_world            = pivot_new_position_world + handle_offset_world;
 	} else if (active_count >= 2) {
 		// Multiple interactors: solve one incremental translate/rotate/scale that
 		// maps each grab point from its previous- to current-frame world position.
@@ -437,24 +439,28 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 		// delta_rot is world-space, so the handle orientation goes on the LEFT;
 		// reversing applies it in the handle's local frame, which inverts axes for
 		// any non-identity rest pose (a 180-turned handle would invert its roll).
-		quat   new_rot_world = quat_mul(handle_world.orientation, delta_rot);
+		new_rot_world = quat_mul(handle_world.orientation, delta_rot);
 		if (move_type == ui_move_pos_only) {
 			swing_rot     = quat_identity;
 			new_rot_world = handle_world.orientation;
 		} else if (move_type == ui_move_face_user) {
 			swing_rot = quat_identity;
-			vec3 handle_center = hierarchy_to_world_point(handle_bounds.center);
-			new_rot_world = ui_face_user_rotation(handle_center, handle_center);
+			new_rot_world = ui_face_user_rotation(hierarchy_to_world_point(handle_bounds.center));
 		}
 
 		// Apply the combined transform: scale & rotate the handle about the grab
 		// centroid, then carry it along with the centroid's motion.
-		vec3 new_pos_world = cur_centroid + delta_scale * (swing_rot * (handle_world.position - prev_centroid));
+		new_pos_world = cur_centroid + delta_scale * (swing_rot * (handle_world.position - prev_centroid));
 
-		ref_handle_pose->position    = matrix_transform_pt  (to_handle_parent_local, new_pos_world);
-		ref_handle_pose->orientation = quat_normalize(matrix_transform_quat(to_handle_parent_local, new_rot_world));
 		if (allow_scaling)
 			*opt_ref_scale *= delta_scale;
+	}
+
+	// Both paths produced a world-space target pose; write it back into the
+	// handle's parent space.
+	if (active_count > 0) {
+		ref_handle_pose->position    = matrix_transform_pt  (to_handle_parent_local, new_pos_world);
+		ref_handle_pose->orientation = quat_normalize(matrix_transform_quat(to_handle_parent_local, new_rot_world));
 	}
 
 	// Whichever path ran, keep each active interactor's focus tracking in sync
