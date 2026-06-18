@@ -1420,12 +1420,14 @@ namespace StereoKit
 		/// able to grab this handle and move it around. The pose is relative
 		/// to the current hierarchy stack.</param>
 		/// <param name="handle">Size and location of the handle, relative to
-		/// the pose.</param>
+		/// the pose. When a `scale` is provided, the handle multiplies these
+		/// Bounds by it - so pass your unscaled base size, and the grab volume
+		/// and drawn handle grow and shrink to match your scaled content.</param>
 		/// <param name="scale">A uniform scale multiplier that gets accumulated
 		/// as the user scales the handle with multiple interactors. Seed this
 		/// with 1 (or your starting scale). Since the Pose has no scale of its
-		/// own, you should apply this value to both your content AND the `handle`
-		/// Bounds you pass in so the grab volume matches the visual.</param>
+		/// own, apply this value to your content - the `handle` Bounds are scaled
+		/// by it for you, so the grab volume and drawn handle stay matched.</param>
 		/// <param name="drawHandle">Should this function draw the handle
 		/// visual for you, or will you draw that yourself?</param>
 		/// <param name="moveType">Describes how the handle will move when
@@ -1483,12 +1485,14 @@ namespace StereoKit
 		/// be able to grab this handle and move it around. The pose is relative
 		/// to the current hierarchy stack.</param>
 		/// <param name="handle">Size and location of the handle, relative to
-		/// the pose.</param>
+		/// the pose. When a `scale` is provided, the handle multiplies these
+		/// Bounds by it - so pass your unscaled base size, and the grab volume
+		/// and drawn handle grow and shrink to match your scaled content.</param>
 		/// <param name="scale">A uniform scale multiplier that gets accumulated
 		/// as the user scales the handle with multiple interactors. Seed this
 		/// with 1 (or your starting scale). Since the Pose has no scale of its
-		/// own, you should apply this value to both your content AND the `handle`
-		/// Bounds you pass in so the grab volume matches the visual.</param>
+		/// own, apply this value to your content - the `handle` Bounds are scaled
+		/// by it for you, so the grab volume and drawn handle stay matched.</param>
 		/// <param name="drawHandle">Should this function draw the handle for
 		/// you, or will you draw that yourself?</param>
 		/// <param name="moveType">Describes how the handle will move when

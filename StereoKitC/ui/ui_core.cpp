@@ -253,18 +253,29 @@ void ui_slider_behavior(vec3 window_relative_pos, vec2 size, id_hash_t id, vec2*
 ///////////////////////////////////////////
 
 bool32_t _ui_handle_begin(id_hash_t id, pose_t* handle_pose, float* opt_ref_scale, bounds_t handle_bounds, bool32_t draw, ui_move_ move_type, ui_gesture_ allowed_gestures) {
-	bool result = interaction_handle(id, -2, handle_pose, handle_bounds, move_type, allowed_gestures, opt_ref_scale);
+	// When a scale is present, ensure the bounds scale with it
+	bounds_t bounds = handle_bounds;
+	if (opt_ref_scale != nullptr) {
+		bounds.center     = handle_bounds.center     * *opt_ref_scale;
+		bounds.dimensions = handle_bounds.dimensions * *opt_ref_scale;
+	}
+	bool result = interaction_handle(id, -2, handle_pose, bounds, move_type, allowed_gestures, opt_ref_scale);
 	ui_push_surface(*handle_pose);
+
+	if (opt_ref_scale != nullptr) {
+		bounds.center     = handle_bounds.center     * *opt_ref_scale;
+		bounds.dimensions = handle_bounds.dimensions * *opt_ref_scale;
+	}
 
 	float color_blend = 0;
 	if (ui_id_focused(id)) color_blend = 1;
 	if (ui_id_active_state(id) & button_state_just_active)
-		ui_play_sound_on_off(ui_vis_handle, id, handle_bounds.center);
+		ui_play_sound_on_off(ui_vis_handle, id, bounds.center);
 
 	if (draw) {
 		ui_draw_element(ui_vis_handle,
-			handle_bounds.center+handle_bounds.dimensions/2,
-			handle_bounds.dimensions,
+			bounds.center+bounds.dimensions/2,
+			bounds.dimensions,
 			color_blend);
 		ui_nextline();
 	}
