@@ -30,6 +30,8 @@ class TestUIFocus : ITest
 	public void Initialize()
 	{
 		oldInteractors = Interaction.DefaultInteractors;
+		if (!Tests.IsTesting) return; // leave the default interactors on to try by hand
+
 		Interaction.DefaultInteractors = DefaultInteractors.None;
 
 		// Unique sources so the two interactors never preoccupy each other.
@@ -43,40 +45,45 @@ class TestUIFocus : ITest
 
 	public void Step()
 	{
-		// frame 0 warm-up, 1 establishes focus, 2 is the one-frame JustActive that
-		// activates, 3 holds Active - same drive for both interactors.
-		BtnState pinch = frame switch {
-			0 => BtnState.Inactive,
-			1 => BtnState.Inactive,
-			2 => BtnState.Active | BtnState.JustActive,
-			_ => BtnState.Active };
-		Aim(raySlider, sliderTarget, pinch);
-		Aim(rayButton, buttonTarget, pinch);
+		bool scripted = Tests.IsTesting && frame < sliderFocused.Length;
+		if (scripted)
+		{
+			// frame 0 warm-up, 1 establishes focus, 2 is the one-frame JustActive
+			// that activates, 3 holds Active - same drive for both interactors.
+			BtnState pinch = frame switch {
+				0 => BtnState.Inactive,
+				1 => BtnState.Inactive,
+				2 => BtnState.Active | BtnState.JustActive,
+				_ => BtnState.Active };
+			Aim(raySlider, sliderTarget, pinch);
+			Aim(rayButton, buttonTarget, pinch);
+		}
 
 		UI.WindowBegin("UI Focus", ref windowPose);
-
 		UI.HSlider("Slider", ref sliderVal, 0, 1, 0.1f, 0, UIConfirm.Pinch);
-		sliderFocused[frame] = UI.LastElementFocused; sliderActive[frame] = UI.LastElementActive;
-
+		BtnState sf = UI.LastElementFocused, sa = UI.LastElementActive;
 		UI.Button("Button");
-		buttonFocused[frame] = UI.LastElementFocused; buttonActive[frame] = UI.LastElementActive;
-
+		BtnState bf = UI.LastElementFocused, ba = UI.LastElementActive;
 		UI.WindowEnd();
 
-		Log.Info($"frame {frame}: pinch=[{pinch}]");
-		Log.Info($"  slider: UI.Focused=[{sliderFocused[frame]}] UI.Active=[{sliderActive[frame]}]  (interactor focused={raySlider.Focused != IdHash.None} active={raySlider.Active != IdHash.None})");
-		Log.Info($"  button: UI.Focused=[{buttonFocused[frame]}] UI.Active=[{buttonActive[frame]}]  (interactor focused={rayButton.Focused != IdHash.None} active={rayButton.Active != IdHash.None})");
-
-		// Keep each ray aimed at its element once it's focused it.
-		if (raySlider.TryGetFocusBounds(out Pose sp, out Bounds sb, out _)) sliderTarget = sp.ToMatrix().Transform(sb.center);
-		if (rayButton.TryGetFocusBounds(out Pose bp, out Bounds bb, out _)) buttonTarget = bp.ToMatrix().Transform(bb.center);
-
-		// Once the full sequence is recorded, check it.
-		if (frame == 3)
+		if (scripted)
 		{
-			Tests.Test(SliderLifecycle);
-			Tests.Test(ButtonLifecycle);
-			Tests.Test(ButtonMatchesSlider);
+			sliderFocused[frame] = sf; sliderActive[frame] = sa;
+			buttonFocused[frame] = bf; buttonActive[frame] = ba;
+			Log.Info($"frame {frame}:");
+			Log.Info($"  slider: UI.Focused=[{sf}] UI.Active=[{sa}]  (interactor focused={raySlider.Focused != IdHash.None} active={raySlider.Active != IdHash.None})");
+			Log.Info($"  button: UI.Focused=[{bf}] UI.Active=[{ba}]  (interactor focused={rayButton.Focused != IdHash.None} active={rayButton.Active != IdHash.None})");
+
+			// Keep each ray aimed at its element once it's focused it.
+			if (raySlider.TryGetFocusBounds(out Pose sp, out Bounds sb, out _)) sliderTarget = sp.ToMatrix().Transform(sb.center);
+			if (rayButton.TryGetFocusBounds(out Pose bp, out Bounds bb, out _)) buttonTarget = bp.ToMatrix().Transform(bb.center);
+
+			if (frame == 3)
+			{
+				Tests.Test(SliderLifecycle);
+				Tests.Test(ButtonLifecycle);
+				Tests.Test(ButtonMatchesSlider);
+			}
 		}
 		frame++;
 	}
@@ -112,8 +119,7 @@ class TestUIFocus : ITest
 
 	public void Shutdown()
 	{
-		raySlider.Destroy();
-		rayButton.Destroy();
+		if (Tests.IsTesting) { raySlider.Destroy(); rayButton.Destroy(); }
 		Interaction.DefaultInteractors = oldInteractors;
 	}
 }
