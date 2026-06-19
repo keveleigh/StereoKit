@@ -82,7 +82,7 @@ void             interaction_update         ();
 void             interaction_shutdown       ();
 
 void             interaction_1h_box         (id_hash_t id, interactor_event_ event_mask, int32_t priority, vec3 box_unfocused_start, vec3 box_unfocused_size, vec3 box_focused_start, vec3 box_focused_size, button_state_* out_focus_candidacy, interactor_t* out_interactor);
-void             interaction_1h_plate       (id_hash_t id, interactor_event_ event_mask, int32_t priority, vec3 plate_start, vec3 plate_size, button_state_* out_focus_candidacy, interactor_t* out_interactor, vec3* out_interaction_at_local);
+void             interaction_1h_plate       (id_hash_t id, interactor_event_ event_mask, int32_t priority, vec3 plate_start, vec3 plate_size, button_state_* out_focus_candidacy, interactor_t* out_interactor, vec3* out_interaction_at_local, float* out_cancel_dist);
 bool32_t         interaction_handle         (id_hash_t id, int32_t priority, pose_t* ref_handle_pose, bounds_t handle_bounds, ui_move_ move_type, ui_gesture_ allowed_gestures, float* opt_ref_scale);
 
 _interactor_t*   _interactor_get            (interactor_t interactor);

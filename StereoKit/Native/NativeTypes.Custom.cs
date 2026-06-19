@@ -310,6 +310,10 @@ namespace StereoKit
 		/// <summary>Has the button just been released this frame?</summary>
 		/// <returns>True if released, false if not.</returns>
 		public static bool IsJustInactive(this BtnState state) => (state & BtnState.JustInactive) > 0;
+		/// <summary>Was a button activation just canceled this frame, ending
+		/// without firing because the interactor moved too far away?</summary>
+		/// <returns>True if just canceled, false if not.</returns>
+		public static bool IsJustCanceled(this BtnState state) => (state & BtnState.JustCanceled) > 0;
 		/// <summary>Was the button either presses or released this frame?
 		/// </summary>
 		/// <returns>True if the state just changed this frame, false if not.

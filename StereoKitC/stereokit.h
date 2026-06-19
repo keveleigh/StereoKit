@@ -2500,8 +2500,10 @@ typedef enum button_state_ {
 	button_state_just_inactive = 1 << 1,
 	/*Has the button just been pressed? Only true for a single frame.*/
 	button_state_just_active   = 1 << 2,
-	/*Has the button just changed state this frame?*/
-	button_state_changed       = button_state_just_inactive | button_state_just_active,
+	/*Was a button activation just canceled this frame, ending without firing because the interactor moved too far away? Only true for a single frame.*/
+	button_state_just_canceled = 1 << 3,
+	/*Has the button just changed state this frame? Includes presses, releases, and canceled activations.*/
+	button_state_changed       = button_state_just_inactive | button_state_just_active | button_state_just_canceled,
 	/*Matches with all states!*/
 	button_state_any           = 0x7FFFFFFF,
 } button_state_;

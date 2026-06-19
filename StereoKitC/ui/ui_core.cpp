@@ -81,6 +81,10 @@ void ui_button_behavior(vec3 window_relative_pos, vec2 size, id_hash_t id, float
 
 ///////////////////////////////////////////
 
+// A pinch/ray button activation cancels (ends without firing) once the
+// interactor moves more than this far from the button.
+static const float skui_button_cancel_dist = 15 * cm2m;
+
 void ui_button_behavior_depth(vec3 window_relative_pos, vec2 size, id_hash_t id, float button_depth, float button_activation_depth, float &out_finger_offset, button_state_ &out_button_state, button_state_ &out_focus_state, interactor_t* out_opt_interactor) {
 	out_button_state  = button_state_inactive;
 	out_focus_state   = button_state_inactive;
@@ -88,16 +92,18 @@ void ui_button_behavior_depth(vec3 window_relative_pos, vec2 size, id_hash_t id,
 
 	int32_t       interactor = -1;
 	vec3          interaction_at;
+	float         cancel_dist = 0;
 	button_state_ focus_candidacy = button_state_inactive;
 	interaction_1h_plate(id, interactor_event_poke, 0,
 		{ window_relative_pos.x, window_relative_pos.y, window_relative_pos.z - button_depth }, { size.x, size.y, button_depth },
-		&focus_candidacy, &interactor, &interaction_at);
+		&focus_candidacy, &interactor, &interaction_at, &cancel_dist);
 
 	// If a hand is interacting, adjust the button surface accordingly
 	_interactor_t* actor = _interactor_get(interactor);
 	if (actor) {
 		if (focus_candidacy & button_state_active) {
 			bool pressed;
+			bool canceled = false;
 			if (actor->activation_type == interactor_activation_position) {
 				out_finger_offset = -(interaction_at.z + actor->capsule_radius) - window_relative_pos.z;
 				pressed = out_finger_offset < button_activation_depth;
@@ -105,10 +111,15 @@ void ui_button_behavior_depth(vec3 window_relative_pos, vec2 size, id_hash_t id,
 				pressed = (actor->pinch_state & button_state_just_active) ||
 				          (actor->pinch_state & button_state_active && actor->active_prev == id);
 				if (pressed) out_finger_offset = 0;
+				// A pinch/ray pulled too far cancels: the activation ends and won't
+				// fire on release.
+				canceled = pressed && cancel_dist > skui_button_cancel_dist;
+				if (canceled) out_finger_offset = button_depth;
 			}
 			const float min_press_depth = 2 * mm2m;
 			out_finger_offset = fminf(fmaxf(min_press_depth, out_finger_offset), button_depth);
-			out_button_state  = interactor_set_active(actor, id, pressed);
+			out_button_state  = interactor_set_active(actor, id, pressed && !canceled);
+			if (canceled) out_button_state = button_state_just_canceled;
 		} else if (focus_candidacy & button_state_just_inactive) {
 			out_button_state = interactor_set_active(actor, id, false);
 		}

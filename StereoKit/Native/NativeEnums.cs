@@ -1401,8 +1401,10 @@ namespace StereoKit
 		JustInactive = 1 << 1,
 		/// <summary>Has the button just been pressed? Only true for a single frame.</summary>
 		JustActive   = 1 << 2,
-		/// <summary>Has the button just changed state this frame?</summary>
-		Changed      = JustInactive | JustActive,
+		/// <summary>Was a button activation just canceled this frame, ending without firing because the interactor moved too far away? Only true for a single frame.</summary>
+		JustCanceled = 1 << 3,
+		/// <summary>Has the button just changed state this frame? Includes presses, releases, and canceled activations.</summary>
+		Changed      = JustInactive | JustActive | JustCanceled,
 		/// <summary>Matches with all states!</summary>
 		Any          = 0x7FFFFFFF,
 	}

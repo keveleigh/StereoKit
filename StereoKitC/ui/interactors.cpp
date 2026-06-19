@@ -126,10 +126,11 @@ inline bounds_t size_box(vec3 top_left, vec3 dimensions) {
 
 ///////////////////////////////////////////
 
-void interaction_1h_plate(id_hash_t id, interactor_event_ event_mask, int32_t priority, vec3 plate_start, vec3 plate_size, button_state_ *out_focus_candidacy, interactor_t* out_interactor, vec3 *out_interaction_at_local) {
+void interaction_1h_plate(id_hash_t id, interactor_event_ event_mask, int32_t priority, vec3 plate_start, vec3 plate_size, button_state_ *out_focus_candidacy, interactor_t* out_interactor, vec3 *out_interaction_at_local, float* out_cancel_dist) {
 	*out_interactor           = -1;
 	*out_focus_candidacy      = button_state_inactive;
 	*out_interaction_at_local = vec3_zero;
+	*out_cancel_dist          = 0;
 
 	local.last_element = id;
 	if (!ui_is_enabled()) return;
@@ -168,6 +169,16 @@ void interaction_1h_plate(id_hash_t id, interactor_event_ event_mask, int32_t pr
 			*out_interactor           = gen_id_make(i, actor->generation);
 			*out_focus_candidacy      = focus;
 			*out_interaction_at_local = interact_at;
+
+			// Distance from the interactor's ray/point to the plate, valid even
+			// when it's no longer pointing at it (interactor_check_box returns
+			// nothing off-box). Used to cancel a button activation.
+			vec3  cap_start = hierarchy_to_local_point(actor->capsule_start_world);
+			vec3  cap_end   = hierarchy_to_local_point(actor->capsule_end_world);
+			vec3  seg_dir   = cap_end - cap_start;
+			float seg_len2  = vec3_dot(seg_dir, seg_dir);
+			float seg_t     = seg_len2 < 1e-9f ? 0 : fminf(1, fmaxf(0, vec3_dot(bounds.center - cap_start, seg_dir) / seg_len2));
+			*out_cancel_dist = bounds_sdf(bounds, cap_start + seg_dir * seg_t);
 		}
 	}
 }
