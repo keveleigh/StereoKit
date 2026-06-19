@@ -155,6 +155,12 @@ namespace StereoKit
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]
 		public static extern void ui_window_begin_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Pose opt_pose, Vec2 size, UIWin window_type, UIMove move_type);
 
+		// ref-float overload of the IntPtr-based generated binding, for passing a
+		// present (non-null) opt_ref_scale.
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)]
+		public static extern bool ui_handle_begin_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Pose movement, ref float opt_ref_scale, Bounds handle, [MarshalAs(UnmanagedType.Bool)] bool draw, UIMove move_type, UIGesture allowed_gestures);
+
 		// UI button/slider behavior - opt/nullable
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void ui_button_behavior(Vec3 window_relative_pos, Vec2 size, IdHash id, out float out_finger_offset, out BtnState out_button_state, out BtnState out_focus_state, out Interactor out_opt_interactor);

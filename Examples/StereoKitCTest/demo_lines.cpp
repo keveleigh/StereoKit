@@ -55,7 +55,7 @@ bool swatch_button(const char* id, vec2 c, vec2 size) {
 
 void demo_lines_palette()
 {
-	ui_handle_begin("PaletteMenu", line_palette_pose, model_get_bounds( line_palette_model ), false);
+	ui_handle_begin("PaletteMenu", line_palette_pose, nullptr, model_get_bounds( line_palette_model ), false);
 	render_add_model(line_palette_model, matrix_identity);
 	ui_push_surface({ {}, quat_from_angles(90,0,0) });
 

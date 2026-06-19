@@ -944,7 +944,7 @@ void ui_window_begin_g(const C *text, pose_t* opt_pose, vec2 window_size, ui_win
 	box_start.z = box_size.z/2;
 
 	// Set up window handle and layout area
-	_ui_handle_begin(hash, pose, { box_start, box_size }, false, move_type, ui_gesture_pinch);
+	_ui_handle_begin(hash, pose, nullptr, { box_start, box_size }, false, move_type, ui_gesture_pinch);
 	ui_layout_window(win_id, { win->prev_size.x / 2,0,0 }, window_size, true);
 
 	// Ensure space for the header text

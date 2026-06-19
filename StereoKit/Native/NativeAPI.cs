@@ -1165,9 +1165,9 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_hspace(float horizontal_space);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_vspace(float vertical_space);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_handle_begin([MarshalAs(UnmanagedType.LPUTF8Str)] string text, ref Pose movement, Bounds handle, [MarshalAs(UnmanagedType.Bool)] bool draw, UIMove move_type, UIGesture allowed_gestures);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_handle_begin([MarshalAs(UnmanagedType.LPUTF8Str)] string text, ref Pose movement, IntPtr opt_ref_scale, Bounds handle, [MarshalAs(UnmanagedType.Bool)] bool draw, UIMove move_type, UIGesture allowed_gestures);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_handle_begin_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Pose movement, Bounds handle, [MarshalAs(UnmanagedType.Bool)] bool draw, UIMove move_type, UIGesture allowed_gestures);
+		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern bool         ui_handle_begin_16([MarshalAs(UnmanagedType.LPWStr)] string text, ref Pose movement, IntPtr opt_ref_scale, Bounds handle, [MarshalAs(UnmanagedType.Bool)] bool draw, UIMove move_type, UIGesture allowed_gestures);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_handle_end();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_window_begin([MarshalAs(UnmanagedType.LPUTF8Str)] string text, IntPtr opt_pose, Vec2 size, UIWin window_type, UIMove move_type);
 		[DllImport(dll, CharSet = CharSet.Unicode, CallingConvention = call)] public static extern void         ui_window_begin_16([MarshalAs(UnmanagedType.LPWStr)] string text, IntPtr opt_pose, Vec2 size, UIWin window_type, UIMove move_type);
