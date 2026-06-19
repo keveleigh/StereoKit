@@ -312,12 +312,14 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 			(actor_world->pinch_state & button_state_active      && actor_world->active_prev  == id));
 
 		if (active & button_state_just_active) {
+			vec3 grab_world = hierarchy_to_world_point(at_local);
 			actor_world->interaction_start_motion           = actor_world->motion;
 			actor_world->interaction_start_motion_anchor    = actor_world->motion_anchor;
 			actor_world->interaction_start_el               = *ref_handle_pose;
 			actor_world->interaction_start_el_pivot         = at_local;
 			actor_world->interaction_secondary_motion_total = vec3_zero;
-			actor_world->interaction_intersection_local     = matrix_transform_pt(pose_matrix_inv(actor_world->motion), hierarchy_to_world_point(at_local));
+			actor_world->interaction_intersection_local     = matrix_transform_pt(pose_matrix_inv(actor_world->motion), grab_world);
+			actor_world->interaction_start_flat_depth       = vec3_dot(grab_world - actor_world->capsule_start_world, input_head().orientation * vec3_forward);
 		}
 
 		if (active & button_state_active) {
@@ -338,6 +340,7 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 		actor_world->interaction_start_el               = *ref_handle_pose;
 		actor_world->interaction_start_el_pivot         = hierarchy_to_local_point(world_grab);
 		actor_world->interaction_secondary_motion_total = vec3_zero;
+		actor_world->interaction_start_flat_depth       = vec3_dot(world_grab - actor_world->capsule_start_world, input_head().orientation * vec3_forward);
 	}
 
 	// Both branches below produce a world-space target pose in these.
@@ -361,8 +364,37 @@ bool32_t interaction_handle(id_hash_t id, int32_t priority, pose_t* ref_handle_p
 		else if (actor_world->secondary_motion_dimensions == 2) { secondary_motion = actor_world->motion.orientation * vec3{ 0,0,-actor_world->interaction_secondary_motion_total.y }; }
 		else if (actor_world->secondary_motion_dimensions == 3) { secondary_motion = actor_world->motion.orientation * actor_world->interaction_secondary_motion_total; }
 
+		vec3 pivot_base = matrix_transform_pt(matrix_trs(actor_world->motion.position, actor_world->motion.orientation, vec3_one * amplify_factor), actor_world->interaction_intersection_local);
+
+		// Keep secondary motion from pulling the grab point back through the
+		// interactor origin; rescale the running total so reversing has no dead zone.
+		if (actor_world->secondary_motion_dimensions != 0) {
+			vec3  origin    = actor_world->capsule_start_world;
+			vec3  ray_dir   = vec3_normalize(actor_world->capsule_end_world - origin);
+			float base_dist = vec3_dot(pivot_base - origin, ray_dir);
+			float sec_along = vec3_dot(secondary_motion, ray_dir);
+			const float min_dist = 0.0f;
+			if (base_dist > min_dist && base_dist + sec_along < min_dist) {
+				float clamped = min_dist - base_dist; // allowed along-ray displacement (negative)
+				actor_world->interaction_secondary_motion_total *= clamped / sec_along;
+				secondary_motion = ray_dir * clamped;
+			}
+		}
+
 		// Where the grabbed point lands this frame, from the interactor's input.
-		vec3 pivot_new_position_world = matrix_transform_pt(matrix_trs(actor_world->motion.position + secondary_motion, actor_world->motion.orientation, vec3_one * amplify_factor), actor_world->interaction_intersection_local);
+		vec3 pivot_new_position_world = pivot_base + secondary_motion;
+
+		// A flat-screen cursor ray would arc the grab point as the mouse moves; pin it
+		// to a camera-parallel plane at the grab-time depth so windows slide flat.
+		if (move_type == ui_move_face_user && device_display_get_type() == display_type_flatscreen) {
+			vec3  camera       = actor_world->capsule_start_world;
+			vec3  forward      = input_head().orientation * vec3_forward;
+			float target_depth = actor_world->interaction_start_flat_depth + vec3_dot(secondary_motion, forward);
+			vec3  cursor_dir   = vec3_normalize(pivot_new_position_world - camera);
+			float cursor_dot   = vec3_dot(cursor_dir, forward);
+			if (cursor_dot > 0.001f)
+				pivot_new_position_world = camera + cursor_dir * (target_depth / cursor_dot);
+		}
 
 		switch (move_type) {
 		case ui_move_exact:

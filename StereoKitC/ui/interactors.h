@@ -54,6 +54,9 @@ struct _interactor_t {
 	vec3                   interaction_secondary_motion_total;
 	// This is local to the motion pose
 	vec3                   interaction_intersection_local;
+	// Flat-screen ui_move_face_user: the grab point's depth in front of the camera at
+	// grab time, so a dragged window can hold a constant depth (interaction_handle).
+	float                  interaction_start_flat_depth;
 
 
 	int32_t                focus_priority;
