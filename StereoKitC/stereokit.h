@@ -655,7 +655,12 @@ typedef enum log_ {
   the primary display. See `Renderer.LayerFilter` for configuring what
   the primary display renders.
   
-  Render layers can also be mixed and matched like bit-flags!*/
+  Render layers can also be mixed and matched like bit-flags!
+
+  Note that while this enum is 32 bits wide, render layers are stored
+  internally in 16 bits when items are queued for drawing. Only the low
+  16 bits are usable as layers, so any custom flags above bit 15 will be
+  silently truncated.*/
 typedef enum render_layer_ {
 	/*The default render layer. All Draw use this layer unless
 	  otherwise specified.*/
@@ -689,13 +694,17 @@ typedef enum render_layer_ {
 	  perspective. By default, this is enabled for renders that
 	  are from a 3rd person viewpoint.*/
 	render_layer_third_person     = 1 << 12,
+	/*The default layer for StereoKit's UI. Mesh and model content
+	  drawn by the UI system uses this layer, see `UI.RenderLayer`
+	  to change it.*/
+	render_layer_ui               = 1 << 13,
 	/*This is a flag that specifies all possible layers. If you
 	  want to render all layers, then this is the layer filter
 	  you would use. This is the default for render filtering.*/
 	render_layer_all              = 0xFFFF,
 	/*This is a combination of all layers that are not the VFX
 	  layer.*/
-	render_layer_all_regular      = render_layer_0 | render_layer_1 | render_layer_2 | render_layer_3 | render_layer_4 | render_layer_5 | render_layer_6 | render_layer_7 | render_layer_8 | render_layer_9,
+	render_layer_all_regular      = render_layer_0 | render_layer_1 | render_layer_2 | render_layer_3 | render_layer_4 | render_layer_5 | render_layer_6 | render_layer_7 | render_layer_8 | render_layer_9 | render_layer_ui,
 	/*All layers except for the third person layer.*/
 	render_layer_all_first_person = render_layer_all & ~render_layer_third_person,
 	/*All layers except for the first person layer.*/

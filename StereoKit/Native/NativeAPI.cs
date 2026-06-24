@@ -1015,6 +1015,8 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_far_interact_enabled();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern UIMove       ui_system_get_move_type();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_system_set_move_type(UIMove move_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern RenderLayer  ui_get_render_layer();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_set_render_layer(RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_settings(UISettings settings);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern UISettings   ui_get_settings();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        ui_get_margin();

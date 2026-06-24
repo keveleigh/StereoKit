@@ -43,6 +43,7 @@ render_layer_6 Layer6
 render_layer_7 Layer7
 render_layer_8 Layer8
 render_layer_9 Layer9
+render_layer_ui UI
 
 compute_buffer_type_readwrite ReadWrite
 

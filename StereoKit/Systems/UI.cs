@@ -46,6 +46,12 @@ namespace StereoKit
 		/// soft keyboard.</summary>
 		public static UIMove SystemMoveType { get => NativeAPI.ui_system_get_move_type(); set { NativeAPI.ui_system_set_move_type(value); } }
 
+		/// <summary>This is the RenderLayer that all mesh and model geometry
+		/// drawn by the UI system is rendered on. This does not affect text or
+		/// sprites, which are always drawn on the RenderLayer.Vfx layer. This
+		/// is RenderLayer.UI by default.</summary>
+		public static RenderLayer RenderLayer { get => NativeAPI.ui_get_render_layer(); set { NativeAPI.ui_set_render_layer(value); } }
+
 		/// <summary>This is the height of a single line of text with padding
 		/// in the UI's layout system!</summary>
 		public static float LineHeight => NativeAPI.ui_line_height();

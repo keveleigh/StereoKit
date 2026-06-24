@@ -526,7 +526,11 @@ namespace StereoKit
 	/// to draw a player's avatar in a 'mirror' rendertarget, but not in
 	/// the primary display. See `Renderer.LayerFilter` for configuring what
 	/// the primary display renders.
-	/// Render layers can also be mixed and matched like bit-flags!</summary>
+	/// Render layers can also be mixed and matched like bit-flags!
+	/// Note that while this enum is 32 bits wide, render layers are stored
+	/// internally in 16 bits when items are queued for drawing. Only the low
+	/// 16 bits are usable as layers, so any custom flags above bit 15 will be
+	/// silently truncated.</summary>
 	[Flags]
 	public enum RenderLayer {
 		/// <summary>The default render layer. All Draw use this layer unless
@@ -561,13 +565,17 @@ namespace StereoKit
 		/// perspective. By default, this is enabled for renders that
 		/// are from a 3rd person viewpoint.</summary>
 		ThirdPerson  = 1 << 12,
+		/// <summary>The default layer for StereoKit's UI. Mesh and model content
+		/// drawn by the UI system uses this layer, see `UI.RenderLayer`
+		/// to change it.</summary>
+		UI           = 1 << 13,
 		/// <summary>This is a flag that specifies all possible layers. If you
 		/// want to render all layers, then this is the layer filter
 		/// you would use. This is the default for render filtering.</summary>
 		All          = 0xFFFF,
 		/// <summary>This is a combination of all layers that are not the VFX
 		/// layer.</summary>
-		AllRegular   = Layer0 | Layer1 | Layer2 | Layer3 | Layer4 | Layer5 | Layer6 | Layer7 | Layer8 | Layer9,
+		AllRegular   = Layer0 | Layer1 | Layer2 | Layer3 | Layer4 | Layer5 | Layer6 | Layer7 | Layer8 | Layer9 | UI,
 		/// <summary>All layers except for the third person layer.</summary>
 		AllFirstPerson = All & ~ThirdPerson,
 		/// <summary>All layers except for the first person layer.</summary>

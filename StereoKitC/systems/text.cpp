@@ -728,7 +728,7 @@ void text_step() {
 		text_buffer_check_dirty_inds(buffer);
 		mesh_set_draw_inds(buffer.mesh, (buffer.vert_count / 4) * 6);
 
-		render_add_mesh(buffer.mesh, buffer.material, matrix_identity);
+		render_add_mesh(buffer.mesh, buffer.material, matrix_identity, {1,1,1,1}, render_layer_vfx);
 		buffer.vert_count = 0;
 	}
 }

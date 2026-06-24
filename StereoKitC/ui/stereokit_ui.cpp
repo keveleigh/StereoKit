@@ -132,6 +132,18 @@ void ui_system_set_move_type(ui_move_ move_type) {
 
 ///////////////////////////////////////////
 
+render_layer_ ui_get_render_layer() {
+	return skui_render_layer;
+}
+
+///////////////////////////////////////////
+
+void ui_set_render_layer(render_layer_ layer) {
+	skui_render_layer = layer;
+}
+
+///////////////////////////////////////////
+
 bool32_t ui_has_keyboard_focus() {
 	return skui_input_target != 0;
 }
@@ -142,7 +154,7 @@ bool32_t ui_has_keyboard_focus() {
 
 void ui_model_at(model_t model, vec3 start, vec3 size, color128 color) {
 	matrix mx = matrix_trs(start, quat_identity, size);
-	render_add_model(model, mx, color*skui_tint);
+	render_add_model(model, mx, color*skui_tint, skui_render_layer);
 }
 
 ///////////////////////////////////////////

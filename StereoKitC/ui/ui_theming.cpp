@@ -63,6 +63,7 @@ id_hash_t                 skui_anim_id[3];
 float                     skui_anim_time[3];
 
 color128                  skui_tint;
+render_layer_             skui_render_layer;
 
 array_t<ui_el_visual_t>   skui_visuals;
 array_t<ui_theme_color_t> skui_palette;
@@ -91,6 +92,7 @@ void ui_theme_visuals_assign ();
 
 void ui_theming_init() {
 	skui_tint            = { 1,1,1,1 };
+	skui_render_layer    = render_layer_ui;
 	skui_font_stack      = {};
 	skui_tint_stack      = {};
 	skui_grab_aura_stack = {};
@@ -454,7 +456,8 @@ void ui_draw_element_color(ui_vis_ element_visual, ui_vis_ element_color, vec3 s
 		ui_get_mesh    (element_visual),
 		ui_get_material(element_visual),
 		matrix_ts(start - size / 2, size),
-		ui_get_element_color(element_color, focus));
+		ui_get_element_color(element_color, focus),
+		skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -464,7 +467,8 @@ void ui_draw_element(ui_vis_ element_visual, vec3 start, vec3 size, float focus)
 		ui_get_mesh    (element_visual),
 		ui_get_material(element_visual),
 		matrix_ts(start - size / 2, size),
-		ui_get_element_color(element_visual, focus));
+		ui_get_element_color(element_visual, focus),
+		skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -507,7 +511,7 @@ void ui_draw_cube(vec3 start, vec3 size, ui_color_ color, float focus) {
 		: skui_palette[color].disabled;
 	final_color = final_color * skui_tint;
 
-	render_add_mesh(skui_box_dbg, skui_mat, matrix_ts(center, size), final_color);
+	render_add_mesh(skui_box_dbg, skui_mat, matrix_ts(center, size), final_color, skui_render_layer);
 }
 
 ///////////////////////////////////////////
