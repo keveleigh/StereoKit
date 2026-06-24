@@ -2152,7 +2152,7 @@ SK_API float       sprite_get_aspect (sprite_t sprite);
 SK_API int32_t     sprite_get_width  (sprite_t sprite);
 SK_API int32_t     sprite_get_height (sprite_t sprite);
 SK_API vec2        sprite_get_dimensions_normalized(sprite_t sprite);
-SK_API void        sprite_draw       (sprite_t sprite, matrix transform, pivot_ pivot_position, color32 color sk_default({255,255,255,255}));
+SK_API void        sprite_draw       (sprite_t sprite, matrix transform, pivot_ pivot_position, color32 color sk_default({255,255,255,255}), render_layer_ layer sk_default(render_layer_0));
 
 ///////////////////////////////////////////
 

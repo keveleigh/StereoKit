@@ -76,14 +76,16 @@ namespace StereoKit
 		/// you're specifying the transform of. The 'Pivot' point or
 		/// 'Origin' of the Sprite.</param>
 		public void Draw(in Matrix transform, Pivot pivotPosition)
-			=> NativeAPI.sprite_draw(_inst, transform, pivotPosition, Color32.White);
+			=> NativeAPI.sprite_draw(_inst, transform, pivotPosition, Color32.White, RenderLayer.Layer0);
 
 		/// <inheritdoc cref="Draw(in Matrix, Pivot)"/>
 		/// <param name="linearColor">Per-instance color data for this render
 		/// item. It is unmodified by StereoKit, and is generally interpreted
 		/// as linear.</param>
-		public void Draw(in Matrix transform, Pivot anchorPosition, Color32 linearColor)
-			=> NativeAPI.sprite_draw(_inst, transform, anchorPosition, linearColor);
+		/// <param name="layer">The RenderLayer this sprite should be drawn on.
+		/// This defaults to RenderLayer.Layer0.</param>
+		public void Draw(in Matrix transform, Pivot anchorPosition, Color32 linearColor, RenderLayer layer = RenderLayer.Layer0)
+			=> NativeAPI.sprite_draw(_inst, transform, anchorPosition, linearColor, layer);
 
 		/// <summary>Finds a sprite that matches the given id! Check out the
 		/// DefaultIds static class for some built-in ids. Sprites will auto-id

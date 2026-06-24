@@ -593,7 +593,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          sprite_get_width(IntPtr sprite);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          sprite_get_height(IntPtr sprite);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec2         sprite_get_dimensions_normalized(IntPtr sprite);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sprite_draw(IntPtr sprite, Matrix transform, Pivot pivot_position, Color32 color);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sprite_draw(IntPtr sprite, Matrix transform, Pivot pivot_position, Color32 color, RenderLayer layer);
 
 		///////////////////////////////////////////
 
