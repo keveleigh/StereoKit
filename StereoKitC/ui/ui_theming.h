@@ -13,6 +13,7 @@ extern sprite_t      skui_radio_on;
 extern mesh_t        skui_box_dbg;
 extern material_t    skui_mat_dbg;
 extern material_t    skui_mat;
+extern text_style_t  skui_font_style;
 
 extern const float skui_aura_radius;
 

@@ -140,6 +140,7 @@ render_layer_ ui_get_render_layer() {
 
 void ui_set_render_layer(render_layer_ layer) {
 	skui_render_layer = layer;
+	text_style_set_render_layer(skui_font_style, layer);
 }
 
 ///////////////////////////////////////////

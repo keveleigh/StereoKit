@@ -492,6 +492,8 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_total_height(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         text_style_set_total_height(TextStyle style, float height_meters);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       text_style_get_material(TextStyle style);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern RenderLayer  text_style_get_render_layer(TextStyle style);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         text_style_set_render_layer(TextStyle style, RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_ascender(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_descender(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_cap_height(TextStyle style);

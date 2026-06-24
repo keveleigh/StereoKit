@@ -2024,6 +2024,8 @@ SK_API void          text_style_set_layout_height   (text_style_t style, float h
 SK_API float         text_style_get_total_height    (text_style_t style);
 SK_API void          text_style_set_total_height    (text_style_t style, float height_meters);
 SK_API material_t    text_style_get_material        (text_style_t style);
+SK_API render_layer_ text_style_get_render_layer    (text_style_t style);
+SK_API void          text_style_set_render_layer    (text_style_t style, render_layer_ layer);
 SK_API float         text_style_get_ascender        (text_style_t style);
 SK_API float         text_style_get_descender       (text_style_t style);
 SK_API float         text_style_get_cap_height      (text_style_t style);

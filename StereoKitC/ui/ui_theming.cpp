@@ -36,6 +36,7 @@ font_t                    skui_font;
 material_t                skui_mat;
 material_t                skui_mat_dbg;
 material_t                skui_font_mat;
+text_style_t              skui_font_style;
 
 sprite_t                  skui_toggle_off;
 sprite_t                  skui_toggle_on;
@@ -106,11 +107,12 @@ void ui_theming_init() {
 	skui_font_mat   = material_find(default_id_material_font);
 	material_set_queue_offset(skui_font_mat, -12);
 	skui_font       = font_find(default_id_font);
-	text_style_t style = text_make_style_mat(skui_font, 0.01f, skui_font_mat, { 1,1,1,1 });
+	skui_font_style = text_make_style_mat(skui_font, 0.01f, skui_font_mat, { 1,1,1,1 });
 	// TODO: v0.4, switch these to something more intentional instead of backwards compatible (like lineheight 1.4)
 	// This matches the original SK size for compat, for now.
-	text_style_set_line_height_pct(style, 1.1f);
-	skui_font_stack.add(style);
+	text_style_set_line_height_pct(skui_font_style, 1.1f);
+	text_style_set_render_layer   (skui_font_style, skui_render_layer);
+	skui_font_stack.add(skui_font_style);
 
 	// TODO: v0.4, this sets up default values when zeroed out, with a
 	// ui_get_settings, this isn't really necessary anymore!

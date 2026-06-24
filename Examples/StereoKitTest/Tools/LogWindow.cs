@@ -77,6 +77,13 @@ namespace StereoKit.Framework
 			styleWarn  = TextStyle.FromFont(logFnt, 0.008f, Color.HSV(0.17f, 0.7f, 1));
 			styleErr   = TextStyle.FromFont(logFnt, 0.008f, Color.HSV(1, 0.7f, 1));
 			styleGraph = TextStyle.FromFont(logFnt, 1,      Color.HSV(1, 0, 1));
+			
+			// Ensure the text is on the UI render layer
+			styleDiag .RenderLayer = RenderLayer.UI;
+			styleInfo .RenderLayer = RenderLayer.UI;
+			styleWarn .RenderLayer = RenderLayer.UI;
+			styleErr  .RenderLayer = RenderLayer.UI;
+			styleGraph.RenderLayer = RenderLayer.UI;
 
 			// Share the line spacing across every log style.
 			styleDiag.LineHeightPct = lineSpacing;
