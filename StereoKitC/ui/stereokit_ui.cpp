@@ -132,6 +132,19 @@ void ui_system_set_move_type(ui_move_ move_type) {
 
 ///////////////////////////////////////////
 
+render_layer_ ui_get_render_layer() {
+	return skui_render_layer;
+}
+
+///////////////////////////////////////////
+
+void ui_set_render_layer(render_layer_ layer) {
+	skui_render_layer = layer;
+	text_style_set_render_layer(skui_font_style, layer);
+}
+
+///////////////////////////////////////////
+
 bool32_t ui_has_keyboard_focus() {
 	return skui_input_target != 0;
 }
@@ -142,7 +155,7 @@ bool32_t ui_has_keyboard_focus() {
 
 void ui_model_at(model_t model, vec3 start, vec3 size, color128 color) {
 	matrix mx = matrix_trs(start, quat_identity, size);
-	render_add_model(model, mx, color*skui_tint);
+	render_add_model(model, mx, color*skui_tint, skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -200,7 +213,7 @@ void ui_image(sprite_t image, vec2 size) {
 	ui_layout_reserve_sz(size, false, &final_pos, &final_size);
 	
 	sprite_draw(image, matrix_ts(final_pos - vec3{size.x / 2, size.y / 2, 2 * mm2m }, vec3{ scale, scale, 1 }),
-		pivot_center, ui_is_enabled() ? color32{255, 255, 255, 255} : color32{128, 128, 128, 255});
+		pivot_center, ui_is_enabled() ? color32{255, 255, 255, 255} : color32{128, 128, 128, 255}, skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -278,7 +291,7 @@ void _ui_button_img_surface(const C* text, sprite_t image, ui_btn_layout_ image_
 
 		// Drawn a touch larger than its layout slot, for optical weight.
 		const float draw_size = image_size + font_size * skui_img_optic_size;
-		sprite_draw(image, matrix_ts(image_at, { draw_size, draw_size, draw_size }), pivot_center, color_to_32( final_color ));
+		sprite_draw(image, matrix_ts(image_at, { draw_size, draw_size, draw_size }), pivot_center, color_to_32( final_color ), skui_render_layer);
 	}
 	if (image_layout != ui_btn_layout_center_no_text) {
 		// align_none means "use the layout's natural alignment".
@@ -436,7 +449,7 @@ bool32_t ui_button_round_at_g(const C *text, sprite_t image, vec3 window_relativ
 
 	float sprite_scale = fmaxf(1, sprite_get_aspect(image));
 	float sprite_size  = (diameter * 0.6f) / sprite_scale;
-	sprite_draw(image, matrix_ts(window_relative_pos + vec3{ -diameter/2, -diameter/2, -(finger_offset + 2*mm2m) }, vec3{ sprite_size, sprite_size, 1 }), pivot_center);
+	sprite_draw(image, matrix_ts(window_relative_pos + vec3{ -diameter/2, -diameter/2, -(finger_offset + 2*mm2m) }, vec3{ sprite_size, sprite_size, 1 }), pivot_center, {255,255,255,255}, skui_render_layer);
 
 	if (state & button_state_just_active)
 		ui_play_sound_on_off(ui_vis_button, id, window_relative_pos - vec3{ diameter/2.f, diameter/2.f, 0 });

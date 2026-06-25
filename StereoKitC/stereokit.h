@@ -655,7 +655,12 @@ typedef enum log_ {
   the primary display. See `Renderer.LayerFilter` for configuring what
   the primary display renders.
   
-  Render layers can also be mixed and matched like bit-flags!*/
+  Render layers can also be mixed and matched like bit-flags!
+
+  Note that while this enum is 32 bits wide, render layers are stored
+  internally in 16 bits when items are queued for drawing. Only the low
+  16 bits are usable as layers, so any custom flags above bit 15 will be
+  silently truncated.*/
 typedef enum render_layer_ {
 	/*The default render layer. All Draw use this layer unless
 	  otherwise specified.*/
@@ -689,6 +694,10 @@ typedef enum render_layer_ {
 	  perspective. By default, this is enabled for renders that
 	  are from a 3rd person viewpoint.*/
 	render_layer_third_person     = 1 << 12,
+	/*The default layer for StereoKit's UI. Mesh and model content
+	  drawn by the UI system uses this layer, see `UI.RenderLayer`
+	  to change it.*/
+	render_layer_ui               = 1 << 13,
 	/*This is a flag that specifies all possible layers. If you
 	  want to render all layers, then this is the layer filter
 	  you would use. This is the default for render filtering.*/
@@ -2015,6 +2024,8 @@ SK_API void          text_style_set_layout_height   (text_style_t style, float h
 SK_API float         text_style_get_total_height    (text_style_t style);
 SK_API void          text_style_set_total_height    (text_style_t style, float height_meters);
 SK_API material_t    text_style_get_material        (text_style_t style);
+SK_API render_layer_ text_style_get_render_layer    (text_style_t style);
+SK_API void          text_style_set_render_layer    (text_style_t style, render_layer_ layer);
 SK_API float         text_style_get_ascender        (text_style_t style);
 SK_API float         text_style_get_descender       (text_style_t style);
 SK_API float         text_style_get_cap_height      (text_style_t style);
@@ -2141,7 +2152,7 @@ SK_API float       sprite_get_aspect (sprite_t sprite);
 SK_API int32_t     sprite_get_width  (sprite_t sprite);
 SK_API int32_t     sprite_get_height (sprite_t sprite);
 SK_API vec2        sprite_get_dimensions_normalized(sprite_t sprite);
-SK_API void        sprite_draw       (sprite_t sprite, matrix transform, pivot_ pivot_position, color32 color sk_default({255,255,255,255}));
+SK_API void        sprite_draw       (sprite_t sprite, matrix transform, pivot_ pivot_position, color32 color sk_default({255,255,255,255}), render_layer_ layer sk_default(render_layer_0));
 
 ///////////////////////////////////////////
 

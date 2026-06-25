@@ -5,6 +5,7 @@
  */
 
 #include "interactors.h"
+#include "ui_theming.h"
 
 #include "../_stereokit.h"
 #include "../sk_math.h"
@@ -758,7 +759,7 @@ bool32_t interactor_check_box(const _interactor_t* actor, bounds_t box, vec3* ou
 		return false;
 
 	if (local.show_volumes)
-		render_add_mesh(local.show_volume_mesh, local.show_volume_mat, matrix_trs(box.center, quat_identity, box.dimensions));
+		render_add_mesh(local.show_volume_mesh, local.show_volume_mat, matrix_trs(box.center, quat_identity, box.dimensions), {1,1,1,1}, skui_render_layer);
 
 	vec3     start_local = hierarchy_to_local_point(actor->capsule_start_world);
 	vec3     end_local   = hierarchy_to_local_point(actor->capsule_end_world  );

@@ -36,6 +36,7 @@ font_t                    skui_font;
 material_t                skui_mat;
 material_t                skui_mat_dbg;
 material_t                skui_font_mat;
+text_style_t              skui_font_style;
 
 sprite_t                  skui_toggle_off;
 sprite_t                  skui_toggle_on;
@@ -63,6 +64,7 @@ id_hash_t                 skui_anim_id[3];
 float                     skui_anim_time[3];
 
 color128                  skui_tint;
+render_layer_             skui_render_layer;
 
 array_t<ui_el_visual_t>   skui_visuals;
 array_t<ui_theme_color_t> skui_palette;
@@ -91,6 +93,7 @@ void ui_theme_visuals_assign ();
 
 void ui_theming_init() {
 	skui_tint            = { 1,1,1,1 };
+	skui_render_layer    = render_layer_ui;
 	skui_font_stack      = {};
 	skui_tint_stack      = {};
 	skui_grab_aura_stack = {};
@@ -104,11 +107,12 @@ void ui_theming_init() {
 	skui_font_mat   = material_find(default_id_material_font);
 	material_set_queue_offset(skui_font_mat, -12);
 	skui_font       = font_find(default_id_font);
-	text_style_t style = text_make_style_mat(skui_font, 0.01f, skui_font_mat, { 1,1,1,1 });
+	skui_font_style = text_make_style_mat(skui_font, 0.01f, skui_font_mat, { 1,1,1,1 });
 	// TODO: v0.4, switch these to something more intentional instead of backwards compatible (like lineheight 1.4)
 	// This matches the original SK size for compat, for now.
-	text_style_set_line_height_pct(style, 1.1f);
-	skui_font_stack.add(style);
+	text_style_set_line_height_pct(skui_font_style, 1.1f);
+	text_style_set_render_layer   (skui_font_style, skui_render_layer);
+	skui_font_stack.add(skui_font_style);
 
 	// TODO: v0.4, this sets up default values when zeroed out, with a
 	// ui_get_settings, this isn't really necessary anymore!
@@ -454,7 +458,8 @@ void ui_draw_element_color(ui_vis_ element_visual, ui_vis_ element_color, vec3 s
 		ui_get_mesh    (element_visual),
 		ui_get_material(element_visual),
 		matrix_ts(start - size / 2, size),
-		ui_get_element_color(element_color, focus));
+		ui_get_element_color(element_color, focus),
+		skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -464,7 +469,8 @@ void ui_draw_element(ui_vis_ element_visual, vec3 start, vec3 size, float focus)
 		ui_get_mesh    (element_visual),
 		ui_get_material(element_visual),
 		matrix_ts(start - size / 2, size),
-		ui_get_element_color(element_visual, focus));
+		ui_get_element_color(element_visual, focus),
+		skui_render_layer);
 }
 
 ///////////////////////////////////////////
@@ -507,7 +513,7 @@ void ui_draw_cube(vec3 start, vec3 size, ui_color_ color, float focus) {
 		: skui_palette[color].disabled;
 	final_color = final_color * skui_tint;
 
-	render_add_mesh(skui_box_dbg, skui_mat, matrix_ts(center, size), final_color);
+	render_add_mesh(skui_box_dbg, skui_mat, matrix_ts(center, size), final_color, skui_render_layer);
 }
 
 ///////////////////////////////////////////

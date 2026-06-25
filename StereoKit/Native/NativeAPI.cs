@@ -492,6 +492,8 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_total_height(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         text_style_set_total_height(TextStyle style, float height_meters);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       text_style_get_material(TextStyle style);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern RenderLayer  text_style_get_render_layer(TextStyle style);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         text_style_set_render_layer(TextStyle style, RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_ascender(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_descender(TextStyle style);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        text_style_get_cap_height(TextStyle style);
@@ -591,7 +593,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          sprite_get_width(IntPtr sprite);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          sprite_get_height(IntPtr sprite);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec2         sprite_get_dimensions_normalized(IntPtr sprite);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sprite_draw(IntPtr sprite, Matrix transform, Pivot pivot_position, Color32 color);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sprite_draw(IntPtr sprite, Matrix transform, Pivot pivot_position, Color32 color, RenderLayer layer);
 
 		///////////////////////////////////////////
 
@@ -1015,6 +1017,8 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         ui_far_interact_enabled();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern UIMove       ui_system_get_move_type();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_system_set_move_type(UIMove move_type);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern RenderLayer  ui_get_render_layer();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_set_render_layer(RenderLayer layer);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         ui_settings(UISettings settings);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern UISettings   ui_get_settings();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        ui_get_margin();
