@@ -336,7 +336,7 @@ bool32_t ui_button_img_at_g(const C* text, sprite_t image, ui_btn_layout_ image_
 	float         finger_offset;
 	button_state_ state, focus;
 	int32_t       interactor;
-	ui_button_behavior(window_relative_pos, size, id, finger_offset, state, focus, &interactor);
+	ui_button_behavior(window_relative_pos, size, id, 0, 0, ui_btn_flag_none, finger_offset, state, focus, &interactor);
 
 	float min_activation = 1 - (finger_offset / skui_settings.depth);
 	ui_draw_element(ui_vis_button, window_relative_pos, vec3{ size.x,size.y,finger_offset }, fmaxf(min_activation, ui_get_anim_focus(id, focus, state)));
@@ -388,7 +388,7 @@ bool32_t ui_toggle_img_at_g(const C* text, bool32_t& pressed, sprite_t toggle_of
 	float         finger_offset;
 	button_state_ state, focus;
 	int32_t       interactor;
-	ui_button_behavior(window_relative_pos, size, id, finger_offset, state, focus, &interactor);
+	ui_button_behavior(window_relative_pos, size, id, 0, 0, ui_btn_flag_none, finger_offset, state, focus, &interactor);
 
 	if (state & button_state_just_inactive) {
 		pressed = pressed ? false : true;
@@ -442,7 +442,7 @@ bool32_t ui_button_round_at_g(const C *text, sprite_t image, vec3 window_relativ
 	float         finger_offset;
 	button_state_ state, focus;
 	int32_t       interactor;
-	ui_button_behavior(window_relative_pos, { diameter,diameter }, id, finger_offset, state, focus, &interactor);
+	ui_button_behavior(window_relative_pos, { diameter,diameter }, id, 0, 0, ui_btn_flag_none, finger_offset, state, focus, &interactor);
 
 	float min_activation = 1 - (finger_offset / skui_settings.depth);
 	ui_draw_element(ui_vis_button_round, window_relative_pos, { diameter, diameter, finger_offset }, fmaxf(min_activation, ui_get_anim_focus(id, focus, state)));
@@ -515,7 +515,7 @@ bool32_t ui_input_at_g(const C* id, C* buffer, int32_t buffer_size, vec3 window_
 	float         finger_offset;
 	int32_t       interactor;
 	button_state_ state, focus;
-	ui_button_behavior(window_relative_pos, size, id_hash, finger_offset, state, focus, &interactor);
+	ui_button_behavior(window_relative_pos, size, id_hash, 0, 0, ui_btn_flag_none, finger_offset, state, focus, &interactor);
 
 	if (state & button_state_just_inactive) {
 		platform_keyboard_show(true,type);

@@ -103,6 +103,7 @@ ui_color_ UIColor
 ui_color_state_ UIColorState
 ui_pad_ UIPad
 ui_btn_layout_ UIBtnLayout
+ui_btn_flag_ UIBtnFlag
 ui_cut_ UICut
 ui_dir_ UIDir
 ui_corner_ UICorner

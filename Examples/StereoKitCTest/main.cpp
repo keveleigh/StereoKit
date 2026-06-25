@@ -20,11 +20,11 @@ using namespace sk;
 #include "demo_desktop.h"
 #include "demo_bvh.h"
 #include "demo_aliasing.h"
+#include "log_window.h"
 
 #include <stdio.h>
 
 #include <string>
-#include <list>
 
 matrix      floor_tr;
 material_t  floor_mat;
@@ -120,41 +120,17 @@ scene_t demos[] = {
 
 pose_t demo_select_pose;
 
-void on_log(log_, const char*);
-void log_window();
 void common_init();
 void common_update();
 void common_shutdown();
 void ruler_window();
 
+// Placed behind the viewer, where the log has traditionally lived.
 pose_t log_pose = pose_t{vec3{0, -0.1f, 0.5f}, quat_lookat(vec3_zero, vec3_forward)};
-std::list<std::string> log_list;
-
-void on_log(void*, log_ log_level, const char* log_c_str) {
-	if (log_level == log_error) {
-		log_level = log_level;
-	}
-	if (log_list.size() > 10) {
-		log_list.pop_front();
-	}
-	std::string log_str(log_c_str);
-	if (log_str.size() >= 100) {
-		log_str.resize(100);
-		log_str += "...";
-	}
-	log_list.push_back(log_str);
-}
-
-void log_window() {
-	ui_window_begin("Log", &log_pose, vec2{40*cm2m, 0*cm2m});
-	for (auto &log_str : log_list) {
-		ui_label(log_str.c_str(), vec2{}, false);
-	}
-	ui_window_end();
-}
 
 int main() {
-	log_subscribe(on_log);
+	// Subscribe before sk_init so the window catches logs from startup.
+	log_window_init();
 	log_set_filter(log_diagnostic);
 
 	sk_settings_t settings = {};
@@ -255,10 +231,11 @@ void common_update() {
 	ui_window_end();
 
 	ruler_window();
-	log_window();
+	log_window_update(&log_pose);
 }
 
 void common_shutdown() {
+	log_window_shutdown();
 	scene_shutdown();
 
 	material_release(floor_mat);

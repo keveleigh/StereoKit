@@ -72,7 +72,6 @@ class TestInteractorMultiHandle : ITest
 	int   prevPhase  = -1;
 	int   phaseFrame = 0;
 	float phaseTime  = 0;
-	int   failures   = 0;
 	Vec3  expectCenter;
 	Vec3  preDropPos;
 	Quat  qRest;
@@ -102,8 +101,6 @@ class TestInteractorMultiHandle : ITest
 	{
 		foreach (Interactor a in actors) a.Destroy();
 		Interaction.DefaultInteractors = prevDefault;
-
-		if (failures == 0) Log.Info("TestInteractorMultiHandle: all checks passed.");
 	}
 
 	public void Step()
@@ -235,10 +232,7 @@ class TestInteractorMultiHandle : ITest
 	void Check(string name, bool passed)
 	{
 		if (!passed)
-		{
-			failures += 1;
 			Log.Err($"TestInteractorMultiHandle: '{name}' failed on frame {phaseFrame} of phase {phaseName[phase]} (world pose {worldHandle.position}).");
-		}
 		Tests.Test(() => passed);
 	}
 

@@ -2329,6 +2329,18 @@ namespace StereoKit
 		CenterNoText,
 	}
 
+	/// <summary>A bit-flag for modifying the behavior of a button, used with the lower-level
+	/// `UI.ButtonBehavior`.</summary>
+	[Flags]
+	public enum UIBtnFlag {
+		/// <summary>Default button behavior.</summary>
+		None         = 0,
+		/// <summary>Prevents the activation from being canceled when the interactor moves too
+		/// far from the button. Used for elements like sliders that legitimately track
+		/// an interactor well outside the button's bounds.</summary>
+		NoCancel     = 1 << 0,
+	}
+
 	/// <summary>This describes how a layout should be cut up! Used with `UI.LayoutPushCut`.</summary>
 	public enum UICut {
 		/// <summary>This cuts a chunk from the left side of the current layout. This will work

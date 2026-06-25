@@ -875,6 +875,8 @@ if (SK_BUILD_TESTS)
 
   target_sources( StereoKitCTest PRIVATE
     Examples/StereoKitCTest/main.cpp
+    Examples/StereoKitCTest/log_window.h
+    Examples/StereoKitCTest/log_window.cpp
     Examples/StereoKitCTest/demo_envmap.h
     Examples/StereoKitCTest/demo_envmap.cpp
     Examples/StereoKitCTest/demo_shadows.h
