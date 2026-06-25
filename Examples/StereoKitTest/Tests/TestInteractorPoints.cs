@@ -113,7 +113,7 @@ class TestInteractorPoints : ITest
 			if (testIdx == i && frameIdx >= 0)
 			{
 				if (!testUpdates[i].expects(frameIdx))
-					Log.Err($"Failed interactor test {testUpdates[i].name} frame {frameIdx}");
+					Tests.Fail($"Failed interactor test {testUpdates[i].name} frame {frameIdx}");
 			}
 		}
 		UI.WindowEnd();
