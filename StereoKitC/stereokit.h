@@ -704,7 +704,7 @@ typedef enum render_layer_ {
 	render_layer_all              = 0xFFFF,
 	/*This is a combination of all layers that are not the VFX
 	  layer.*/
-	render_layer_all_regular      = render_layer_0 | render_layer_1 | render_layer_2 | render_layer_3 | render_layer_4 | render_layer_5 | render_layer_6 | render_layer_7 | render_layer_8 | render_layer_9 | render_layer_ui,
+	render_layer_all_regular      = render_layer_0 | render_layer_1 | render_layer_2 | render_layer_3 | render_layer_4 | render_layer_5 | render_layer_6 | render_layer_7 | render_layer_8 | render_layer_9,
 	/*All layers except for the third person layer.*/
 	render_layer_all_first_person = render_layer_all & ~render_layer_third_person,
 	/*All layers except for the first person layer.*/

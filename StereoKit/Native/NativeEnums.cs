@@ -575,7 +575,7 @@ namespace StereoKit
 		All          = 0xFFFF,
 		/// <summary>This is a combination of all layers that are not the VFX
 		/// layer.</summary>
-		AllRegular   = Layer0 | Layer1 | Layer2 | Layer3 | Layer4 | Layer5 | Layer6 | Layer7 | Layer8 | Layer9 | UI,
+		AllRegular   = Layer0 | Layer1 | Layer2 | Layer3 | Layer4 | Layer5 | Layer6 | Layer7 | Layer8 | Layer9,
 		/// <summary>All layers except for the third person layer.</summary>
 		AllFirstPerson = All & ~ThirdPerson,
 		/// <summary>All layers except for the first person layer.</summary>
