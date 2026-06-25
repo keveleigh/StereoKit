@@ -47,7 +47,7 @@ bool swatch_button(const char* id, vec2 c, vec2 size) {
 	float offset;
 	button_state_ state= button_state_inactive, focus=button_state_inactive;
 	ui_button_behavior(vec3{ c.x+size.x/2.0f, c.y+ size.y/2.0f, 0}, size, ui_stack_hash(id),
-		offset, state, focus);
+		0, 0, ui_btn_flag_none, offset, state, focus);
 	return (state & button_state_just_inactive) != 0;
 }
 

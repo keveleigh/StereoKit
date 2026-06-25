@@ -197,6 +197,14 @@ public static class Tests
 		}
 	}
 
+	// Report a failure from within a running test scene. Unlike a bare
+	// Log.Err, this actually fails the test run.
+	public static void Fail(string message)
+	{
+		Log.Err(message);
+		failures += 1;
+	}
+
 	private static bool FinishedWithTest()
 	{
 		if (runSeconds != 0) return Time.Totalf-sceneTime > runSeconds;

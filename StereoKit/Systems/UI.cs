@@ -1935,14 +1935,14 @@ namespace StereoKit
 		/// <param name="focusState">This is the current frame's "focus" state
 		/// for the button.</param>
 		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, out float fingerOffset, out BtnState buttonState, out BtnState focusState)
-			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), out fingerOffset, out buttonState, out focusState, out _);
+			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), 0, 0, UIBtnFlag.None, out fingerOffset, out buttonState, out focusState, out _);
 
 		/// <inheritdoc cref="ButtonBehavior(Vec3, Vec2, string, out float, out BtnState, out BtnState)"/>
 		/// <param name="interactor">The Interactor that interacted with the
 		/// button. If nothing is interacting, this will be `Interactor.None`.
 		/// </param>
 		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out Interactor interactor)
-			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), out fingerOffset, out buttonState, out focusState, out interactor);
+			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), 0, 0, UIBtnFlag.None, out fingerOffset, out buttonState, out focusState, out interactor);
 
 		/// <summary>This is the core functionality of StereoKit's buttons,
 		/// without any of the rendering parts! If you're trying to create your
@@ -1971,7 +1971,13 @@ namespace StereoKit
 		/// button. If nothing is interacting, this will be `Interactor.None`.
 		/// </param>
 		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, float buttonDepth, float buttonActivationDepth, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out Interactor interactor)
-			=> NativeAPI.ui_button_behavior_depth(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), buttonDepth, buttonActivationDepth, out fingerOffset, out buttonState, out focusState, out interactor);
+			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), buttonDepth, buttonActivationDepth, UIBtnFlag.None, out fingerOffset, out buttonState, out focusState, out interactor);
+
+		/// <inheritdoc cref="ButtonBehavior(Vec3, Vec2, string, float, float, out float, out BtnState, out BtnState, out Interactor)"/>
+		/// <param name="flags">Flags for modifying the button's behavior, such
+		/// as opting out of pull-away cancellation.</param>
+		public static void ButtonBehavior(Vec3 windowRelativePos, Vec2 size, string id, float buttonDepth, float buttonActivationDepth, UIBtnFlag flags, out float fingerOffset, out BtnState buttonState, out BtnState focusState, out Interactor interactor)
+			=> NativeAPI.ui_button_behavior(windowRelativePos, size, NativeAPI.ui_stack_hash_16(id), buttonDepth, buttonActivationDepth, flags, out fingerOffset, out buttonState, out focusState, out interactor);
 
 		/// <summary>This is the core functionality of StereoKit's slider
 		/// elements, without any of the rendering parts! If you're trying to

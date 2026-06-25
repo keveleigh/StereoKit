@@ -111,7 +111,7 @@ class TestInteractorRays : ITest
 			if (testIdx == i && frameIdx >= 0)
 			{
 				if (!testUpdates[i].expects(frameIdx))
-					Log.Err($"Failed interactor test {testUpdates[i].name} frame {frameIdx}");
+					Tests.Fail($"Failed interactor test {testUpdates[i].name} frame {frameIdx}");
 			}
 		}
 		UI.WindowEnd();
@@ -122,7 +122,7 @@ class TestInteractorRays : ITest
 		for (int i = 0; i < testUpdates.Length; i++)
 		{
 			if (UI.Button("Don't Press " + i))
-				Log.Err($"Pressed occluded button {i}!");
+				Tests.Fail($"Pressed occluded button {i}!");
 		}
 		UI.WindowEnd();
 
