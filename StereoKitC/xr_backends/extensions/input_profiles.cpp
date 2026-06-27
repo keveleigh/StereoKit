@@ -79,23 +79,15 @@ void xr_profile_ext_hand_interaction_register() {
 		if (!backend_openxr_ext_enabled(XR_EXT_HAND_INTERACTION_EXTENSION_NAME))
 			return xr_system_fail;
 
-		bool explicit_request = ext_management_is_user_requested(XR_EXT_HAND_INTERACTION_EXTENSION_NAME);
-
-		// SK's hand_interaction implementations use XR_EXT_hand_tracking for
-		// some data, so we can't rely on these interaction profiles unless
-		// XR_EXT_hand_tracking is available.
-		if (explicit_request == false && !backend_openxr_ext_enabled(XR_EXT_HAND_TRACKING_EXTENSION_NAME)) {
-			log_diag("XR_EXT_hand_interaction - Disabled - Dependant on XR_EXT_hand_tracking.");
-			//xr_ext.EXT_hand_interaction = xr_ext_disabled;
-			return xr_system_fail;
-		}
-
 		xr_interaction_profile_t profile_l = { "ext/hand_interaction_ext" };
 		profile_l.top_level_path = "/user/hand/left";
 		profile_l.is_hand        = true;
-		profile_l.palm_offset    = pose_identity;
+		// Grip->palm fallback for runtimes that don't provide palm_ext here.
+		profile_l.palm_offset    = pose_t{ {0,0,0}, quat_from_angles(-90, 0, 0) };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose,  input_pose_l_grip,        "grip/pose"           };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose,  input_pose_l_aim,         "aim/pose"            };
+		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose,  input_pose_l_poke,        "poke_ext/pose"       };
+		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose,  input_pose_l_pinch,       "pinch_ext/pose"      };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_bool,  input_button_l_aim_ready, "pinch_ext/ready_ext" };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_float, input_float_l_trigger,    "pinch_ext/value"     };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_float, input_float_l_grip,       "grasp_ext/value"     };
@@ -104,9 +96,12 @@ void xr_profile_ext_hand_interaction_register() {
 		xr_interaction_profile_t profile_r = { "ext/hand_interaction_ext" };
 		profile_r.top_level_path = "/user/hand/right";
 		profile_r.is_hand        = true;
-		profile_r.palm_offset    = pose_identity;
+		// Grip->palm fallback for runtimes that don't provide palm_ext here.
+		profile_r.palm_offset    = pose_t{ {0,0,0}, quat_from_angles(-90, 0, 0) };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose,  input_pose_r_grip,        "grip/pose"           };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose,  input_pose_r_aim,         "aim/pose"            };
+		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose,  input_pose_r_poke,        "poke_ext/pose"       };
+		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose,  input_pose_r_pinch,       "pinch_ext/pose"      };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_bool,  input_button_r_aim_ready, "pinch_ext/ready_ext" };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_float, input_float_r_trigger,    "pinch_ext/value"     };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_float, input_float_r_grip,       "grasp_ext/value"     };
@@ -158,7 +153,8 @@ void xr_profile_msft_hand_interaction_register() {
 		xr_interaction_profile_t profile_l = { "microsoft/hand_interaction" };
 		profile_l.top_level_path = "/user/hand/left";
 		profile_l.is_hand        = true;
-		profile_l.palm_offset    = pose_identity;
+		// Grip->palm fallback for runtimes that don't provide palm_ext here.
+		profile_l.palm_offset    = pose_t{ {0,0,0}, quat_from_angles(-90, 0, 0) };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose, input_pose_l_grip,      "grip/pose"     };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_pose, input_pose_l_aim,       "aim/pose"      };
 		profile_l.binding[profile_l.binding_ct++] = { xra_type_float, input_float_l_trigger, "select/value"  };
@@ -168,7 +164,8 @@ void xr_profile_msft_hand_interaction_register() {
 		xr_interaction_profile_t profile_r = { "microsoft/hand_interaction" };
 		profile_r.top_level_path = "/user/hand/right";
 		profile_r.is_hand        = true;
-		profile_r.palm_offset    = pose_identity;
+		// Grip->palm fallback for runtimes that don't provide palm_ext here.
+		profile_r.palm_offset    = pose_t{ {0,0,0}, quat_from_angles(-90, 0, 0) };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose, input_pose_r_grip,      "grip/pose"     };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_pose, input_pose_r_aim,       "aim/pose"      };
 		profile_r.binding[profile_r.binding_ct++] = { xra_type_float, input_float_r_trigger, "select/value"  };
