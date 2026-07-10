@@ -1329,6 +1329,86 @@ typedef struct vert_t {
 
 static inline vert_t vert_create(vec3 position, vec3 normal sk_default({ 0,1,0 }), vec2 texture_coordinates sk_default({ 0,0 }), color32 vertex_color sk_default({ 255,255,255,255 })) { vert_t v = { position, normal, texture_coordinates, vertex_color }; return v;  }
 
+/*The data format of a single element of a vertex component. Normalized
+  formats map their integer range onto 0-1 (unsigned) or -1-1 (signed)
+  when read by the GPU, other integer formats arrive as integers.*/
+typedef enum vert_fmt_ {
+	/*Invalid format, this is not a valid value for a component.*/
+	vert_fmt_none = 0,
+	/*32 bit float.*/
+	vert_fmt_f32,
+	/*16 bit half float.*/
+	vert_fmt_f16,
+	/*32 bit signed integer.*/
+	vert_fmt_i32,
+	/*16 bit signed integer.*/
+	vert_fmt_i16,
+	/*8 bit signed integer.*/
+	vert_fmt_i8,
+	/*16 bit signed integer, normalized to -1-1 on the GPU.*/
+	vert_fmt_i16_normalized,
+	/*8 bit signed integer, normalized to -1-1 on the GPU.*/
+	vert_fmt_i8_normalized,
+	/*32 bit unsigned integer.*/
+	vert_fmt_u32,
+	/*16 bit unsigned integer.*/
+	vert_fmt_u16,
+	/*8 bit unsigned integer.*/
+	vert_fmt_u8,
+	/*16 bit unsigned integer, normalized to 0-1 on the GPU.*/
+	vert_fmt_u16_normalized,
+	/*8 bit unsigned integer, normalized to 0-1 on the GPU. A color32 is
+	  4 of these.*/
+	vert_fmt_u8_normalized,
+} vert_fmt_;
+
+/*What a vertex component means! This is matched against the semantics
+  the shader's vertex inputs declare, so component order in a format
+  doesn't need to match the shader's input order.*/
+typedef enum vert_semantic_ {
+	/*Invalid semantic, this is not a valid value for a component.*/
+	vert_semantic_none = 0,
+	/*Vertex position, in model space coordinates.*/
+	vert_semantic_position,
+	/*Direction the vertex is facing.*/
+	vert_semantic_normal,
+	/*Texture coordinates.*/
+	vert_semantic_texcoord,
+	/*Vertex color.*/
+	vert_semantic_color,
+	/*Tangent direction for normal mapping.*/
+	vert_semantic_tangent,
+	/*Binormal/bitangent direction for normal mapping.*/
+	vert_semantic_binormal,
+	/*Bone weights for skinning.*/
+	vert_semantic_blendweight,
+	/*Bone indices for skinning.*/
+	vert_semantic_blendindices,
+	/*Point size for point rendering.*/
+	vert_semantic_psize,
+} vert_semantic_;
+
+/*A single component of a custom vertex layout, such as a position or a
+  UV coordinate. A vertex format is described by an array of these, in
+  the same order the fields appear in the vertex struct. Data is always
+  tightly packed, aligned to nothing, so the format fully describes the
+  vertex layout.*/
+typedef struct vert_component_t {
+	/*The data format of a single element, of type vert_fmt_.*/
+	uint8_t format;
+	/*How many format elements this component has, 1-4. A float3
+	  position would be 3.*/
+	uint8_t count;
+	/*What this component means, of type vert_semantic_. This is matched
+	  with the shader's vertex input semantics.*/
+	uint8_t semantic;
+	/*Distinguishes multiple components with the same semantic, like
+	  TEXCOORD0 vs TEXCOORD1. Usually 0.*/
+	uint8_t semantic_slot;
+} vert_component_t;
+
+static inline vert_component_t vert_component(vert_semantic_ semantic, vert_fmt_ format, int32_t count, int32_t semantic_slot sk_default(0)) { vert_component_t c = { (uint8_t)format, (uint8_t)count, (uint8_t)semantic, (uint8_t)semantic_slot }; return c; }
+
 typedef uint32_t vind_t;
 
 /*Culling is discarding an object from the render pipeline!
@@ -1377,8 +1457,12 @@ SK_API void         mesh_draw            (mesh_t mesh, material_t material, matr
 SK_API void         mesh_set_keep_data   (mesh_t mesh, bool32_t keep_data);
 SK_API bool32_t     mesh_get_keep_data   (mesh_t mesh);
 SK_API void         mesh_set_data        (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, const vind_t *in_arr_indices, int32_t index_count, mesh_data_ flags sk_default(mesh_data_calc_bounds), int32_t priority sk_default(0));
+SK_API void         mesh_set_data_fmt    (mesh_t mesh, const vert_component_t *in_arr_format, int32_t component_count, const void *vertex_data, int32_t vertex_count, const vind_t *in_arr_indices, int32_t index_count, mesh_data_ flags sk_default(mesh_data_calc_bounds), int32_t priority sk_default(0));
 SK_API void         mesh_set_verts       (mesh_t mesh, const vert_t *in_arr_vertices, int32_t vertex_count, bool32_t calculate_bounds sk_default(true));
 SK_API void         mesh_get_verts       (mesh_t mesh, sk_ref_arr(vert_t) out_arr_vertices, sk_ref(int32_t) out_vertex_count, memory_ reference_mode);
+SK_API void         mesh_set_verts_fmt   (mesh_t mesh, const vert_component_t *in_arr_format, int32_t component_count, const void *vertex_data, int32_t vertex_count, bool32_t calculate_bounds sk_default(true));
+SK_API void         mesh_get_verts_fmt   (mesh_t mesh, vert_component_t **out_arr_format, int32_t *out_component_count, void **out_vertex_data, int32_t *out_vertex_count, memory_ reference_mode);
+SK_API int32_t      mesh_fmt_stride      (const vert_component_t *in_arr_format, int32_t component_count);
 SK_API int32_t      mesh_get_vert_count  (mesh_t mesh);
 SK_API void         mesh_set_inds        (mesh_t mesh, const vind_t *in_arr_indices, int32_t index_count);
 SK_API void         mesh_get_inds        (mesh_t mesh, sk_ref_arr(vind_t) out_arr_indices,  sk_ref(int32_t) out_index_count, memory_ reference_mode);

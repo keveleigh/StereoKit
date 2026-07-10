@@ -781,6 +781,65 @@ namespace StereoKit
 		Granted      = 1,
 	}
 
+	/// <summary>The data format of a single element of a vertex component. Normalized
+	/// formats map their integer range onto 0-1 (unsigned) or -1-1 (signed)
+	/// when read by the GPU, other integer formats arrive as integers.</summary>
+	public enum VertFmt {
+		/// <summary>Invalid format, this is not a valid value for a component.</summary>
+		None         = 0,
+		/// <summary>32 bit float.</summary>
+		F32,
+		/// <summary>16 bit half float.</summary>
+		F16,
+		/// <summary>32 bit signed integer.</summary>
+		I32,
+		/// <summary>16 bit signed integer.</summary>
+		I16,
+		/// <summary>8 bit signed integer.</summary>
+		I8,
+		/// <summary>16 bit signed integer, normalized to -1-1 on the GPU.</summary>
+		I16Normalized,
+		/// <summary>8 bit signed integer, normalized to -1-1 on the GPU.</summary>
+		I8Normalized,
+		/// <summary>32 bit unsigned integer.</summary>
+		U32,
+		/// <summary>16 bit unsigned integer.</summary>
+		U16,
+		/// <summary>8 bit unsigned integer.</summary>
+		U8,
+		/// <summary>16 bit unsigned integer, normalized to 0-1 on the GPU.</summary>
+		U16Normalized,
+		/// <summary>8 bit unsigned integer, normalized to 0-1 on the GPU. A color32 is
+		/// 4 of these.</summary>
+		U8Normalized,
+	}
+
+	/// <summary>What a vertex component means! This is matched against the semantics
+	/// the shader's vertex inputs declare, so component order in a format
+	/// doesn't need to match the shader's input order.</summary>
+	public enum VertSemantic {
+		/// <summary>Invalid semantic, this is not a valid value for a component.</summary>
+		None         = 0,
+		/// <summary>Vertex position, in model space coordinates.</summary>
+		Position,
+		/// <summary>Direction the vertex is facing.</summary>
+		Normal,
+		/// <summary>Texture coordinates.</summary>
+		Texcoord,
+		/// <summary>Vertex color.</summary>
+		Color,
+		/// <summary>Tangent direction for normal mapping.</summary>
+		Tangent,
+		/// <summary>Binormal/bitangent direction for normal mapping.</summary>
+		Binormal,
+		/// <summary>Bone weights for skinning.</summary>
+		Blendweight,
+		/// <summary>Bone indices for skinning.</summary>
+		Blendindices,
+		/// <summary>Point size for point rendering.</summary>
+		Psize,
+	}
+
 	/// <summary>Culling is discarding an object from the render pipeline!
 	/// This enum describes how mesh faces get discarded on the graphics
 	/// card. With culling set to none, you can double the number of pixels

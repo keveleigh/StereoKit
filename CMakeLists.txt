@@ -305,7 +305,7 @@ if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
     NAME sk_renderer
     GITHUB_REPOSITORY StereoKit/sk_renderer
-    GIT_TAG v2026.7.8
+    GIT_TAG v2026.7.9
   )
 else()
   # For building directly with in-progress sk_renderer changes, point this to your
@@ -474,7 +474,9 @@ set(SK_SRC_SYSTEMS
   StereoKitC/systems/system.h
   StereoKitC/systems/system.cpp
   StereoKitC/systems/text.h
-  StereoKitC/systems/text.cpp  
+  StereoKitC/systems/text.cpp
+  StereoKitC/systems/vert_format.h
+  StereoKitC/systems/vert_format.cpp
   StereoKitC/systems/world.h
   StereoKitC/systems/world.cpp )
 
@@ -900,6 +902,8 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/demo_aliasing.cpp
     Examples/StereoKitCTest/demo_bvh.h
     Examples/StereoKitCTest/demo_bvh.cpp
+    Examples/StereoKitCTest/demo_custom_verts.h
+    Examples/StereoKitCTest/demo_custom_verts.cpp
     Examples/StereoKitCTest/demo_desktop.h
     Examples/StereoKitCTest/demo_desktop.cpp
     Examples/StereoKitCTest/demo_picker.h
@@ -954,7 +958,8 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/Shaders/skt_default_lighting.hlsl
     Examples/StereoKitCTest/Shaders/skt_light_only.hlsl
     Examples/StereoKitCTest/Shaders/skt_shadow.hlsl
-    Examples/StereoKitCTest/Shaders/skt_shadow_caster.hlsl)
+    Examples/StereoKitCTest/Shaders/skt_shadow_caster.hlsl
+    Examples/StereoKitCTest/Shaders/skt_vert_custom.hlsl)
 
   # Add source assets and compiled shaders to the app
   target_skapp_assets(StereoKitCTest ${CMAKE_CURRENT_BINARY_DIR}/shaders)
