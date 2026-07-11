@@ -225,8 +225,12 @@ namespace StereoKit
 		[return: MarshalAs(UnmanagedType.Bool)]
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mesh_get_keep_data(IntPtr mesh);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_data(IntPtr mesh, [In] Vertex[] in_arr_vertices, int vertex_count, [In] uint[] in_arr_indices, int index_count, MeshData flags, int priority);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_data_fmt(IntPtr mesh, [In] VertComponent[] in_arr_format, int component_count, IntPtr vertex_data, int vertex_count, [In] uint[] in_arr_indices, int index_count, MeshData flags, int priority);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_verts(IntPtr mesh, [In] Vertex[] in_arr_vertices, int vertex_count, [MarshalAs(UnmanagedType.Bool)] bool calculate_bounds);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_get_verts(IntPtr mesh, out IntPtr out_arr_vertices, out int out_vertex_count, Memory reference_mode);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_verts_fmt(IntPtr mesh, [In] VertComponent[] in_arr_format, int component_count, IntPtr vertex_data, int vertex_count, [MarshalAs(UnmanagedType.Bool)] bool calculate_bounds);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_get_verts_fmt(IntPtr mesh, out IntPtr out_arr_format, out int out_component_count, out IntPtr out_vertex_data, out int out_vertex_count, Memory reference_mode);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          mesh_fmt_stride([In] VertComponent[] in_arr_format, int component_count);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          mesh_get_vert_count(IntPtr mesh);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_set_inds(IntPtr mesh, [In] uint[] in_arr_indices, int index_count);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mesh_get_inds(IntPtr mesh, out IntPtr out_arr_indices, out int out_index_count, Memory reference_mode);
