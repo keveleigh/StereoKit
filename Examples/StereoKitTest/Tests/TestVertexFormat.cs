@@ -130,6 +130,7 @@ class TestVertexFormat : ITest
 
 		// A format change on a skinned mesh gets rejected, the mesh should
 		// still be readable with its original format.
+		Log.Warn("Expected error:");
 		mesh.SetVerts(new Vertex[] { new Vertex(Vec3.Zero, Vec3.Up) });
 		VertPosColor[] after = mesh.GetVerts<VertPosColor>();
 		return after != null && after.Length == verts.Length;
