@@ -169,6 +169,12 @@ backend_graphics_ backend_graphics_get() {
 }
 
 ///////////////////////////////////////////
+
+int32_t backend_vulkan_get_frame_fence_fd() {
+	return skr_renderer_frame_fence_fd();
+}
+
+///////////////////////////////////////////
 // Legacy D3D11 backend functions - always return null/0 since we're Vulkan-only now
 
 void    *backend_d3d11_get_d3d_device()           { return nullptr; }

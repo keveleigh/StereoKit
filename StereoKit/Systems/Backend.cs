@@ -324,6 +324,24 @@ namespace StereoKit
 			/// `eglCreateContext`.</summary>
 			public static IntPtr Context => NativeAPI.backend_opengl_egl_get_context();
 		}
+
+		/// <summary>When using Vulkan for rendering, this contains a number
+		/// of variables that may be useful for doing advanced rendering
+		/// tasks.</summary>
+		public static class Vulkan
+		{
+			/// <summary>Returns a sync file descriptor for the most recently
+			/// submitted frame's GPU work! Waiting on it (e.g. via
+			/// EGL_ANDROID_native_fence_sync) guarantees all rendering
+			/// submitted up to the last frame end has completed. Call from
+			/// StereoKit's main thread. The caller owns the descriptor and
+			/// must close it. Only functional on platforms and devices
+			/// supporting external fence export.</summary>
+			/// <returns>A sync file descriptor, or -1 when unsupported or no
+			/// frame has been submitted yet.</returns>
+			public static int GetFrameFenceFd()
+				=> NativeAPI.backend_vulkan_get_frame_fence_fd();
+		}
 		
 	}
 }
