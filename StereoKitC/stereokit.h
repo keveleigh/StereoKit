@@ -2338,7 +2338,6 @@ SK_API void                  render_screenshot     (const char *file_utf8, int32
 SK_API void                  render_screenshot_capture  (void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees, tex_format_ tex_format sk_default(tex_format_rgba32), void *context sk_default(nullptr));
 SK_API void                  render_screenshot_viewpoint(void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter sk_default(render_layer_all), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default(rect_t{}), tex_format_ tex_format sk_default(tex_format_rgba32), void* context sk_default(nullptr));
 SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
-SK_API void                  render_get_device     (void **device, void **context);
 SK_API render_list_t         render_get_primary_list(void);
 
 ///////////////////////////////////////////
@@ -3567,25 +3566,47 @@ typedef enum backend_graphics_ {
 	/*An invalid default value.*/
 	backend_graphics_none,
 	/*DirectX's Direct3D11 is used for rendering! This is used by default on
-	  Windows. (No longer supported)*/
+	  Windows. (No longer supported)
+	  Obsolete: StereoKit is now Vulkan-only; the D3D11 backend is no longer supported.*/
 	backend_graphics_d3d11,
 	/*OpenGL is used for rendering, using GLX (OpenGL Extension to the X Window
-	  System) for loading. This is used by default on Linux. (No longer supported)*/
+	  System) for loading. This is used by default on Linux. (No longer supported)
+	  Obsolete: StereoKit is now Vulkan-only; the OpenGL/GLX backend is no longer supported.*/
 	backend_graphics_opengl_glx,
 	/*OpenGL is used for rendering, using WGL (Windows Extensions to OpenGL)
 	  for loading. Native developers can configure SK to use this on Windows.
-	  (No longer supported)*/
+	  (No longer supported)
+	  Obsolete: StereoKit is now Vulkan-only; the OpenGL/WGL backend is no longer supported.*/
 	backend_graphics_opengl_wgl,
 	/*OpenGL ES is used for rendering, using EGL (EGL Native Platform Graphics
 	  Interface) for loading. This is used by default on Android, and native
-	  developers can configure SK to use this on Linux. (No longer supported)*/
+	  developers can configure SK to use this on Linux. (No longer supported)
+	  Obsolete: StereoKit is now Vulkan-only; the OpenGL ES/EGL backend is no longer supported.*/
 	backend_graphics_opengles_egl,
-	/*WebGL is used for rendering. This is used by default on Web.*/
+	/*WebGL is used for rendering. This is used by default on Web.
+	  (No longer supported)
+	  Obsolete: StereoKit is now Vulkan-only; the WebGL backend is no longer supported.*/
 	backend_graphics_webgl,
 	/*Vulkan is used for rendering, this works basically on every platform, and
 	  is the only backend StereoKit currently supports!*/
 	backend_graphics_vulkan,
 } backend_graphics_;
+
+/*Identifies a Vulkan queue family that StereoKit's Vulkan backend interacts
+  with. Use this with the queue accessors on Backend.Vulkan.*/
+typedef enum backend_vulkan_queue_ {
+	/*The primary graphics queue. This is the queue StereoKit submits all of
+	  its rendering work to, and the only queue with a handle currently
+	  available via backend_vulkan_get_queue.*/
+	backend_vulkan_queue_graphics,
+	/*A queue family suitable for transfer operations. StereoKit does not yet
+	  use a dedicated transfer queue, so no queue handle is available here yet,
+	  but the family index is provided for advanced interop.*/
+	backend_vulkan_queue_transfer,
+	/*A queue family suitable for Vulkan video decode. Not present on all
+	  devices, in which case the family index will be UINT32_MAX.*/
+	backend_vulkan_queue_video_decode,
+} backend_vulkan_queue_;
 
 typedef uint64_t openxr_handle_t;
 
@@ -3617,19 +3638,13 @@ SK_API void*             backend_android_get_jni_env  (void);
 
 SK_API backend_graphics_ backend_graphics_get                  (void);
 SK_API int32_t           backend_vulkan_get_frame_fence_fd     (void);
-SK_API void             *backend_d3d11_get_d3d_device          (void);
-SK_API void             *backend_d3d11_get_d3d_context         (void);
-SK_API void             *backend_d3d11_get_deferred_d3d_context(void);
-SK_API void             *backend_d3d11_get_deferred_mtx        (void);
-SK_API uint32_t          backend_d3d11_get_main_thread_id      (void);
-SK_API void             *backend_opengl_wgl_get_hdc            (void);
-SK_API void             *backend_opengl_wgl_get_hglrc          (void);
-SK_API void             *backend_opengl_glx_get_context        (void);
-SK_API void             *backend_opengl_glx_get_display        (void);
-SK_API void             *backend_opengl_glx_get_drawable       (void);
-SK_API void             *backend_opengl_egl_get_context        (void);
-SK_API void             *backend_opengl_egl_get_config         (void);
-SK_API void             *backend_opengl_egl_get_display        (void);
+SK_API void             *backend_vulkan_get_instance           (void);
+SK_API void             *backend_vulkan_get_physical_device    (void);
+SK_API void             *backend_vulkan_get_device             (void);
+SK_API void             *backend_vulkan_get_queue              (backend_vulkan_queue_ queue);
+SK_API uint32_t          backend_vulkan_get_queue_family_index (backend_vulkan_queue_ queue);
+SK_API void              backend_vulkan_queue_lock             (backend_vulkan_queue_ queue);
+SK_API void              backend_vulkan_queue_unlock           (backend_vulkan_queue_ queue);
 
 ///////////////////////////////////////////
 

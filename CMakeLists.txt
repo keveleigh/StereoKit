@@ -904,8 +904,6 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/demo_bvh.cpp
     Examples/StereoKitCTest/demo_custom_verts.h
     Examples/StereoKitCTest/demo_custom_verts.cpp
-    Examples/StereoKitCTest/demo_desktop.h
-    Examples/StereoKitCTest/demo_desktop.cpp
     Examples/StereoKitCTest/demo_picker.h
     Examples/StereoKitCTest/demo_picker.cpp
     Examples/StereoKitCTest/demo_mic.h
@@ -922,8 +920,6 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/demo_mixed_reality.cpp
     Examples/StereoKitCTest/demo_anchors.h
     Examples/StereoKitCTest/demo_anchors.cpp
-    Examples/StereoKitCTest/demo_windows.h
-    Examples/StereoKitCTest/demo_windows.cpp
     Examples/StereoKitCTest/demo_lines.h
     Examples/StereoKitCTest/demo_lines.cpp
     Examples/StereoKitCTest/demo_lighting.h
@@ -954,7 +950,6 @@ if (SK_BUILD_TESTS)
   skshaderc_compile_headers( StereoKitCTest
     ${CMAKE_BINARY_DIR}/shaders/
     "-e -O3 -f ${SK_SHADER_SVSL} ${SK_SHADER_VERBOSITY} -i ${CMAKE_CURRENT_SOURCE_DIR}/tools/include"
-    Examples/StereoKitCTest/Shaders/blit.hlsl
     Examples/StereoKitCTest/Shaders/skt_default_lighting.hlsl
     Examples/StereoKitCTest/Shaders/skt_light_only.hlsl
     Examples/StereoKitCTest/Shaders/skt_shadow.hlsl

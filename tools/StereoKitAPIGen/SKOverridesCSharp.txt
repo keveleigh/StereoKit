@@ -124,7 +124,7 @@ ui_scroll_ UIScroll
 
 # Structs with existing hand-written versions elsewhere
 @noimpl hand_joint_t sound_inst_t gradient_key_t sh_light_t
-@noimpl vert_component_t
+@noimpl vert_t vert_component_t
 
 # Functions with hand-written bindings in NativeAPI.Custom.cs
 # (none currently)

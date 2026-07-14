@@ -21,9 +21,9 @@ namespace StereoKit
 		/// the app.</summary>
 		public static BackendPlatform Platform => NativeAPI.backend_platform_get();
 
-		/// <summary>This describes the graphics API thatStereoKit is using for
-		/// rendering. StereoKit uses D3D11 for Windows platforms, and a flavor
-		/// of OpenGL for Linux, Android, and Web.</summary>
+		/// <summary>This describes the graphics API that StereoKit is using for
+		/// rendering. StereoKit is Vulkan-only, so this will report
+		/// <see cref="BackendGraphics.Vulkan"/> on all supported platforms.</summary>
 		public static BackendGraphics Graphics => NativeAPI.backend_graphics_get();
 
 		/// <summary>This class is NOT of general interest, unless you are
@@ -267,14 +267,15 @@ namespace StereoKit
 		/// <summary>When using Direct3D11 for rendering, this contains a
 		/// number of variables that may be useful for doing advanced rendering
 		/// tasks. This is the default rendering backend on Windows.</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the D3D11 backend is no longer supported. Use Backend.Vulkan instead.")]
 		public static class D3D11
 		{
 			/// <summary>This is the main `ID3D11Device*` StereoKit uses for
-			/// rendering.</summary>
-			public static IntPtr D3DDevice  => NativeAPI.backend_d3d11_get_d3d_device();
+			/// rendering. (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr D3DDevice  => default;
 			/// <summary>This is the main `ID3D11DeviceContext*` StereoKit uses
-			/// for rendering.</summary>
-			public static IntPtr D3DContext => NativeAPI.backend_d3d11_get_d3d_context();
+			/// for rendering. (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr D3DContext => default;
 		}
 
 		/// <summary>When using OpenGL with the WGL loader for rendering, this
@@ -282,31 +283,35 @@ namespace StereoKit
 		/// advanced rendering tasks. This is Windows only, and requires
 		/// gloabally defining SKG_FORCE_OPENGL when building the core
 		/// StereoKitC library.</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL/WGL backend is no longer supported. Use Backend.Vulkan instead.")]
 		public static class OpenGL_WGL
 		{
 			/// <summary>This is the Handle to Device Context `HDC` StereoKit
-			/// uses with `wglMakeCurrent`.</summary>
-			public static IntPtr HDC => NativeAPI.backend_opengl_wgl_get_hdc();
+			/// uses with `wglMakeCurrent`. (No longer supported, always returns
+			/// IntPtr.Zero)</summary>
+			public static IntPtr HDC => default;
 			/// <summary>This is the Handle to an OpenGL Rendering Context
-			/// `HGLRC` StereoKit uses with `wglMakeCurrent`.</summary>
-			public static IntPtr HGLRC => NativeAPI.backend_opengl_wgl_get_hglrc();
+			/// `HGLRC` StereoKit uses with `wglMakeCurrent`. (No longer
+			/// supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr HGLRC => default;
 		}
 
 		/// <summary>When using OpenGL with the GLX loader for rendering, this
 		/// contains a number of variables that may be useful for doing
 		/// advanced rendering tasks. This is the default rendering backend for
 		/// Linux.</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL/GLX backend is no longer supported. Use Backend.Vulkan instead.")]
 		public static class OpenGL_GLX
 		{
 			/// <summary>This is the `Display*` from X used to create the GLX
-			/// context.</summary>
-			public static IntPtr Display  => NativeAPI.backend_opengl_glx_get_display();
+			/// context. (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr Display  => default;
 			/// <summary>This is the `GLXContext` that StereoKit uses with
-			/// `glXMakeCurrent`</summary>
-			public static IntPtr Context  => NativeAPI.backend_opengl_glx_get_context();
+			/// `glXMakeCurrent` (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr Context  => default;
 			/// <summary>This is the `GLXDrawable` that StereoKit uses with
-			/// `glXMakeCurrent`.</summary>
-			public static IntPtr Drawable => NativeAPI.backend_opengl_glx_get_drawable();
+			/// `glXMakeCurrent`. (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr Drawable => default;
 		}
 
 		/// <summary>When using OpenGL ES with the EGL loader for rendering,
@@ -315,21 +320,75 @@ namespace StereoKit
 		/// Android, and Linux builds can be configured to use this with the
 		/// SK_LINUX_EGL cmake option when building the core StereoKitC
 		/// library.</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL ES/EGL backend is no longer supported. Use Backend.Vulkan instead.")]
 		public static class OpenGLES_EGL
 		{
 			/// <summary>This is the `EGLDisplay` StereoKit receives from
-			/// `eglGetDisplay`</summary>
-			public static IntPtr Display => NativeAPI.backend_opengl_egl_get_display();
+			/// `eglGetDisplay` (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr Display => default;
 			/// <summary>This is the `EGLContext` StereoKit receives from
-			/// `eglCreateContext`.</summary>
-			public static IntPtr Context => NativeAPI.backend_opengl_egl_get_context();
+			/// `eglCreateContext`. (No longer supported, always returns IntPtr.Zero)</summary>
+			public static IntPtr Context => default;
 		}
 
 		/// <summary>When using Vulkan for rendering, this contains a number
 		/// of variables that may be useful for doing advanced rendering
-		/// tasks.</summary>
+		/// tasks. Vulkan is StereoKit's only rendering backend, so these are
+		/// valid on all supported platforms after SK.Initialize.</summary>
 		public static class Vulkan
 		{
+			/// <summary>The `VkInstance` StereoKit created (or was given, when
+			/// running under OpenXR) for rendering. Valid after SK.Initialize.
+			/// </summary>
+			public static IntPtr Instance => NativeAPI.backend_vulkan_get_instance();
+			/// <summary>The `VkPhysicalDevice` StereoKit is rendering with.
+			/// Valid after SK.Initialize.</summary>
+			public static IntPtr PhysicalDevice => NativeAPI.backend_vulkan_get_physical_device();
+			/// <summary>The `VkDevice` StereoKit created (or was given, when
+			/// running under OpenXR) for rendering. Valid after SK.Initialize.
+			/// </summary>
+			public static IntPtr Device => NativeAPI.backend_vulkan_get_device();
+
+			/// <summary>Gets the `VkQueue` StereoKit uses for the given queue
+			/// family. Currently only <see cref="BackendVulkanQueue.Graphics"/>
+			/// has a handle available; the others return IntPtr.Zero until
+			/// StereoKit makes real use of them. If you submit work to this
+			/// queue, you MUST guard it with <see cref="QueueLock"/> /
+			/// <see cref="QueueUnlock"/>, since StereoKit shares it across
+			/// threads.</summary>
+			/// <param name="queue">Which queue family to retrieve the queue
+			/// for.</param>
+			/// <returns>A `VkQueue` handle, or IntPtr.Zero if no queue handle is
+			/// available for that family.</returns>
+			public static IntPtr Queue(BackendVulkanQueue queue)
+				=> NativeAPI.backend_vulkan_get_queue(queue);
+
+			/// <summary>Gets the queue family index StereoKit uses for the given
+			/// queue family. This is the value you'd use when creating command
+			/// pools or performing queue family ownership transfers.</summary>
+			/// <param name="queue">Which queue family to look up.</param>
+			/// <returns>The Vulkan queue family index, or uint.MaxValue if that
+			/// family is not available on this device (for example, video
+			/// decode).</returns>
+			public static uint QueueFamilyIndex(BackendVulkanQueue queue)
+				=> NativeAPI.backend_vulkan_get_queue_family_index(queue);
+
+			/// <summary>Locks the mutex StereoKit uses to guard the given queue
+			/// family, so you can safely submit work to a queue StereoKit also
+			/// uses. Always pair this with <see cref="QueueUnlock"/>. Note that
+			/// queue families that resolve to the same index share a single
+			/// lock, so don't nest locks across two families that may
+			/// alias.</summary>
+			/// <param name="queue">Which queue family's lock to acquire.</param>
+			public static void QueueLock(BackendVulkanQueue queue)
+				=> NativeAPI.backend_vulkan_queue_lock(queue);
+
+			/// <summary>Releases the queue family lock acquired via
+			/// <see cref="QueueLock"/>.</summary>
+			/// <param name="queue">Which queue family's lock to release.</param>
+			public static void QueueUnlock(BackendVulkanQueue queue)
+				=> NativeAPI.backend_vulkan_queue_unlock(queue);
+
 			/// <summary>Returns a sync file descriptor for the most recently
 			/// submitted frame's GPU work! Waiting on it (e.g. via
 			/// EGL_ANDROID_native_fence_sync) guarantees all rendering
