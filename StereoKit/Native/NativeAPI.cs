@@ -927,6 +927,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BackendXRType backend_xr_get_type();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BackendPlatform backend_platform_get();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BackendGraphics backend_graphics_get();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          backend_vulkan_get_frame_fence_fd();
 
 		///////////////////////////////////////////
 

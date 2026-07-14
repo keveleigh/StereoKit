@@ -3616,6 +3616,7 @@ SK_API void*             backend_android_get_activity (void);
 SK_API void*             backend_android_get_jni_env  (void);
 
 SK_API backend_graphics_ backend_graphics_get                  (void);
+SK_API int32_t           backend_vulkan_get_frame_fence_fd     (void);
 SK_API void             *backend_d3d11_get_d3d_device          (void);
 SK_API void             *backend_d3d11_get_d3d_context         (void);
 SK_API void             *backend_d3d11_get_deferred_d3d_context(void);
