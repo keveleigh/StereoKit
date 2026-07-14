@@ -1624,6 +1624,8 @@ SK_API const char*  tex_get_id              (const tex_t texture);
 SK_API void         tex_set_fallback        (tex_t texture, tex_t fallback);
 SK_API void         tex_set_surface         (tex_t texture, void *native_surface, tex_type_ type, int64_t native_fmt, int32_t width, int32_t height, int32_t surface_count, int32_t multisample sk_default(1), bool32_t owned sk_default(true));
 SK_API void*        tex_get_surface         (tex_t texture);
+SK_API tex_t        tex_create_from_hardware_buffer(void *hardware_buffer, bool32_t owns_buffer sk_default(false));
+SK_API void*        tex_get_hardware_buffer (tex_t texture);
 SK_API void         tex_addref              (tex_t texture);
 SK_API void         tex_release             (tex_t texture);
 SK_API asset_state_ tex_asset_state         (const tex_t texture);

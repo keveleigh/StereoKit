@@ -971,6 +971,57 @@ void* tex_get_surface(tex_t texture) {
 
 ///////////////////////////////////////////
 
+tex_t tex_create_from_hardware_buffer(void *hardware_buffer, bool32_t owns_buffer) {
+#if defined(SK_OS_ANDROID)
+	if (hardware_buffer == nullptr) return nullptr;
+	if (!skr_is_capable(skr_capability_external_ahb)) {
+		log_warn("tex_create_from_hardware_buffer: AHardwareBuffer import is not supported on this device!");
+		return nullptr;
+	}
+
+	tex_t result = tex_create(tex_type_image_nomips, tex_format_none);
+
+	skr_tex_external_ahb_info_t info = {};
+	info.hardware_buffer = hardware_buffer;
+	info.format          = skr_tex_fmt_none;
+	info.sampler         = tex_get_skr_sampler(result);
+	info.owns_buffer     = owns_buffer;
+
+	if (skr_tex_create_external_ahb(info, &result->gpu_tex) == skr_err_success) {
+		skr_vec3i_t size = skr_tex_get_size(&result->gpu_tex);
+		result->width    = size.x;
+		result->height   = size.y;
+		result->format   = (tex_format_)skr_tex_get_format(&result->gpu_tex);
+	}
+
+	result->header.state = skr_tex_is_valid(&result->gpu_tex)
+		? asset_state_loaded
+		: asset_state_error;
+	tex_set_fallback(result, result->header.state <= 0
+		? _tex_get_error_fallback(result)
+		: nullptr);
+	return result;
+#else
+	(void)hardware_buffer;
+	(void)owns_buffer;
+	return nullptr;
+#endif
+}
+
+///////////////////////////////////////////
+
+void* tex_get_hardware_buffer(tex_t texture) {
+#if defined(SK_OS_ANDROID)
+	assets_block_until(&texture->header, asset_state_loaded);
+	return texture->gpu_tex.ahb_handle;
+#else
+	(void)texture;
+	return nullptr;
+#endif
+}
+
+///////////////////////////////////////////
+
 void tex_set_fallback(tex_t texture, tex_t fallback) {
 	if (texture->header.state >= asset_state_loaded && fallback != nullptr) return;
 
