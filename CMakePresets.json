@@ -235,7 +235,7 @@
     {
       "name":        "Linux_x64_Debug_Fast",
       "inherits":    ["Linux_x64_Debug", "Fast"],
-      "binaryDir":   "${sourceDir}/bin/intermediate/Linux_x64_Fast"
+      "binaryDir":   "${sourceDir}/bin/intermediate/Linux_x64_Debug_Fast"
     },
     {
       "name":        "Linux_Arm64",
