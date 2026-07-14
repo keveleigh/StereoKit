@@ -2154,23 +2154,45 @@ namespace StereoKit
 		None,
 		/// <summary>DirectX's Direct3D11 is used for rendering! This is used by default on
 		/// Windows. (No longer supported)</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the D3D11 backend is no longer supported.")]
 		D3D11,
 		/// <summary>OpenGL is used for rendering, using GLX (OpenGL Extension to the X Window
 		/// System) for loading. This is used by default on Linux. (No longer supported)</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL/GLX backend is no longer supported.")]
 		OpenGL_GLX,
 		/// <summary>OpenGL is used for rendering, using WGL (Windows Extensions to OpenGL)
 		/// for loading. Native developers can configure SK to use this on Windows.
 		/// (No longer supported)</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL/WGL backend is no longer supported.")]
 		OpenGL_WGL,
 		/// <summary>OpenGL ES is used for rendering, using EGL (EGL Native Platform Graphics
 		/// Interface) for loading. This is used by default on Android, and native
 		/// developers can configure SK to use this on Linux. (No longer supported)</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the OpenGL ES/EGL backend is no longer supported.")]
 		OpenGLES_EGL,
-		/// <summary>WebGL is used for rendering. This is used by default on Web.</summary>
+		/// <summary>WebGL is used for rendering. This is used by default on Web.
+		/// (No longer supported)</summary>
+		[Obsolete("StereoKit is now Vulkan-only; the WebGL backend is no longer supported.")]
 		WebGL,
 		/// <summary>Vulkan is used for rendering, this works basically on every platform, and
 		/// is the only backend StereoKit currently supports!</summary>
 		Vulkan,
+	}
+
+	/// <summary>Identifies a Vulkan queue family that StereoKit's Vulkan backend interacts
+	/// with. Use this with the queue accessors on Backend.Vulkan.</summary>
+	public enum BackendVulkanQueue {
+		/// <summary>The primary graphics queue. This is the queue StereoKit submits all of
+		/// its rendering work to, and the only queue with a handle currently
+		/// available via backend_vulkan_get_queue.</summary>
+		Graphics,
+		/// <summary>A queue family suitable for transfer operations. StereoKit does not yet
+		/// use a dedicated transfer queue, so no queue handle is available here yet,
+		/// but the family index is provided for advanced interop.</summary>
+		Transfer,
+		/// <summary>A queue family suitable for Vulkan video decode. Not present on all
+		/// devices, in which case the family index will be UINT32_MAX.</summary>
+		VideoDecode,
 	}
 
 	/// <summary>The log tool will write to the console with annotations for console

@@ -16,8 +16,6 @@ using namespace sk;
 #include "demo_draw.h"
 #include "demo_envmap.h"
 #include "demo_shadows.h"
-#include "demo_windows.h"
-#include "demo_desktop.h"
 #include "demo_bvh.h"
 #include "demo_aliasing.h"
 #include "demo_custom_verts.h"
@@ -108,19 +106,6 @@ scene_t demos[] = {
 		demo_mixed_reality_update,
 		demo_mixed_reality_shutdown,
 	},
-#if defined(_WIN32)
-	{
-		"Windows",
-		demo_windows_init,
-		demo_windows_update,
-		demo_windows_shutdown,
-	}, {
-		"Desktop",
-		demo_desktop_init,
-		demo_desktop_update,
-		demo_desktop_shutdown,
-	}
-#endif
 };
 
 

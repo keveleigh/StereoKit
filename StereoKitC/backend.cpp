@@ -175,24 +175,44 @@ int32_t backend_vulkan_get_frame_fence_fd() {
 }
 
 ///////////////////////////////////////////
-// Legacy D3D11 backend functions - always return null/0 since we're Vulkan-only now
 
-void    *backend_d3d11_get_d3d_device()           { return nullptr; }
-void    *backend_d3d11_get_d3d_context()          { return nullptr; }
-void    *backend_d3d11_get_deferred_d3d_context() { return nullptr; }
-void    *backend_d3d11_get_deferred_mtx()         { return nullptr; }
-uint32_t backend_d3d11_get_main_thread_id()       { return 0; }
+void *backend_vulkan_get_instance       () { return skr_get_vk_instance       (); }
+void *backend_vulkan_get_physical_device() { return skr_get_vk_physical_device(); }
+void *backend_vulkan_get_device         () { return skr_get_vk_device         (); }
 
 ///////////////////////////////////////////
-// Legacy OpenGL backend functions - always return null since we're Vulkan-only now
 
-void *backend_opengl_wgl_get_hdc()     { return nullptr; }
-void *backend_opengl_wgl_get_hglrc()   { return nullptr; }
-void *backend_opengl_glx_get_context() { return nullptr; }
-void *backend_opengl_glx_get_display() { return nullptr; }
-void *backend_opengl_glx_get_drawable(){ return nullptr; }
-void *backend_opengl_egl_get_context() { return nullptr; }
-void *backend_opengl_egl_get_config()  { return nullptr; }
-void *backend_opengl_egl_get_display() { return nullptr; }
+void *backend_vulkan_get_queue(backend_vulkan_queue_ queue) {
+	switch (queue) {
+	// Only the graphics queue currently has a handle available. Transfer and
+	// video decode expose family indices only, until StereoKit makes real use
+	// of them.
+	case backend_vulkan_queue_graphics: return skr_get_vk_graphics_queue();
+	default:                            return nullptr;
+	}
+}
+
+///////////////////////////////////////////
+
+uint32_t backend_vulkan_get_queue_family_index(backend_vulkan_queue_ queue) {
+	switch (queue) {
+	case backend_vulkan_queue_graphics:     return skr_get_vk_graphics_queue_family     ();
+	case backend_vulkan_queue_transfer:     return skr_get_vk_transfer_queue_family     ();
+	case backend_vulkan_queue_video_decode: return skr_get_vk_video_decode_queue_family ();
+	default:                                return UINT32_MAX;
+	}
+}
+
+///////////////////////////////////////////
+
+void backend_vulkan_queue_lock(backend_vulkan_queue_ queue) {
+	skr_vk_queue_lock(backend_vulkan_get_queue_family_index(queue));
+}
+
+///////////////////////////////////////////
+
+void backend_vulkan_queue_unlock(backend_vulkan_queue_ queue) {
+	skr_vk_queue_unlock(backend_vulkan_get_queue_family_index(queue));
+}
 
 }

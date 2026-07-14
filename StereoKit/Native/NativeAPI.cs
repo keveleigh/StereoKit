@@ -656,7 +656,6 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_screenshot_capture([MarshalAs(UnmanagedType.FunctionPtr)] RenderOnScreenshotCallback render_on_screenshot_callback, Pose viewpoint, int width, int height, float field_of_view_degrees, TexFormat tex_format, IntPtr context);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_screenshot_viewpoint([MarshalAs(UnmanagedType.FunctionPtr)] RenderOnScreenshotCallback render_on_screenshot_callback, Matrix camera, Matrix projection, int width, int height, RenderLayer layer_filter, RenderClear clear, Rect viewport, TexFormat tex_format, IntPtr context);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_to(IntPtr to_rendertarget, int to_target_index, [In] Matrix[] in_arr_cameras, [In] Matrix[] in_arr_projections, int view_count, RenderLayer layer_filter, int material_variant, RenderClear clear, Rect viewport);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         render_get_device(IntPtr device, IntPtr context);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       render_get_primary_list();
 
 		///////////////////////////////////////////
@@ -928,6 +927,13 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BackendPlatform backend_platform_get();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern BackendGraphics backend_graphics_get();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          backend_vulkan_get_frame_fence_fd();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_vulkan_get_instance();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_vulkan_get_physical_device();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_vulkan_get_device();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_vulkan_get_queue(BackendVulkanQueue queue);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern uint         backend_vulkan_get_queue_family_index(BackendVulkanQueue queue);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         backend_vulkan_queue_lock(BackendVulkanQueue queue);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         backend_vulkan_queue_unlock(BackendVulkanQueue queue);
 
 		///////////////////////////////////////////
 
@@ -956,25 +962,6 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_android_get_java_vm();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_android_get_activity();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_android_get_jni_env();
-
-		///////////////////////////////////////////
-
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_d3d11_get_d3d_device();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_d3d11_get_d3d_context();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_d3d11_get_deferred_d3d_context();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_d3d11_get_deferred_mtx();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern uint         backend_d3d11_get_main_thread_id();
-
-		///////////////////////////////////////////
-
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_wgl_get_hdc();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_wgl_get_hglrc();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_glx_get_context();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_glx_get_display();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_glx_get_drawable();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_egl_get_context();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_egl_get_config();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_opengl_egl_get_display();
 
 		///////////////////////////////////////////
 
