@@ -13,6 +13,20 @@ namespace StereoKit
 		/// of the user-defined callbacks.</summary>
 		private static Queue<RenderOnScreenshotCallback> _renderCaptureCallbacks;
 
+		// Wrap a user screenshot callback in a native-compatible delegate, queued
+		// so the GC can't collect it before the native side fires it.
+		private static RenderOnScreenshotCallback QueueScreenshotCallback(ScreenshotCallback onScreenshot)
+		{
+			if (_renderCaptureCallbacks is null) _renderCaptureCallbacks = new Queue<RenderOnScreenshotCallback>();
+			RenderOnScreenshotCallback native = (IntPtr data, TexFormat format, int w, int h, IntPtr context) =>
+			{
+				onScreenshot.Invoke(data, format, w, h);
+				_ = _renderCaptureCallbacks.Dequeue();
+			};
+			_renderCaptureCallbacks.Enqueue(native);
+			return native;
+		}
+
 		/// <summary>Set a cubemap skybox texture for rendering a background! This is only visible on Opaque
 		/// displays, since transparent displays have the real world behind them already! StereoKit has a
 		/// a default procedurally generated skybox. You can load one with `Tex.FromEquirectangular`, 
@@ -391,8 +405,8 @@ namespace StereoKit
 		/// thread! You can use the color data directly by saving/processing it
 		/// inside your callback, or you can keep the data alive for as long as
 		/// it is referenced.</summary>
-		/// <param name="onScreenshot">Outputs a reference to the color data
-		/// and its length which represent the current scene from a requested
+		/// <param name="onScreenshot">A callback that receives the captured
+		/// pixel data, its format, and its dimensions for the requested
 		/// viewpoint.</param>
 		/// <param name="from">Viewpoint location.</param>
 		/// <param name="at">Direction the viewpoint is looking at.</param>
@@ -404,16 +418,7 @@ namespace StereoKit
 		/// degrees.</param>
 		/// <param name="texFormat">The pixel format of the color data.</param>
 		public static void Screenshot(ScreenshotCallback onScreenshot, Vec3 from, Vec3 at, int width, int height, float fieldOfViewDegrees = 90, TexFormat texFormat = TexFormat.Rgba32)
-		{
-			if (_renderCaptureCallbacks is null) _renderCaptureCallbacks = new Queue<RenderOnScreenshotCallback>();
-			RenderOnScreenshotCallback renderCaptureCallback = (IntPtr dataPtr, int w, int h, IntPtr context) =>
-			{
-				onScreenshot.Invoke(dataPtr, w, h);
-				_ = _renderCaptureCallbacks.Dequeue();
-			};
-			_renderCaptureCallbacks.Enqueue(renderCaptureCallback);
-			NativeAPI.render_screenshot_capture(renderCaptureCallback, Pose.LookAt(from, at), width, height, fieldOfViewDegrees, texFormat, IntPtr.Zero);
-		}
+			=> NativeAPI.render_screenshot_capture(QueueScreenshotCallback(onScreenshot), Pose.LookAt(from, at), width, height, fieldOfViewDegrees, texFormat, IntPtr.Zero);
 
 		/// <summary>Schedules a screenshot for the end of the frame! The view
 		/// will be rendered from the given position at the given point, with a
@@ -422,8 +427,8 @@ namespace StereoKit
 		/// thread! You can use the color data directly by saving/processing it
 		/// inside your callback, or you can keep the data alive for as long as
 		/// it is referenced.</summary>
-		/// <param name="onScreenshot">Outputs a reference to the color data
-		/// and its length which represent the current scene from a requested
+		/// <param name="onScreenshot">A callback that receives the captured
+		/// pixel data, its format, and its dimensions for the requested
 		/// viewpoint.</param>
 		/// <param name="camera">A TRS matrix representing the location and
 		/// orientation of the camera. This matrix gets inverted later on, so
@@ -442,16 +447,7 @@ namespace StereoKit
 		/// surface!</param>
 		/// <param name="texFormat">The pixel format of the color data.</param>
 		public static void Screenshot(ScreenshotCallback onScreenshot, Matrix camera, Matrix projection, int width, int height, RenderLayer layerFilter = RenderLayer.All, RenderClear clear = RenderClear.All, Rect viewport = default(Rect), TexFormat texFormat = TexFormat.Rgba32)
-		{
-			if (_renderCaptureCallbacks is null) _renderCaptureCallbacks = new Queue<RenderOnScreenshotCallback>();
-			RenderOnScreenshotCallback renderCaptureCallback = (IntPtr dataPtr, int w, int h, IntPtr context) =>
-			{
-				onScreenshot.Invoke(dataPtr, w, h);
-				_ = _renderCaptureCallbacks.Dequeue();
-			};
-			_renderCaptureCallbacks.Enqueue(renderCaptureCallback);
-			NativeAPI.render_screenshot_viewpoint(renderCaptureCallback, camera, projection, width, height, layerFilter, clear, viewport, texFormat, IntPtr.Zero);
-		}
+			=> NativeAPI.render_screenshot_viewpoint(QueueScreenshotCallback(onScreenshot), camera, projection, width, height, layerFilter, clear, viewport, texFormat, IntPtr.Zero);
 
 		/// <summary>This renders the current scene to the indicated 
 		/// rendertarget texture, from the specified viewpoint. This call 

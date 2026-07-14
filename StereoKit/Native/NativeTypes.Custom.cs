@@ -420,20 +420,23 @@ namespace StereoKit
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 	internal delegate void XRPollEventCallback(IntPtr context, IntPtr XrEventDataBuffer);
 
-	/// <summary>A callback for receiving the color data of a screenshot, instead
+	/// <summary>A callback for receiving the pixel data of a screenshot, instead
 	/// of saving it directly to a file.</summary>
-	/// <param name="data">The pointer to the color data. A fare warning that the
-	/// memory *will* be freed once this callback completes, so if you need to
-	/// reference this data elsewhere, be sure to store a copy of it!</param>
+	/// <param name="data">The pointer to the pixel data, laid out according to
+	/// format. A fare warning that the memory *will* be freed once this callback
+	/// completes, so if you need to reference this data elsewhere, be sure to
+	/// store a copy of it!</param>
+	/// <param name="format">The pixel format of the data, matching the texFormat
+	/// requested when the screenshot was scheduled.</param>
 	/// <param name="width">The width of the image.</param>
 	/// <param name="height">The height of the image.</param>
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-	public delegate void ScreenshotCallback(IntPtr data, int width, int height);
+	public delegate void ScreenshotCallback(IntPtr data, TexFormat format, int width, int height);
 
 	// Internal callback delegate for render_screenshot_capture/viewpoint
-	// Takes IntPtr for color buffer (color32*) since it's a pointer to array data
+	// Takes IntPtr for the pixel buffer since it's a pointer to array data
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-	internal delegate void RenderOnScreenshotCallback(IntPtr color_buffer, int width, int height, IntPtr context);
+	internal delegate void RenderOnScreenshotCallback(IntPtr data, TexFormat format, int width, int height, IntPtr context);
 
 	// Callback for platform_file_picker - uses IntPtr for confirmed and filename
 	// because the wrapper handles manual string conversion from pointer+length

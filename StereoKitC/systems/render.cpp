@@ -78,7 +78,7 @@ struct render_blit_data_t {
 	float pixel_height;
 };
 struct render_screenshot_t {
-	void        (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context);
+	void        (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context);
 	void*         context;
 	matrix        camera;
 	matrix        projection;
@@ -92,8 +92,9 @@ struct render_screenshot_t {
 
 // Pending async readback for screenshot
 struct render_pending_readback_t {
-	void               (*callback)(color32* color_buffer, int32_t width, int32_t height, void* context);
+	void               (*callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context);
 	void*                context;
+	tex_format_          format;
 	int32_t              width;
 	int32_t              height;
 	tex_t                color_surface;  // MSAA color target (kept alive until readback completes)
@@ -207,7 +208,7 @@ static render_state_t local = {};
 
 ///////////////////////////////////////////
 
-void render_save_to_file(color32* color_buffer, int width, int height, void* context);
+void render_save_to_file(void* data, tex_format_ format, int width, int height, void* context);
 void render_list_add    (const render_item_t *item);
 void render_list_add_to (render_list_t list, const render_item_t *item);
 
@@ -260,6 +261,20 @@ void render_shutdown() {
 	render_list_release(local.list_primary);
 	local.list_stack        .free();
 	local.screenshot_list   .free();
+
+	// Drain in-flight readbacks so their GPU resources aren't leaked at
+	// shutdown - blocks on each future, unlike the per-frame poll path.
+	for (int32_t i = 0; i < local.pending_readbacks.count; i++) {
+		render_pending_readback_t* pending = &local.pending_readbacks[i];
+		skr_future_wait(&pending->readback.future);
+
+		pending->callback(pending->readback.data, pending->format, pending->width, pending->height, pending->context);
+
+		skr_tex_readback_destroy(&pending->readback);
+		tex_release(pending->resolve_tex);
+		tex_release(pending->depth_surface);
+		tex_release(pending->color_surface);
+	}
 	local.pending_readbacks .free();
 
 	// Release refs held by any pending actions before freeing the list
@@ -893,15 +908,9 @@ void render_check_pending_readbacks() {
 			continue; // Not ready yet
 		}
 
-		// Readback is complete - copy data and invoke callback
-		size_t   size   = sizeof(color32) * pending->width * pending->height;
-		color32* buffer = (color32*)sk_malloc(size);
-		size_t copy_size = (pending->readback.size < size) ? pending->readback.size : size;
-		memcpy(buffer, pending->readback.data, copy_size);
-
-		// Invoke user callback
-		pending->callback(buffer, pending->width, pending->height, pending->context);
-		sk_free(buffer);
+		// Readback is complete - hand the mapped data straight to the callback,
+		// which reads it according to format. Valid only until we destroy it.
+		pending->callback(pending->readback.data, pending->format, pending->width, pending->height, pending->context);
 
 		// Cleanup
 		skr_tex_readback_destroy(&pending->readback);
@@ -975,6 +984,7 @@ void render_check_screenshots() {
 		render_pending_readback_t pending = {};
 		pending.callback      = local.screenshot_list[i].render_on_screenshot_callback;
 		pending.context       = local.screenshot_list[i].context;
+		pending.format        = local.screenshot_list[i].tex_format;
 		pending.width         = w;
 		pending.height        = h;
 		pending.color_surface = color_surface;
@@ -1089,12 +1099,18 @@ struct screenshot_ctx_t {
 	int32_t quality;
 };
 
-void render_save_to_file(color32* color_buffer, int width, int height, void* context) {
+void render_save_to_file(void* data, tex_format_ format, int width, int height, void* context) {
+	// srgb and linear rgba32 share the byte layout stb writes as-is; bgra would
+	// come out with R/B swapped, and wider/other formats aren't 4x8-bit RGBA.
 	screenshot_ctx_t *ctx = (screenshot_ctx_t*)context;
-	if (string_endswith(ctx->filename, ".png", false)) {
-		stbi_write_png(ctx->filename, width, height, 4, color_buffer, 0);
+	if (format == tex_format_rgba32 || format == tex_format_rgba32_linear) {
+		if (string_endswith(ctx->filename, ".png", false)) {
+			stbi_write_png(ctx->filename, width, height, 4, data, 0);
+		} else {
+			stbi_write_jpg(ctx->filename, width, height, 4, data, ctx->quality);
+		}
 	} else {
-		stbi_write_jpg(ctx->filename, width, height, 4, color_buffer, ctx->quality);
+		log_errf("render screenshot to file requires an rgba32 format, got format %d", format);
 	}
 	sk_free(ctx->filename);
 	sk_free(ctx);
@@ -1107,22 +1123,22 @@ void render_screenshot(const char* file_utf8, int32_t file_quality_100, pose_t v
 	ctx->filename = string_copy(file_utf8);
 	ctx->quality  = file_quality_100;
 
-	matrix view = pose_matrix_inv(viewpoint);
-	matrix proj = matrix_perspective(fov_degrees, (float)width / height, local.clip_planes.x, local.clip_planes.y);
-	local.screenshot_list.add(render_screenshot_t{ render_save_to_file, ctx, view, proj, rect_t{}, width, height, render_layer_all, render_clear_all, tex_format_rgba32 });
+	// File output is just a capture into the built-in file writer.
+	render_screenshot_capture(render_save_to_file, viewpoint, width, height, fov_degrees, tex_format_rgba32, ctx);
 }
 
 ///////////////////////////////////////////
 
-void render_screenshot_capture(void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float fov_degrees, tex_format_ tex_format, void* context) {
-	matrix view = pose_matrix_inv(viewpoint);
+void render_screenshot_capture(void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float fov_degrees, tex_format_ tex_format, void* context) {
+	// A pose+fov is just a viewpoint whose camera is the pose matrix (viewpoint
+	// re-inverts it) and a perspective projection, full-frame and all-layers.
 	matrix proj = matrix_perspective(fov_degrees, (float)width / height, local.clip_planes.x, local.clip_planes.y);
-	local.screenshot_list.add(render_screenshot_t{ render_on_screenshot_callback, context, view, proj, rect_t{}, width, height, render_layer_all, render_clear_all, tex_format });
+	render_screenshot_viewpoint(render_on_screenshot_callback, pose_matrix(viewpoint), proj, width, height, render_layer_all, render_clear_all, rect_t{}, tex_format, context);
 }
 
 ///////////////////////////////////////////
 
-void render_screenshot_viewpoint(void (*render_on_screenshot_callback)(color32* color_buffer, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter, render_clear_ clear, rect_t viewport, tex_format_ tex_format, void* context) {
+void render_screenshot_viewpoint(void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter, render_clear_ clear, rect_t viewport, tex_format_ tex_format, void* context) {
 	matrix inv_cam = matrix_invert(camera);
 	local.screenshot_list.add(render_screenshot_t{ render_on_screenshot_callback, context, inv_cam, projection, viewport, width, height, layer_filter, clear, tex_format });
 }
