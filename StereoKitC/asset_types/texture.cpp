@@ -1159,9 +1159,16 @@ void _tex_set_color_arr(tex_t texture, int32_t width, int32_t height, void **arr
 		return;
 	}
 
+	// Texture creation caps the sample count to the GPU's max, so compare
+	// against the capped value, or we'd rebuild the texture on every call.
+	int32_t max_msaa = skr_get_max_msaa_samples();
+	if (multisample > max_msaa) multisample = max_msaa;
+	if (multisample < 1)        multisample = 1;
+
 	bool dynamic        = texture->type & tex_type_dynamic;
 	bool different_size = texture->width != width || texture->height != height || (int32_t)texture->gpu_tex.layer_count != array_count;
-	if (!different_size && (array_data == nullptr || *array_data == nullptr))
+	bool different_msaa = skr_tex_is_valid(&texture->gpu_tex) && skr_tex_get_multisample(&texture->gpu_tex) != multisample;
+	if (!different_size && !different_msaa && (array_data == nullptr || *array_data == nullptr))
 		return;
 
 	// Build texture data descriptor from array_data
@@ -1204,8 +1211,8 @@ void _tex_set_color_arr(tex_t texture, int32_t width, int32_t height, void **arr
 		tex_data.row_pitch   = 0; // tightly packed
 	}
 
-	if (!skr_tex_is_valid(&texture->gpu_tex) || different_size || (!different_size && !dynamic)) {
-		if (!different_size && !dynamic)
+	if (!skr_tex_is_valid(&texture->gpu_tex) || different_size || different_msaa || (!different_size && !dynamic)) {
+		if (!different_size && !different_msaa && !dynamic)
 			texture->type &= tex_type_dynamic;
 
 		// Convert tex_type_ to skr_tex_flags_

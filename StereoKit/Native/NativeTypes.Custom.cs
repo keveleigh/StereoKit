@@ -95,7 +95,8 @@ namespace StereoKit
 		/// <summary>If you know in advance that you need this feature, this
 		/// setting allows you to set `Renderer.Multisample` before
 		/// initialization. This avoids creating and discarding a large and
-		/// unnecessary swapchain object. Default value is 1.</summary>
+		/// unnecessary swapchain object. Leave this at 0 to use the default,
+		/// which is 4.</summary>
 		public int renderMultisample;
 
 		/// <summary>Set the behavior of StereoKit's initial origin. Default
