@@ -70,7 +70,8 @@
 	<Target Name="StereoKit_BuildNative" BeforeTargets="BeforeBuild;StereoKit_Properties">
 		<PropertyGroup>
 			<SKSDKPresetFast Condition="'$(Configuration)'=='Debug'">_Fast</SKSDKPresetFast>
-			<SKSDKPreset>$(SKSDKBuildOS)_$(SKSDKBuildModePreset)_$(Configuration)$(SKSDKPresetFast)</SKSDKPreset>
+			<!-- Overridable, so a cross-compile can pick a preset that doesn't follow the OS name, like MinGW. -->
+			<SKSDKPreset Condition="'$(SKSDKPreset)'==''">$(SKSDKBuildOS)_$(SKSDKBuildModePreset)_$(Configuration)$(SKSDKPresetFast)</SKSDKPreset>
 			<!-- Windows uses multi-config generator (MSVC), others use single-config (Ninja) -->
 			<SKSDKCacheFile Condition="'$(SKSDKBuildOS)'=='Win32'">$(SKSDKFolder)\bin\intermediate\$(SKSDKBuildOS)_$(SKSDKBuildModePreset)$(SKSDKPresetFast)\CMakeCache.txt</SKSDKCacheFile>
 			<SKSDKCacheFile Condition="'$(SKSDKCacheFile)'==''"   >$(SKSDKFolder)\bin\intermediate\$(SKSDKBuildOS)_$(SKSDKBuildModePreset)_$(Configuration)$(SKSDKPresetFast)\CMakeCache.txt</SKSDKCacheFile>
