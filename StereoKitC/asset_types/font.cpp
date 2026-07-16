@@ -753,6 +753,14 @@ font_t font_create_family(const char* font_family) {
 	free(info);
 	tokens.free();
 
+	// A family asks for _a_ font rather than a specific file, so nothing
+	// resolving is a reason to fall back to the builtin, not to fail.
+	if (result->font_ids.count == 0) {
+		log_infof("Font family '%s' matched no valid fonts, using the builtin font.", font_family);
+		int32_t id = font_source_add_token({ {}, fam_kind_builtin });
+		if (id >= 0) result->font_ids.add(id);
+	}
+
 	if (!font_setup(result)) {
 		font_release(result);
 		return nullptr;

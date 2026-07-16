@@ -185,7 +185,9 @@ elseif(WIN32)
     list(APPEND WINDOWS_LIBS WindowsApp) # Required for ISAC spatial audio code
   else()
     # MinGW/GCC cross-compile settings
-    add_compile_options(-mavx -mf16c)
+    # GCC spills 256-bit ymm with 32-byte-aligned vmovdqa, but only ever gets the
+    # 16 bytes Win64 guarantees, so keep it on 128-bit vectors. See GCC #54412.
+    add_compile_options(-mavx -mf16c -mprefer-vector-width=128)
     # Static runtime linking is applied per-target to StereoKitC only (see below)
     # Executables use the runtime from the DLL to avoid duplicate symbol errors
   endif()
@@ -927,6 +929,11 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/skt_lighting.h
     Examples/StereoKitCTest/skt_lighting.cpp
   )
+
+  # Without a standard here we get the compiler's default, and GCC 16 moved that
+  # to C++20, where u8 literals are char8_t and no longer fit the C API.
+  set_property(TARGET StereoKitCTest PROPERTY CXX_STANDARD 17)
+  set_property(TARGET StereoKitCTest PROPERTY CXX_STANDARD_REQUIRED ON)
 
   target_link_libraries( StereoKitCTest PRIVATE StereoKitC )
   if (SK_DYNAMIC_OPENXR)
