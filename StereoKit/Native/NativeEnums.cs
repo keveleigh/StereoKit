@@ -1292,13 +1292,16 @@ namespace StereoKit
 	/// draws.</summary>
 	[Flags]
 	public enum RenderClear {
-		/// <summary>Don't clear anything, leave it as it is.</summary>
-		None         = 0,
 		/// <summary>Clear the rendertarget's color data.</summary>
 		Color        = 1 << 0,
 		/// <summary>Clear the rendertarget's depth data, if present.</summary>
 		Depth        = 1 << 1,
-		/// <summary>Clear both color and depth data.</summary>
+		/// <summary>Don't clear anything, draw on top of what's already there.</summary>
+		Keep         = 1 << 3,
+		/// <summary>Deprecated, use render_clear_keep.</summary>
+		None         = Keep,
+		/// <summary>Clear both color and depth data. A zero value also means this -
+		/// it's the default, so zero-initialized settings clear everything.</summary>
 		All          = Color | Depth,
 	}
 

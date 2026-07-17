@@ -67,18 +67,21 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void tex_set_colors_3d(IntPtr texture, int width, int height, int depth, [In] byte[] data);
 
-		// render_list_draw_now single-matrix overload — passes one camera +
-		// projection by reference (ABI-equivalent to a 1-element array
-		// pointer) so the common single-view call path doesn't have to
-		// allocate a temporary array.
+		// render_list_draw_now overloads - a single camera + projection passes
+		// by reference (ABI-equivalent to a 1-element array pointer) so the
+		// common single-view call path doesn't have to allocate a temporary
+		// array, and settings pass as a typed struct reference rather than
+		// the generated binding's IntPtr.
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
-		public static extern void render_list_draw_now(IntPtr list, IntPtr to_rendertarget, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, Color clear_color, RenderClear clear, Rect viewport_pct, RenderLayer layer_filter, int material_variant);
+		public static extern void render_list_draw_now(IntPtr list, IntPtr to_rendertarget, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, in RenderSettingsNative opt_settings);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void render_list_draw_now(IntPtr list, IntPtr to_rendertarget, [In] Matrix[] in_arr_cameras, [In] Matrix[] in_arr_projections, int view_count, in RenderSettingsNative opt_settings);
 
-		// render_to single-matrix overload — same trick as
-		// render_list_draw_now above. Lets the single-view RenderTo
-		// path avoid a temporary array allocation.
+		// render_to overloads - same tricks as render_list_draw_now above.
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
-		public static extern void render_to(IntPtr to_rendertarget, int to_target_index, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, RenderLayer layer_filter, int material_variant, RenderClear clear, Rect viewport);
+		public static extern void render_to(IntPtr to_rendertarget, int to_target_index, in Matrix in_arr_cameras, in Matrix in_arr_projections, int view_count, in RenderSettingsNative opt_settings);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void render_to(IntPtr to_rendertarget, int to_target_index, [In] Matrix[] in_arr_cameras, [In] Matrix[] in_arr_projections, int view_count, in RenderSettingsNative opt_settings);
 
 		// tex_create_mem with byte array
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]

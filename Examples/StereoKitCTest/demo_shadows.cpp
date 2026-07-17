@@ -2,6 +2,7 @@
 
 #include "skt_shadow.hlsl.h"
 #include "skt_shadow_caster.hlsl.h"
+#include "skt_postfx_volumetric.hlsl.h"
 
 #include <stereokit.h>
 #include <stereokit_ui.h>
@@ -41,6 +42,12 @@ static pose_t     shadow_model_pose = {};
 
 static spherical_harmonics_t old_lighting = {};
 static tex_t                 old_tex      = {};
+
+// Volumetric fog post-process - marches view rays through the shadow map
+static material_t fog_mat       = {};
+static bool32_t   fog_on        = true;
+static float      fog_density   = 0.25f;
+static float      fog_intensity = 0.8f;
 
 ///////////////////////////////////////////
 
@@ -110,6 +117,13 @@ void demo_shadows_init() {
 
 	// Bind shadow buffer globally
 	render_global_buffer(shadow_buffer_slot, shadow_buffer);
+
+	// Volumetric fog post-process, on by default. It picks the shadow map
+	// and shadow buffer up from the globals bound above.
+	shader_t fog_shader = shader_create_mem((void*)sks_skt_postfx_volumetric_hlsl, sizeof(sks_skt_postfx_volumetric_hlsl));
+	fog_mat = material_create(fog_shader);
+	shader_release(fog_shader);
+	if (fog_on) render_add_post_process(fog_mat);
 }
 
 ///////////////////////////////////////////
@@ -152,8 +166,10 @@ static void setup_shadow_map(vec3 light_direction) {
 	render_global_texture(shadow_buffer_slot, nullptr);
 
 	// Render to shadow map (filter out VFX layer)
-	render_layer_ layer_filter = (render_layer_)(render_layer_all & ~render_layer_vfx);
-	render_to(shadow_map, 0, &view, &proj, 1, layer_filter, shadow_map_variant, render_clear_all, rect_t{});
+	render_settings_t settings = {};
+	settings.layer_filter     = (render_layer_)(render_layer_all & ~render_layer_vfx);
+	settings.material_variant = shadow_map_variant;
+	render_to(shadow_map, 0, &view, &proj, 1, &settings);
 
 	// Rebind the shadow map for reading
 	render_global_texture(shadow_buffer_slot, shadow_map);
@@ -169,6 +185,24 @@ void demo_shadows_update() {
 	ui_handle_begin("ShadowModel", shadow_model_pose, nullptr, model_bounds, false, ui_move_exact);
 	model_draw(shadow_model, matrix_identity);
 	ui_handle_end();
+
+	// Volumetric fog settings
+	static pose_t window_pose =
+		pose_t{ {0.35f,0.1f,-0.35f}, quat_lookat({0.35f,0.1f,-0.35f}, {0,0,0}) };
+	ui_window_begin("Volumetric Fog", &window_pose);
+
+	if (ui_toggle("Enabled", fog_on)) {
+		if (fog_on) render_add_post_process   (fog_mat);
+		else        render_remove_post_process(fog_mat);
+	}
+	ui_label("Density");
+	if (ui_hslider("density", fog_density, 0.0f, 1.0f))
+		material_set_float(fog_mat, "density", fog_density);
+	ui_label("Intensity");
+	if (ui_hslider("intensity", fog_intensity, 0.0f, 2.0f))
+		material_set_float(fog_mat, "intensity", fog_intensity);
+
+	ui_window_end();
 }
 
 ///////////////////////////////////////////
@@ -183,6 +217,8 @@ void demo_shadows_shutdown() {
 	render_global_texture(shadow_buffer_slot, nullptr);
 
 	// Release resources
+	render_remove_post_process(fog_mat);
+	material_release       (fog_mat);
 	tex_release            (shadow_map);
 	material_buffer_release(shadow_buffer);
 	model_release          (shadow_model);

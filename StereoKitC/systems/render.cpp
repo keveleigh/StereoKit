@@ -132,6 +132,9 @@ struct render_action_viewpoint_t {
 	render_layer_ layer_filter;
 	int32_t       material_variant;
 	render_clear_ clear;
+	color128      clear_color;
+	material_t    post_process[SKR_PASS_MAX_POSTFX]; // ref'd until drawn
+	int32_t       post_process_count;
 };
 
 struct render_action_global_texture_t {
@@ -200,6 +203,7 @@ struct render_state_t {
 	array_t<render_screenshot_t>       screenshot_list;
 	array_t<render_pending_readback_t> pending_readbacks;
 	array_t<render_action_t>           render_action_list;
+	array_t<material_t>                post_process;
 
 	array_t<render_list_t>  list_stack;
 	render_list_t           list_active;
@@ -262,6 +266,10 @@ void render_shutdown() {
 	local.list_stack        .free();
 	local.screenshot_list   .free();
 
+	for (int32_t i = 0; i < local.post_process.count; i++)
+		material_release(local.post_process[i]);
+	local.post_process.free();
+
 	// Drain in-flight readbacks so their GPU resources aren't leaked at
 	// shutdown - blocks on each future, unlike the per-frame poll path.
 	for (int32_t i = 0; i < local.pending_readbacks.count; i++) {
@@ -282,7 +290,11 @@ void render_shutdown() {
 		render_action_t* a = &local.render_action_list[i];
 		switch (a->type) {
 		case render_action_type_none:      break;
-		case render_action_type_viewpoint: break;
+		case render_action_type_viewpoint:
+			for (int32_t p = 0; p < a->viewpoint.post_process_count; p++)
+				material_release(a->viewpoint.post_process[p]);
+			tex_release(a->viewpoint.rendertarget);
+			break;
 		case render_action_type_global_texture: tex_release            (a->global_texture.texture); break;
 		case render_action_type_global_buffer:  material_buffer_release(a->global_buffer .buffer ); break;
 		case render_action_type_compute:        compute_release        (a->compute       .compute); break;
@@ -898,6 +910,113 @@ void render_pass_add_draw(skr_pass_t* pass) {
 
 ///////////////////////////////////////////
 
+// A valid post-process material declares a 'color' input attachment (the
+// scene) and no vertex inputs - it draws as a bufferless fullscreen triangle.
+bool32_t render_material_is_post_process(material_t material) {
+	if (material == nullptr || material->shader == nullptr) return false;
+
+	const sksc_shader_meta_t* meta = &material->shader->gpu_shader.meta;
+	if (meta->vertex_input_count > 0) return false;
+	for (uint32_t i = 0; i < meta->resource_count; i++) {
+		if (meta->resources[i].bind.register_type == skr_register_input_attachment &&
+		    strcmp(meta->resources[i].name, "color") == 0) return true;
+	}
+	return false;
+}
+
+///////////////////////////////////////////
+
+void render_add_post_process(material_t material) {
+	if (!render_material_is_post_process(material)) {
+		log_errf("render_add_post_process: '%s' is not a post-process material - its shader needs an input attachment named 'color' (SubpassInput), and no vertex inputs", material ? material->header.id_text : "null");
+		return;
+	}
+	if (local.post_process.index_of(material) != -1) return;
+
+	material_addref(material);
+	local.post_process.add(material);
+	if (local.post_process.count > SKR_PASS_MAX_POSTFX)
+		log_errf("render_add_post_process: %d post-process materials are active, only the %d with the lowest queue offsets will render", local.post_process.count, SKR_PASS_MAX_POSTFX);
+}
+
+///////////////////////////////////////////
+
+void render_remove_post_process(material_t material) {
+	int32_t idx = local.post_process.index_of(material);
+	if (idx == -1) return;
+
+	material_release(local.post_process[idx]);
+	local.post_process.remove(idx);
+}
+
+///////////////////////////////////////////
+
+// Pick the SKR_PASS_MAX_POSTFX lowest-queue-offset valid materials, stable
+// for ties. Returns the count written to out_picked.
+static int32_t render_post_process_select(const material_t* materials, int32_t count, material_t out_picked[SKR_PASS_MAX_POSTFX]) {
+	int32_t picked_count = 0;
+	for (int32_t i = 0; i < count; i++) {
+		if (!render_material_is_post_process(materials[i])) {
+			log_errf("'%s' is not a post-process material - its shader needs an input attachment named 'color' (SubpassInput), and no vertex inputs", materials[i] ? materials[i]->header.id_text : "null");
+			continue;
+		}
+		int32_t offset = material_get_queue_offset(materials[i]);
+		int32_t at     = picked_count;
+		while (at > 0 && material_get_queue_offset(out_picked[at-1]) > offset) at--;
+		if (at >= SKR_PASS_MAX_POSTFX) continue;
+
+		if (picked_count < SKR_PASS_MAX_POSTFX) picked_count++;
+		for (int32_t m = picked_count-1; m > at; m--) out_picked[m] = out_picked[m-1];
+		out_picked[at] = materials[i];
+	}
+	return picked_count;
+}
+
+///////////////////////////////////////////
+
+// Set the pass sample count on any MSAA spec constant, flush material params,
+// and attach each already-picked material as a postfx subpass.
+static void render_pass_apply_post_process(skr_pass_t* pass, material_t* picked, int32_t picked_count) {
+	int32_t samples = 1;
+	if      (pass->color) samples = skr_tex_get_multisample(pass->color);
+	else if (pass->depth) samples = skr_tex_get_multisample(pass->depth);
+
+	for (int32_t i = 0; i < picked_count; i++) {
+		material_t mat = picked[i];
+
+		// Set the pass sample count on an MSAA spec constant if present -
+		// unchanged is a no-op, a new value bakes a cached pipeline variant.
+		const sksc_shader_meta_t* meta = &mat->shader->gpu_shader.meta;
+		for (uint32_t s = 0; s < meta->spec_constant_count; s++) {
+			if (strcmp(meta->spec_constants[s].name, "MSAA") == 0) {
+				material_set_int(mat, "MSAA", samples);
+				break;
+			}
+		}
+
+		material_check_dirty(mat);
+		skr_pass_add_postfx(pass, &mat->gpu_mat);
+	}
+}
+
+///////////////////////////////////////////
+
+void render_pass_add_post_process(skr_pass_t* pass, const material_t* materials, int32_t count) {
+	if (count <= 0) return;
+
+	material_t picked[SKR_PASS_MAX_POSTFX];
+	int32_t    picked_count = render_post_process_select(materials, count, picked);
+	render_pass_apply_post_process(pass, picked, picked_count);
+}
+
+///////////////////////////////////////////
+
+void render_pass_add_global_post_process(skr_pass_t* pass) {
+	render_pass_add_post_process(pass, local.post_process.data, local.post_process.count);
+}
+
+///////////////////////////////////////////
+
 // Check and complete any pending async readbacks from previous frames
 void render_check_pending_readbacks() {
 	for (int32_t i = local.pending_readbacks.count - 1; i >= 0; i--) {
@@ -938,8 +1057,10 @@ void render_check_screenshots() {
 		int32_t  h = local.screenshot_list[i].height;
 
 		// Create render targets for screenshot
+		// Depth matches the display's preferred (stencil-free) format, so
+		// depth-reading post-process effects work in screenshots too.
 		tex_t color_surface = tex_create_rendertarget(w, h, 8, local.screenshot_list[i].tex_format, tex_format_none);
-		tex_t depth_surface = tex_create_rendertarget(w, h, 8, tex_get_supported_depth_format(tex_format_depthstencil, true, 8), tex_format_none);
+		tex_t depth_surface = tex_create_rendertarget(w, h, 8, tex_get_supported_depth_format(render_preferred_depth_fmt(), true, 8), tex_format_none);
 		tex_t resolve_tex   = tex_create_rendertarget(w, h, 1, local.screenshot_list[i].tex_format, tex_format_none);
 
 		// Set up viewport
@@ -978,6 +1099,9 @@ void render_check_screenshots() {
 		pass.scissor     = scissor;
 		pass.view_count  = 1;
 		render_pass_add_draw(&pass);
+		// Screenshots follow the display's post-process chain - what you see
+		// is what you shoot.
+		render_pass_add_global_post_process(&pass);
 		skr_pass_submit(&pass);
 
 		// Initiate async readback (will complete in a future frame after GPU finishes)
@@ -1040,7 +1164,7 @@ void render_draw_viewpoint(render_action_viewpoint_t* vp) {
 	if (vp->clear & render_clear_depth) clear_flags = (skr_clear_)(clear_flags | skr_clear_depth | skr_clear_stencil);
 
 	// Render!
-	skr_vec4_t clear_color = { local.clear_col.r, local.clear_col.g, local.clear_col.b, local.clear_col.a };
+	skr_vec4_t clear_color = { vp->clear_color.r, vp->clear_color.g, vp->clear_color.b, vp->clear_color.a };
 	render_draw_queue(local.list_primary, vp->cameras, vp->projections, 0, vp->view_count, vp->layer_filter, vp->material_variant, w, h);
 
 	skr_pass_t pass = {};
@@ -1054,9 +1178,13 @@ void render_draw_viewpoint(render_action_viewpoint_t* vp) {
 	pass.view_count       = vp->view_count;
 	pass.views_correlated = vp->view_count == 2;
 	render_pass_add_draw(&pass);
+	// The chain was already selected + ref'd at enqueue, just apply it
+	render_pass_apply_post_process(&pass, vp->post_process, vp->post_process_count);
 	skr_pass_submit(&pass);
 
-	// Release the reference we added, the user should have their own ref
+	// Release the references we added, the user should have their own
+	for (int32_t i = 0; i < vp->post_process_count; i++)
+		material_release(vp->post_process[i]);
 	tex_release(vp->rendertarget);
 }
 
@@ -1145,7 +1273,18 @@ void render_screenshot_viewpoint(void (*render_on_screenshot_callback)(void* dat
 
 ///////////////////////////////////////////
 
-void render_to(tex_t to_rendertarget, int32_t to_target_index, const matrix* cameras, const matrix* projections, int32_t view_count, render_layer_ layer_filter, int32_t material_variant, render_clear_ clear, rect_t viewport) {
+// Zero is the default 'clear everything'; render_clear_keep masks to nothing.
+static render_clear_ render_clear_resolve(render_clear_ clear) {
+	if (clear == 0) return render_clear_all;
+	return (render_clear_)(clear & render_clear_all);
+}
+
+///////////////////////////////////////////
+
+void render_to(tex_t to_rendertarget, int32_t to_target_index, const matrix* cameras, const matrix* projections, int32_t view_count, const render_settings_t* opt_settings) {
+	const render_settings_t defaults = {};
+	const render_settings_t* s = opt_settings ? opt_settings : &defaults;
+
 	if (!(to_rendertarget->type & tex_type_rendertarget || to_rendertarget->type & tex_type_depthtarget || to_rendertarget->type & tex_type_zbuffer)) {
 		log_err("render_to texture must be a render target texture type!");
 		return;
@@ -1154,6 +1293,8 @@ void render_to(tex_t to_rendertarget, int32_t to_target_index, const matrix* cam
 		log_errf("render_to view_count %d out of range [1, %d]", view_count, SK_MAX_VIEWS);
 		return;
 	}
+	if (s->post_process_count > SKR_PASS_MAX_POSTFX)
+		log_errf("render_to: %d post-process materials, only the %d with the lowest queue offsets will render", s->post_process_count, SKR_PASS_MAX_POSTFX);
 	tex_addref(to_rendertarget);
 
 	render_action_t action = {};
@@ -1165,10 +1306,15 @@ void render_to(tex_t to_rendertarget, int32_t to_target_index, const matrix* cam
 		matrix_inverse(cameras[i], action.viewpoint.cameras[i]);
 		action.viewpoint.projections[i] = projections[i];
 	}
-	action.viewpoint.layer_filter      = layer_filter;
-	action.viewpoint.viewport          = viewport;
-	action.viewpoint.clear             = clear;
-	action.viewpoint.material_variant  = material_variant;
+	action.viewpoint.layer_filter      = s->layer_filter == 0 ? render_layer_all : s->layer_filter;
+	action.viewpoint.viewport          = s->viewport;
+	action.viewpoint.clear             = render_clear_resolve(s->clear);
+	action.viewpoint.clear_color       = s->clear_color;
+	action.viewpoint.material_variant  = s->material_variant;
+	// Select the chain now, and hold refs until the action executes
+	action.viewpoint.post_process_count = render_post_process_select(s->post_process, s->post_process_count, action.viewpoint.post_process);
+	for (int32_t i = 0; i < action.viewpoint.post_process_count; i++)
+		material_addref(action.viewpoint.post_process[i]);
 	local.render_action_list.add(action);
 }
 
@@ -1434,11 +1580,22 @@ void render_list_add_model_mat(render_list_t list, model_t model, material_t mat
 
 ///////////////////////////////////////////
 
-void render_list_draw_now(render_list_t list, tex_t to_rendertarget, const matrix* cameras, const matrix* projections, int32_t view_count, color128 clear_color, render_clear_ clear, rect_t viewport_pct, render_layer_ layer_filter, int32_t material_variant) {
+void render_list_draw_now(render_list_t list, tex_t to_rendertarget, const matrix* cameras, const matrix* projections, int32_t view_count, const render_settings_t* opt_settings) {
+	const render_settings_t defaults = {};
+	const render_settings_t* s = opt_settings ? opt_settings : &defaults;
+
+	render_layer_ layer_filter     = s->layer_filter == 0 ? render_layer_all : s->layer_filter;
+	render_clear_ clear            = render_clear_resolve(s->clear);
+	color128      clear_color      = s->clear_color;
+	rect_t        viewport_pct     = s->viewport;
+	int32_t       material_variant = s->material_variant;
+	if (s->post_process_count > SKR_PASS_MAX_POSTFX)
+		log_errf("render_list_draw_now: %d post-process materials, only the %d with the lowest queue offsets will render", s->post_process_count, SKR_PASS_MAX_POSTFX);
+
 	int32_t w = to_rendertarget->width;
 	int32_t h = to_rendertarget->height;
 
-	// Depth-only targets (e.g. shadow maps) — the rendertarget IS the depth
+	// Depth-only targets (e.g. shadow maps) - the rendertarget IS the depth
 	// buffer and there is no color attachment. Match render_draw_viewpoint.
 	bool  depth_only    = (to_rendertarget->type & tex_type_depth) || (to_rendertarget->type & tex_type_depthtarget);
 	tex_t depth_surface = depth_only ? to_rendertarget : to_rendertarget->depth_buffer;
@@ -1478,6 +1635,7 @@ void render_list_draw_now(render_list_t list, tex_t to_rendertarget, const matri
 	pass.view_count       = view_count;
 	pass.views_correlated = view_count == 2; // XR L/R eyes; assume uncorrelated for other counts
 	render_pass_add_draw(&pass);
+	render_pass_add_post_process(&pass, s->post_process, s->post_process_count);
 	skr_pass_submit(&pass);
 }
 
