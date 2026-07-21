@@ -93,7 +93,7 @@ scene_t demos[] = {
 		demo_aliasing_update,
 		demo_aliasing_shutdown,
 	}, {
-		"Post Processing",
+		"PostFX",
 		demo_postfx_init,
 		demo_postfx_update,
 		demo_postfx_shutdown,

@@ -9,7 +9,8 @@ class DemoPostFX : ITest
 	string title       = "Post Processing";
 	string description = "Post-process effects are Materials whose shaders read the scene through a pixel-local input attachment - on mobile GPUs the whole chain stays in tile memory, so these are safe for XR framerates!\n\nEffects added with Renderer.AddPostProcess apply to the main display and screenshots, ordered by Material.QueueOffset. Up to 2 can be active at a time.";
 
-	Pose windowPose = Demo.contentPose.Pose;
+	// Helmet and settings sit side by side, centered together in front.
+	Pose windowPose = Matrix.T(0.175f, 0.1f, 0) * Demo.contentPose.Pose;
 
 	Material vignetteMat;
 	Material invertMat;
@@ -106,9 +107,11 @@ class DemoPostFX : ITest
 
 		UI.WindowEnd();
 
-		model.Draw(Matrix.TRS(V.XYZ(0, -0.1f, -0.5f), Quat.FromAngles(0, 160, 0), 0.25f));
+		// Left of the settings window, turned to a 3/4 view (contentPose already
+		// yaws 180, so 20 here lands the helmet at a 200 world yaw).
+		model.Draw(Matrix.TRS(V.XYZ(0.175f, 0, -0.1f), Quat.FromAngles(0, 20, 0), 0.175f) * Demo.contentPose);
 
-		Tests.Screenshot("Demos/PostFX.jpg", 600, 600, V.XYZ(0, -0.1f, 0.1f), V.XYZ(0, -0.1f, -0.5f));
-		Demo.ShowSummary(title, description, new Bounds(V.XY0(0, -0.16f), V.XYZ(.34f, .5f, 0.6f)));
+		Tests.Screenshot("Demos/PostFX.jpg", 600, 600, V.XYZ(-0.175f, -0.1f, -0.08f), V.XYZ(-0.175f, -0.1f, -0.5f));
+		Demo.ShowSummary(title, description, new Bounds(V.XY0(0, -0.02f), V.XYZ(.65f, .45f, 0.6f)));
 	}
 }

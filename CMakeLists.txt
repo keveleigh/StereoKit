@@ -966,6 +966,7 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/Shaders/skt_vert_custom.hlsl
     Examples/StereoKitCTest/Shaders/skt_postfx_vignette.hlsl
     Examples/StereoKitCTest/Shaders/skt_postfx_invert.hlsl
+    Examples/StereoKitCTest/Shaders/skt_postfx_depth_fog.hlsl
     Examples/StereoKitCTest/Shaders/skt_postfx_volumetric.hlsl)
 
   # Add source assets and compiled shaders to the app
