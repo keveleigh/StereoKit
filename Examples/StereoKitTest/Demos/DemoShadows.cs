@@ -33,17 +33,6 @@ class DemoShadows : ITest
 	SphericalHarmonics oldLighting;
 	Tex                oldTex;
 
-	// Volumetric fog post-process - marches view rays through a small
-	// prefiltered depth map built from the shadow map each frame
-	Material fogMat;
-	Material fogBlurMat;
-	Tex      fogShadowMap;
-	Pose     fogWindowPose = Matrix.T(0.35f, 0.1f, 0) * Demo.contentPose.Pose;
-	bool     fogOn         = true;
-	float    fogDensity    = 0.25f;
-	float    fogIntensity  = 0.8f;
-	float    fogSteps      = 4;
-
 	public void Initialize()
 	{
 		shadowBuffer = new MaterialBuffer<ShadowBuffer>();
@@ -74,22 +63,10 @@ class DemoShadows : ITest
 		Renderer.SkyTex.OnLoaded += t => { Renderer.SkyLight = t.CubemapLighting; lightDir = t.CubemapLighting.DominantLightDirection; };
 
 		Renderer.SetGlobalBuffer(13, shadowBuffer);
-
-		// Volumetric fog, on by default. Marches a small blurred depth map,
-		// cheaper than sampling the raw shadow map, and rebuilt each frame.
-		fogShadowMap             = Tex.RenderTarget(256, 256, 1, TexFormat.R16f, TexFormat.None);
-		fogShadowMap.SampleMode  = TexSample.Linear;
-		fogShadowMap.AddressMode = TexAddress.Clamp;
-		fogBlurMat = new Material("Shaders/fog_shadow_blur.hlsl");
-		fogBlurMat["source"] = shadowMap;
-		fogMat = new Material("Shaders/postfx_volumetric.hlsl");
-		fogMat["fog_shadow"] = fogShadowMap;
-		if (fogOn) Renderer.AddPostProcess(fogMat);
 	}
 
 	public void Shutdown()
 	{
-		Renderer.RemovePostProcess(fogMat);
 		Renderer.SkyLight = oldLighting;
 		Renderer.SkyTex   = oldTex;
 		Renderer.SetGlobalBuffer (13, null);
@@ -101,26 +78,6 @@ class DemoShadows : ITest
 
 		UI.Handle("Model", ref modelPose, model.Bounds);
 		model.Draw(modelPose.ToMatrix());
-
-		// Volumetric fog settings
-		UI.WindowBegin("Volumetric Fog", ref fogWindowPose, new Vec2(0.2f, 0));
-		if (UI.Toggle("Enabled", ref fogOn))
-		{
-			if (fogOn) Renderer.AddPostProcess   (fogMat);
-			else       Renderer.RemovePostProcess(fogMat);
-		}
-		UI.Label("Density");
-		if (UI.HSlider("density", ref fogDensity, 0, 1))
-			fogMat["density"] = fogDensity;
-		UI.Label("Intensity");
-		if (UI.HSlider("intensity", ref fogIntensity, 0, 2))
-			fogMat["intensity"] = fogIntensity;
-		UI.Label("Quality");
-		// STEPS is a specialization constant - each value bakes its own
-		// cached pipeline variant, with the march loop unrolled.
-		if (UI.HSlider("steps", ref fogSteps, 4, 32, 4))
-			fogMat.SetInt("STEPS", (int)fogSteps);
-		UI.WindowEnd();
 
 		Tests.Screenshot("Demos/Shadows.jpg", 600, 600, 60, modelPose.position + V.XYZ(0.15f, 0.5f, 0.8f), modelPose.position);
 		Demo.ShowSummary(title, description,
@@ -154,9 +111,6 @@ class DemoShadows : ITest
 		Renderer.SetGlobalTexture(13, null); // Can't draw to it if it's bound
 		Renderer.RenderTo(shadowMap, view, proj, RenderLayer.All &~ RenderLayer.Vfx, ShadowMapVariant);
 		Renderer.SetGlobalTexture(13, shadowMap);
-
-		// Refresh the fog's blurred depth map
-		if (fogOn) Renderer.Blit(fogShadowMap, fogBlurMat);
 	}
 
 	static Model GenerateModel(Material floorMat, Material material)

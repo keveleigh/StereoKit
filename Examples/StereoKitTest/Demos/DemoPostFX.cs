@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: MIT
 // The authors below grant copyright rights under the MIT license:
 // Copyright (c) 2026 Nick Klingensmith
+// Copyright (c) 2026 Qualcomm Technologies, Inc.
 
 using StereoKit;
 
 class DemoPostFX : ITest
 {
 	string title       = "Post Processing";
-	string description = "Post-process effects are Materials whose shaders read the scene through a pixel-local input attachment - on mobile GPUs the whole chain stays in tile memory, so these are safe for XR framerates!\n\nEffects added with Renderer.AddPostProcess apply to the main display and screenshots, ordered by Material.QueueOffset. Up to 2 can be active at a time.";
+	string description = "On mobile hardware, post processing can be VERY expensive! StereoKit supports 'subpass' based post processing, accepting some limitations to enable a subset of post processing effects that do run fast (in-tile) on mobile hardware!";
 
 	// Helmet and settings sit side by side, centered together in front.
 	Pose windowPose = Matrix.T(0.175f, 0.1f, 0) * Demo.contentPose.Pose;
