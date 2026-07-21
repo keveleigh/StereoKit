@@ -307,7 +307,7 @@ if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
     NAME sk_renderer
     GITHUB_REPOSITORY StereoKit/sk_renderer
-    GIT_TAG v2026.7.13
+    GIT_TAG v2026.7.21
   )
 else()
   # For building directly with in-progress sk_renderer changes, point this to your
@@ -966,8 +966,7 @@ if (SK_BUILD_TESTS)
     Examples/StereoKitCTest/Shaders/skt_vert_custom.hlsl
     Examples/StereoKitCTest/Shaders/skt_postfx_vignette.hlsl
     Examples/StereoKitCTest/Shaders/skt_postfx_invert.hlsl
-    Examples/StereoKitCTest/Shaders/skt_postfx_depth_fog.hlsl
-    Examples/StereoKitCTest/Shaders/skt_postfx_volumetric.hlsl)
+    Examples/StereoKitCTest/Shaders/skt_postfx_depth_fog.hlsl)
 
   # Add source assets and compiled shaders to the app
   target_skapp_assets(StereoKitCTest ${CMAKE_CURRENT_BINARY_DIR}/shaders)
