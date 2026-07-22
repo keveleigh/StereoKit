@@ -34,13 +34,20 @@ void demo_postfx_init() {
 	postfx_invert          = material_create(postfx_invert_shader);
 	postfx_fog             = material_create(postfx_fog_shader);
 
-	// Queue offsets order the chain - fog reads scene depth first, then the
-	// invert flips colors, and the vignette darkens the corners last.
-	material_set_queue_offset(postfx_fog,     -10);
-	material_set_queue_offset(postfx_invert,    0);
-	material_set_queue_offset(postfx_vignette, 10);
-
 	postfx_model = model_create_file("DamagedHelmet.gltf");
+}
+
+///////////////////////////////////////////
+
+// Chain order is the array order - fog reads scene depth first, then the
+// invert flips colors, and the vignette darkens the corners last.
+static void postfx_apply_chain() {
+	material_t chain[3];
+	int32_t    count = 0;
+	if (fog_on     ) chain[count++] = postfx_fog;
+	if (invert_on  ) chain[count++] = postfx_invert;
+	if (vignette_on) chain[count++] = postfx_vignette;
+	render_set_post_process(chain, count);
 }
 
 ///////////////////////////////////////////
@@ -54,22 +61,13 @@ void demo_postfx_update() {
 
 	ui_window_begin("PostFX", &window_pose);
 
-	if (ui_toggle("Vignette", vignette_on)) {
-		if (vignette_on) render_add_post_process   (postfx_vignette);
-		else             render_remove_post_process(postfx_vignette);
-	}
+	if (ui_toggle("Vignette", vignette_on)) postfx_apply_chain();
 	if (vignette_on && ui_hslider("strength", vignette_strength, 0, 1))
 		material_set_float(postfx_vignette, "strength", vignette_strength);
 
-	if (ui_toggle("Invert", invert_on)) {
-		if (invert_on) render_add_post_process   (postfx_invert);
-		else           render_remove_post_process(postfx_invert);
-	}
+	if (ui_toggle("Invert", invert_on)) postfx_apply_chain();
 
-	if (ui_toggle("Depth fog", fog_on)) {
-		if (fog_on) render_add_post_process   (postfx_fog);
-		else        render_remove_post_process(postfx_fog);
-	}
+	if (ui_toggle("Depth fog", fog_on)) postfx_apply_chain();
 	if (fog_on && ui_hslider("density", fog_density, 0, 2))
 		material_set_float(postfx_fog, "fog_density", fog_density);
 
@@ -79,9 +77,7 @@ void demo_postfx_update() {
 ///////////////////////////////////////////
 
 void demo_postfx_shutdown() {
-	render_remove_post_process(postfx_vignette);
-	render_remove_post_process(postfx_invert);
-	render_remove_post_process(postfx_fog);
+	render_set_post_process(nullptr, 0);
 	vignette_on = false;
 	invert_on   = false;
 	fog_on      = false;

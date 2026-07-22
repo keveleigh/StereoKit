@@ -559,12 +559,12 @@ namespace StereoKit
 			if (pin.IsAllocated) pin.Free();
 		}
 
-		/// <summary>Adds a Material to the main display's post-process
-		/// chain! Post-processing here is tile-renderer friendly: effects
-		/// run as subpasses that stay in tile memory on mobile GPUs, and
-		/// they apply to the main display and to screenshots - what you see
-		/// is what you shoot. Chain order comes from Material.QueueOffset,
-		/// lowest first, and at most 2 effects can be active in a pass.
+		/// <summary>Sets the main display's post-process chain! The
+		/// Materials apply in array order, at most 2 per pass, and calling
+		/// this with no arguments clears the chain. Post-processing here is
+		/// tile-renderer friendly: effects run as subpasses that stay in
+		/// tile memory on mobile GPUs, and they apply to the main display
+		/// and to screenshots - what you see is what you shoot.
 		///
 		/// A post-process Material's shader reads the scene through a
 		/// pixel-local input attachment named 'color' (in HLSL,
@@ -575,17 +575,16 @@ namespace StereoKit
 		/// 'depth' at index 1. Materials that don't qualify are rejected
 		/// with an error log. Regular textures and Material parameters work
 		/// normally, and can be animated per-frame.</summary>
-		/// <param name="postProcessMaterial">A Material whose shader
-		/// qualifies as a post-process effect.</param>
-		public static void AddPostProcess(Material postProcessMaterial)
-			=> NativeAPI.render_add_post_process(postProcessMaterial?._inst ?? IntPtr.Zero);
-
-		/// <summary>Removes a Material previously added with
-		/// AddPostProcess from the main display's post-process chain. Does
-		/// nothing if the Material isn't in the chain.</summary>
-		/// <param name="postProcessMaterial">The Material to remove.</param>
-		public static void RemovePostProcess(Material postProcessMaterial)
-			=> NativeAPI.render_remove_post_process(postProcessMaterial?._inst ?? IntPtr.Zero);
+		/// <param name="postProcessChain">Materials whose shaders qualify
+		/// as post-process effects, applied in order. Empty clears the
+		/// chain.</param>
+		public static void SetPostProcess(params Material[] postProcessChain)
+		{
+			IntPtr[] materials = new IntPtr[postProcessChain?.Length ?? 0];
+			for (int i = 0; i < materials.Length; i++)
+				materials[i] = postProcessChain[i]?._inst ?? IntPtr.Zero;
+			NativeAPI.render_set_post_process(materials, materials.Length);
+		}
 
 		/// <summary>This attaches a texture resource globally across all
 		/// shaders. StereoKit uses this to attach the sky cubemap for use in

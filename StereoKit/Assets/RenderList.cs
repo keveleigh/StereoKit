@@ -143,7 +143,7 @@ namespace StereoKit
 		/// <summary>This renders the RenderList to the rendertarget texture
 		/// immediately, from the specified viewpoint, using a RenderSettings
 		/// struct for everything else - including tile-friendly post-process
-		/// effects! See Renderer.AddPostProcess for post-process shader
+		/// effects! See Renderer.SetPostProcess for post-process shader
 		/// requirements.</summary>
 		/// <param name="toRenderTarget">The rendertarget texture to draw to.
 		/// </param>

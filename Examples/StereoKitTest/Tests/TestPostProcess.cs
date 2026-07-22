@@ -1,9 +1,9 @@
 using StereoKit;
 using System;
 
-// Verifies tile-friendly post-processing: material validation, chain
-// ordering via QueueOffset, the RenderSettings path through DrawNow and
-// RenderTo, depth reads, and the global chain add/remove API.
+// Verifies tile-friendly post-processing: material validation, array-order
+// chaining, the RenderSettings path through DrawNow and RenderTo, depth
+// reads, and the global chain API.
 class TestPostProcess : ITest
 {
 	Material   matInvert;   // c * -1 + 1
@@ -52,11 +52,12 @@ class TestPostProcess : ITest
 		// Materials that aren't valid post-process effects are rejected
 		// with an error, and don't join the chain.
 		int before = errorLogs;
-		Renderer.AddPostProcess(Material.Default);
+		Renderer.SetPostProcess(Material.Default);
 		Tests.Test(() => errorLogs == before + 1);
 
-		// The global chain API tolerates removal of something never added.
-		Renderer.RemovePostProcess(matInvert);
+		// Clearing the global chain is error-free, even when it's empty.
+		Renderer.SetPostProcess();
+		Tests.Test(() => errorLogs == before + 1);
 
 		// GPU readbacks need the drawn frame to complete, so work is spread
 		// across frames in Step.
@@ -74,10 +75,8 @@ class TestPostProcess : ITest
 		switch (frame)
 		{
 			case 0:
-				// Invert runs first (offset 0), half second (offset 10):
-				// black -> 1.0 -> 0.5, which lands at ~188 sRGB-encoded.
-				matInvert.QueueOffset = 0;
-				matHalf  .QueueOffset = 10;
+				// Invert runs first, half second: black -> 1.0 -> 0.5,
+				// which lands at ~188 sRGB-encoded.
 				emptyList.DrawNow(targetA, cam, proj, new RenderSettings {
 					postProcess = new Material[] { matInvert, matHalf } });
 				break;
@@ -86,11 +85,10 @@ class TestPostProcess : ITest
 				Log.Info($"postfx invert+half: {px[64*32+32]}");
 				Tests.Test(() => Near(px[64*32+32].r, 188));
 
-				// Reversed offsets: black -> 0.0 -> inverted to 1.0 = 255.
-				// Array order stays the same, QueueOffset decides.
-				matInvert.QueueOffset = 20;
+				// Reversed array order: black -> 0.0 -> inverted to 1.0 =
+				// 255. The array is the chain, in order.
 				emptyList.DrawNow(targetB, cam, proj, new RenderSettings {
-					postProcess = new Material[] { matInvert, matHalf } });
+					postProcess = new Material[] { matHalf, matInvert } });
 			} break;
 			case 6: {
 				Color32[] px = targetB.GetColorData<Color32>();
@@ -109,10 +107,8 @@ class TestPostProcess : ITest
 
 				// RenderTo queues for the next frame, and takes the same
 				// settings. Also sneak in an over-long chain - it errors,
-				// but still renders the two lowest queue offsets.
+				// but still renders the first two in the array.
 				int before = errorLogs;
-				matInvert.QueueOffset = 0;
-				matFog   .QueueOffset = 50; // loses the top-2 cut
 				Renderer.RenderTo(targetTo, cam, proj, new RenderSettings {
 					postProcess = new Material[] { matInvert, matHalf, matFog } });
 				Tests.Test(() => errorLogs == before + 1);

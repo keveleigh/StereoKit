@@ -2301,8 +2301,8 @@ typedef struct render_settings_t {
 	  full target.*/
 	rect_t                 viewport;
 	/*Optional array of post-process materials for this pass, applied in
-	  queue offset order. These are tile-friendly subpass effects, see
-	  render_add_post_process for the shader requirements.*/
+	  array order. These are tile-friendly subpass effects, see
+	  render_set_post_process for the shader requirements.*/
 	const material_t*      post_process;
 	/*Number of materials in post_process.*/
 	int32_t                post_process_count;
@@ -2363,11 +2363,7 @@ SK_API void                  render_add_mesh       (mesh_t  mesh,  material_t ma
 SK_API void                  render_add_model      (model_t model,                               const sk_ref(matrix) transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void                  render_add_model_mat  (model_t model, material_t material_override, const sk_ref(matrix) transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void                  render_blit           (tex_t to_rendertarget, material_t material);
-//TODO: before merging to develop, revisit chain ordering. QueueOffset-based
-// ordering (here and in render_settings_t.post_process) may be less clear than
-// an explicit in-order material_t array - decide which API we want.
-SK_API void                  render_add_post_process   (material_t material);
-SK_API void                  render_remove_post_process(material_t material);
+SK_API void                  render_set_post_process(const material_t* in_arr_materials, int32_t material_count);
 SK_API void                  render_screenshot     (const char *file_utf8, int32_t file_quality_100, pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees);
 //TODO: for v0.4, reorder parameters, context in particular should be next to callback
 SK_API void                  render_screenshot_capture  (void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees, tex_format_ tex_format sk_default(tex_format_rgba32), void *context sk_default(nullptr));

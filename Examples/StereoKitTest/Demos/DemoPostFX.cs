@@ -4,6 +4,7 @@
 // Copyright (c) 2026 Qualcomm Technologies, Inc.
 
 using StereoKit;
+using System.Collections.Generic;
 
 class DemoPostFX : ITest
 {
@@ -26,31 +27,27 @@ class DemoPostFX : ITest
 
 	public void Initialize()
 	{
-		/// :CodeSample: Renderer.AddPostProcess Renderer.RemovePostProcess
-		/// ### Adding a post-process effect
+		/// :CodeSample: Renderer.SetPostProcess
+		/// ### Setting a post-process chain
 		/// A post-process effect is just a Material! Its shader reads the
 		/// scene through an input attachment named 'color', and its
-		/// parameters can be changed live, like any other Material.
+		/// parameters can be changed live, like any other Material. The
+		/// chain renders in argument order.
 		Material vignette = new Material("postfx_vignette.hlsl");
 		vignette["strength"] = 0.4f;
-		Renderer.AddPostProcess(vignette);
+		Renderer.SetPostProcess(vignette);
 		///
 		/// And when you're done with it:
-		Renderer.RemovePostProcess(vignette);
+		Renderer.SetPostProcess();
 		/// :End:
 		vignetteMat = vignette;
 
 		invertMat = new Material("postfx_math.hlsl");
 		invertMat["mul_color"] = new Vec3(-1, -1, -1);
 		invertMat["add_color"] = new Vec3( 1,  1,  1);
-		// Queue offsets order the chain - invert first, vignette after, so
-		// the vignette darkens the inverted image's corners.
-		invertMat  .QueueOffset = 0;
-		vignetteMat.QueueOffset = 10;
 
 		fogMat = new Material("postfx_depth_fog.hlsl");
 		fogMat["fog_density"] = fogDensity;
-		fogMat.QueueOffset = -10; // Fog goes before color effects
 
 		/// :CodeSample: RenderSettings Renderer.RenderTo
 		/// ### Rendering a viewpoint with post-processing
@@ -68,41 +65,39 @@ class DemoPostFX : ITest
 		// display's post-process chain - turn some effects on for the shot!
 		if (Tests.IsTesting)
 		{
-			vignetteOn = true; Renderer.AddPostProcess(vignetteMat);
-			fogOn      = true; Renderer.AddPostProcess(fogMat);
+			vignetteOn = true;
+			fogOn      = true;
+			ApplyChain();
 		}
+	}
+
+	// Chain order is the array order - fog reads scene depth first, then the
+	// invert flips colors, and the vignette darkens the corners last.
+	void ApplyChain()
+	{
+		List<Material> chain = new List<Material>();
+		if (fogOn     ) chain.Add(fogMat);
+		if (invertOn  ) chain.Add(invertMat);
+		if (vignetteOn) chain.Add(vignetteMat);
+		Renderer.SetPostProcess(chain.ToArray());
 	}
 
 	public void Shutdown()
 	{
-		Renderer.RemovePostProcess(vignetteMat);
-		Renderer.RemovePostProcess(invertMat);
-		Renderer.RemovePostProcess(fogMat);
+		Renderer.SetPostProcess();
 	}
 
 	public void Step()
 	{
 		UI.WindowBegin("Post Processing", ref windowPose, new Vec2(0.28f, 0));
 
-		if (UI.Toggle("Vignette", ref vignetteOn))
-		{
-			if (vignetteOn) Renderer.AddPostProcess   (vignetteMat);
-			else            Renderer.RemovePostProcess(vignetteMat);
-		}
+		if (UI.Toggle("Vignette", ref vignetteOn)) ApplyChain();
 		if (vignetteOn && UI.HSlider("strength", ref vignetteStrength, 0, 1))
 			vignetteMat["strength"] = vignetteStrength;
 
-		if (UI.Toggle("Invert", ref invertOn))
-		{
-			if (invertOn) Renderer.AddPostProcess   (invertMat);
-			else          Renderer.RemovePostProcess(invertMat);
-		}
+		if (UI.Toggle("Invert", ref invertOn)) ApplyChain();
 
-		if (UI.Toggle("Depth fog", ref fogOn))
-		{
-			if (fogOn) Renderer.AddPostProcess   (fogMat);
-			else       Renderer.RemovePostProcess(fogMat);
-		}
+		if (UI.Toggle("Depth fog", ref fogOn)) ApplyChain();
 		if (fogOn && UI.HSlider("density", ref fogDensity, 0, 2))
 			fogMat["fog_density"] = fogDensity;
 

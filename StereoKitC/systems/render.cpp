@@ -926,33 +926,8 @@ bool32_t render_material_is_post_process(material_t material) {
 
 ///////////////////////////////////////////
 
-void render_add_post_process(material_t material) {
-	if (!render_material_is_post_process(material)) {
-		log_errf("render_add_post_process: '%s' is not a post-process material - its shader needs an input attachment named 'color' (SubpassInput), and no vertex inputs", material ? material->header.id_text : "null");
-		return;
-	}
-	if (local.post_process.index_of(material) != -1) return;
-
-	material_addref(material);
-	local.post_process.add(material);
-	if (local.post_process.count > SKR_PASS_MAX_POSTFX)
-		log_errf("render_add_post_process: %d post-process materials are active, only the %d with the lowest queue offsets will render", local.post_process.count, SKR_PASS_MAX_POSTFX);
-}
-
-///////////////////////////////////////////
-
-void render_remove_post_process(material_t material) {
-	int32_t idx = local.post_process.index_of(material);
-	if (idx == -1) return;
-
-	material_release(local.post_process[idx]);
-	local.post_process.remove(idx);
-}
-
-///////////////////////////////////////////
-
-// Pick the SKR_PASS_MAX_POSTFX lowest-queue-offset valid materials, stable
-// for ties. Returns the count written to out_picked.
+// Validate the chain, keeping the first SKR_PASS_MAX_POSTFX valid materials
+// in array order. Returns the count written to out_picked.
 static int32_t render_post_process_select(const material_t* materials, int32_t count, material_t out_picked[SKR_PASS_MAX_POSTFX]) {
 	int32_t picked_count = 0;
 	for (int32_t i = 0; i < count; i++) {
@@ -960,16 +935,27 @@ static int32_t render_post_process_select(const material_t* materials, int32_t c
 			log_errf("'%s' is not a post-process material - its shader needs an input attachment named 'color' (SubpassInput), and no vertex inputs", materials[i] ? materials[i]->header.id_text : "null");
 			continue;
 		}
-		int32_t offset = material_get_queue_offset(materials[i]);
-		int32_t at     = picked_count;
-		while (at > 0 && material_get_queue_offset(out_picked[at-1]) > offset) at--;
-		if (at >= SKR_PASS_MAX_POSTFX) continue;
-
-		if (picked_count < SKR_PASS_MAX_POSTFX) picked_count++;
-		for (int32_t m = picked_count-1; m > at; m--) out_picked[m] = out_picked[m-1];
-		out_picked[at] = materials[i];
+		if (picked_count >= SKR_PASS_MAX_POSTFX) {
+			log_errf("Post-process chains are limited to %d materials - skipping '%s'", SKR_PASS_MAX_POSTFX, materials[i]->header.id_text);
+			continue;
+		}
+		out_picked[picked_count++] = materials[i];
 	}
 	return picked_count;
+}
+
+///////////////////////////////////////////
+
+void render_set_post_process(const material_t* materials, int32_t material_count) {
+	material_t picked[SKR_PASS_MAX_POSTFX];
+	int32_t    picked_count = render_post_process_select(materials, material_count, picked);
+
+	// Ref the new chain before releasing the old, they may share materials.
+	for (int32_t i = 0; i < picked_count;             i++) material_addref (picked[i]);
+	for (int32_t i = 0; i < local.post_process.count; i++) material_release(local.post_process[i]);
+	local.post_process.clear();
+	for (int32_t i = 0; i < picked_count; i++)
+		local.post_process.add(picked[i]);
 }
 
 ///////////////////////////////////////////
@@ -1293,8 +1279,6 @@ void render_to(tex_t to_rendertarget, int32_t to_target_index, const matrix* cam
 		log_errf("render_to view_count %d out of range [1, %d]", view_count, SK_MAX_VIEWS);
 		return;
 	}
-	if (s->post_process_count > SKR_PASS_MAX_POSTFX)
-		log_errf("render_to: %d post-process materials, only the %d with the lowest queue offsets will render", s->post_process_count, SKR_PASS_MAX_POSTFX);
 	tex_addref(to_rendertarget);
 
 	render_action_t action = {};
@@ -1589,8 +1573,6 @@ void render_list_draw_now(render_list_t list, tex_t to_rendertarget, const matri
 	color128      clear_color      = s->clear_color;
 	rect_t        viewport_pct     = s->viewport;
 	int32_t       material_variant = s->material_variant;
-	if (s->post_process_count > SKR_PASS_MAX_POSTFX)
-		log_errf("render_list_draw_now: %d post-process materials, only the %d with the lowest queue offsets will render", s->post_process_count, SKR_PASS_MAX_POSTFX);
 
 	int32_t w = to_rendertarget->width;
 	int32_t h = to_rendertarget->height;

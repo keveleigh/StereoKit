@@ -38,9 +38,9 @@ namespace StereoKit
 		/// entire texture.</summary>
 		public Rect        viewport;
 		/// <summary>An optional list of post-process Materials for this
-		/// pass, applied in Material.QueueOffset order. These are
-		/// tile-friendly subpass effects, see Renderer.AddPostProcess for
-		/// the shader requirements. Null is fine here, and means no
+		/// pass, applied in array order. These are tile-friendly subpass
+		/// effects, see Renderer.SetPostProcess for the shader
+		/// requirements. Null is fine here, and means no
 		/// post-processing.</summary>
 		public Material[]  postProcess;
 
