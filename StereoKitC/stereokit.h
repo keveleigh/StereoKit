@@ -2267,16 +2267,46 @@ SK_API void line_add_listv(const line_point_t *in_arr_points, int32_t count);
   everything on the first image draw, but not clear on subsequent
   draws.*/
 typedef enum render_clear_ {
-	/*Don't clear anything, leave it as it is.*/
-	render_clear_none  = 0,
 	/*Clear the rendertarget's color data.*/
 	render_clear_color = 1 << 0,
 	/*Clear the rendertarget's depth data, if present.*/
 	render_clear_depth = 1 << 1,
-	/*Clear both color and depth data.*/
+	/*Don't clear anything, draw on top of what's already there.*/
+	render_clear_keep  = 1 << 3,
+	/*Deprecated, use render_clear_keep.*/
+	render_clear_none  = render_clear_keep,
+	/*Clear both color and depth data. A zero value also means this -
+	  it's the default, so zero-initialized settings clear everything.*/
 	render_clear_all   = render_clear_color | render_clear_depth,
 } render_clear_;
 SK_MakeFlag(render_clear_)
+
+/*Optional settings for rendering a camera viewpoint to a rendertarget,
+  used by render_to and render_list_draw_now. This is a plain struct where
+  zero means 'default' - a zero-initialized struct gives you: all layers,
+  the default material variant, clear everything to transparent black, a
+  full-target viewport, and no post-processing.*/
+typedef struct render_settings_t {
+	/*Layer filter for what to draw, 0 defaults to render_layer_all.*/
+	render_layer_          layer_filter;
+	/*Material variant index, 0 is the default variant.*/
+	int32_t                material_variant;
+	/*What to clear before drawing, 0 defaults to render_clear_all. Use
+	  render_clear_keep to draw on top of the target's existing content.*/
+	render_clear_          clear;
+	/*Color to clear the target with, in linear space. Defaults to
+	  transparent black.*/
+	color128               clear_color;
+	/*Percentage-based viewport rect, a zero-sized rect defaults to the
+	  full target.*/
+	rect_t                 viewport;
+	/*Optional array of post-process materials for this pass, applied in
+	  array order. These are tile-friendly subpass effects, see
+	  render_set_post_process for the shader requirements.*/
+	const material_t*      post_process;
+	/*Number of materials in post_process.*/
+	int32_t                post_process_count;
+} render_settings_t;
 
 /*The projection mode used by StereoKit for the main camera! You
   can use this with Renderer.Projection. These options are only
@@ -2333,11 +2363,12 @@ SK_API void                  render_add_mesh       (mesh_t  mesh,  material_t ma
 SK_API void                  render_add_model      (model_t model,                               const sk_ref(matrix) transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void                  render_add_model_mat  (model_t model, material_t material_override, const sk_ref(matrix) transform, color128 color_linear sk_default({1,1,1,1}), render_layer_ layer sk_default(render_layer_0));
 SK_API void                  render_blit           (tex_t to_rendertarget, material_t material);
+SK_API void                  render_set_post_process(const material_t* in_arr_materials, int32_t material_count);
 SK_API void                  render_screenshot     (const char *file_utf8, int32_t file_quality_100, pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees);
 //TODO: for v0.4, reorder parameters, context in particular should be next to callback
 SK_API void                  render_screenshot_capture  (void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), pose_t viewpoint, int32_t width, int32_t height, float field_of_view_degrees, tex_format_ tex_format sk_default(tex_format_rgba32), void *context sk_default(nullptr));
 SK_API void                  render_screenshot_viewpoint(void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter sk_default(render_layer_all), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default(rect_t{}), tex_format_ tex_format sk_default(tex_format_rgba32), void* context sk_default(nullptr));
-SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0), render_clear_ clear sk_default(render_clear_all), rect_t viewport sk_default({}));
+SK_API void                  render_to             (tex_t to_rendertarget, int32_t to_target_index, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, const render_settings_t* opt_settings sk_default(nullptr));
 SK_API render_list_t         render_get_primary_list(void);
 
 ///////////////////////////////////////////
@@ -2370,7 +2401,7 @@ SK_API int32_t               render_list_prev_count   (const render_list_t list)
 SK_API void                  render_list_add_mesh     (      render_list_t list, mesh_t  mesh,  material_t material,          matrix world_transform, color128 color_linear, render_layer_ layer);
 SK_API void                  render_list_add_model    (      render_list_t list, model_t model,                               matrix world_transform, color128 color_linear, render_layer_ layer);
 SK_API void                  render_list_add_model_mat(      render_list_t list, model_t model, material_t material_override, matrix world_transform, color128 color_linear, render_layer_ layer);
-SK_API void                  render_list_draw_now     (      render_list_t list, tex_t to_rendertarget, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, color128 clear_color sk_default({ 0,0,0,0 }), render_clear_ clear sk_default(render_clear_all), rect_t viewport_pct sk_default({}), render_layer_ layer_filter sk_default(render_layer_all), int32_t material_variant sk_default(0));
+SK_API void                  render_list_draw_now     (      render_list_t list, tex_t to_rendertarget, const matrix* in_arr_cameras, const matrix* in_arr_projections, int32_t view_count, const render_settings_t* opt_settings sk_default(nullptr));
 
 SK_API void                  render_list_push         (      render_list_t list);
 SK_API void                  render_list_pop          (void);

@@ -487,13 +487,45 @@ namespace StereoKit
 		/// If the width of this value is zero, then this will render to the
 		/// entire texture.</param>
 		public static void RenderTo(Tex toRendertarget, Matrix camera, Matrix projection, RenderLayer layerFilter = RenderLayer.All, int materialVariant = 0, RenderClear clear = RenderClear.All, Rect viewport = default(Rect))
-			=> NativeAPI.render_to(toRendertarget._inst, 0, in camera, in projection, 1, layerFilter, materialVariant, clear, viewport);
+			=> RenderTo(toRendertarget, 0, camera, projection, new RenderSettings { layerFilter = layerFilter, materialVariant = materialVariant, clear = clear, viewport = viewport });
 
 		/// <inheritdoc cref="RenderTo(Tex, Matrix, Matrix, RenderLayer, int, RenderClear, Rect)"/>
 		/// <param name="toTargetIndex">Index of the render target's array
 		/// texture we want to draw to.</param>
 		public static void RenderTo(Tex toRendertarget, int toTargetIndex, Matrix camera, Matrix projection, RenderLayer layerFilter = RenderLayer.All, int materialVariant = 0, RenderClear clear = RenderClear.All, Rect viewport = default(Rect))
-			=> NativeAPI.render_to(toRendertarget._inst, toTargetIndex, in camera, in projection, 1, layerFilter, materialVariant, clear, viewport);
+			=> RenderTo(toRendertarget, toTargetIndex, camera, projection, new RenderSettings { layerFilter = layerFilter, materialVariant = materialVariant, clear = clear, viewport = viewport });
+
+		/// <summary>This renders the current scene to the indicated
+		/// rendertarget texture from the specified viewpoint, using a
+		/// RenderSettings struct for everything else - including
+		/// tile-friendly post-processing effects! This call enqueues a
+		/// render that occurs immediately before the screen itself is
+		/// rendered.</summary>
+		/// <param name="toRendertarget">The texture to which the scene will
+		/// be rendered to. This must be a Rendertarget type texture.</param>
+		/// <param name="camera">A TRS matrix representing the location and
+		/// orientation of the camera. This matrix gets inverted later on, so
+		/// no need to do it yourself.</param>
+		/// <param name="projection">The projection matrix describes how the
+		/// geometry is flattened onto the draw surface. Normally, you'd use
+		/// Matrix.Perspective, and occasionally Matrix.Orthographic might be
+		/// helpful as well.</param>
+		/// <param name="settings">Settings for this render pass, a
+		/// `default` here means all layers, the default material variant,
+		/// clear everything to transparent black, a full-target viewport,
+		/// and no post-processing.</param>
+		public static void RenderTo(Tex toRendertarget, Matrix camera, Matrix projection, RenderSettings settings)
+			=> RenderTo(toRendertarget, 0, camera, projection, settings);
+
+		/// <inheritdoc cref="RenderTo(Tex, Matrix, Matrix, RenderSettings)"/>
+		/// <param name="toTargetIndex">Index of the render target's array
+		/// texture we want to draw to.</param>
+		public static void RenderTo(Tex toRendertarget, int toTargetIndex, Matrix camera, Matrix projection, RenderSettings settings)
+		{
+			RenderSettingsNative native = settings.ToNative(out var pin);
+			NativeAPI.render_to(toRendertarget._inst, toTargetIndex, in camera, in projection, 1, in native);
+			if (pin.IsAllocated) pin.Free();
+		}
 
 		/// <summary>Multi-view variant of RenderTo. Queues a single render
 		/// pass that draws the active list into N views at once, with one
@@ -512,10 +544,46 @@ namespace StereoKit
 		/// <param name="clear">Whether and how to clear the rendertarget.</param>
 		/// <param name="viewport">Subregion in normalized 0-1 coordinates.</param>
 		public static void RenderTo(Tex toRendertarget, in Matrix[] cameras, in Matrix[] projections, RenderLayer layerFilter = RenderLayer.All, int materialVariant = 0, RenderClear clear = RenderClear.All, Rect viewport = default(Rect))
+			=> RenderTo(toRendertarget, cameras, projections, new RenderSettings { layerFilter = layerFilter, materialVariant = materialVariant, clear = clear, viewport = viewport });
+
+		/// <inheritdoc cref="RenderTo(Tex, Matrix, Matrix, RenderSettings)"/>
+		/// <param name="cameras">View transforms, one per view.</param>
+		/// <param name="projections">Projection matrices, one per view.
+		/// Length must match `cameras`.</param>
+		public static void RenderTo(Tex toRendertarget, in Matrix[] cameras, in Matrix[] projections, RenderSettings settings)
 		{
 			if (cameras.Length != projections.Length)
 				throw new ArgumentException("cameras and projections must have the same length");
-			NativeAPI.render_to(toRendertarget._inst, 0, cameras, projections, cameras.Length, layerFilter, materialVariant, clear, viewport);
+			RenderSettingsNative native = settings.ToNative(out var pin);
+			NativeAPI.render_to(toRendertarget._inst, 0, cameras, projections, cameras.Length, in native);
+			if (pin.IsAllocated) pin.Free();
+		}
+
+		/// <summary>Sets the main display's post-process chain! The
+		/// Materials apply in array order, at most 2 per pass, and calling
+		/// this with no arguments clears the chain. Post-processing here is
+		/// tile-renderer friendly: effects run as subpasses that stay in
+		/// tile memory on mobile GPUs, and they apply to the main display
+		/// and to screenshots - what you see is what you shoot.
+		///
+		/// A post-process Material's shader reads the scene through a
+		/// pixel-local input attachment named 'color' (in HLSL,
+		/// `[[vk::input_attachment_index(0)]] SubpassInput&lt;float4&gt; color;`
+		/// read with `color.SubpassLoad()`), draws as a bufferless
+		/// fullscreen triangle from SV_VertexID, and so cannot have vertex
+		/// inputs. It may also read depth through an input attachment named
+		/// 'depth' at index 1. Materials that don't qualify are rejected
+		/// with an error log. Regular textures and Material parameters work
+		/// normally, and can be animated per-frame.</summary>
+		/// <param name="postProcessChain">Materials whose shaders qualify
+		/// as post-process effects, applied in order. Empty clears the
+		/// chain.</param>
+		public static void SetPostProcess(params Material[] postProcessChain)
+		{
+			IntPtr[] materials = new IntPtr[postProcessChain?.Length ?? 0];
+			for (int i = 0; i < materials.Length; i++)
+				materials[i] = postProcessChain[i]?._inst ?? IntPtr.Zero;
+			NativeAPI.render_set_post_process(materials, materials.Length);
 		}
 
 		/// <summary>This attaches a texture resource globally across all

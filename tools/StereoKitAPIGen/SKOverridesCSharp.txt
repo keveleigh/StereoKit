@@ -127,7 +127,9 @@ ui_scroll_ UIScroll
 @noimpl vert_t vert_component_t
 
 # Functions with hand-written bindings in NativeAPI.Custom.cs
-# (none currently)
+# render_to/render_list_draw_now take render_settings_t by typed ref there,
+# rather than the generator's IntPtr.
+@noimpl render_to render_list_draw_now
 @noimpl spherical_harmonics_t hand_t controller_t file_filter_t
 
 # Enums with hand-written struct implementations

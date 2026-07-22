@@ -96,26 +96,27 @@
 		<None Visible="false" CopyToOutputDirectory="PreserveNewest" Link="runtimes\$(SKSDKRID)\native\libMoltenVK.dylib" Include="$(SKSDKBinDir)libMoltenVK.dylib" />
 	</ItemGroup>
 
-	<!-- Android binaries are included differently. libStereoKitC.so and the jar
-	     are literal paths, so MSBuild keeps them in the item list even before the
-	     native build produces them. -->
+	<!-- Android binaries are included differently. libStereoKitC.so, the OpenXR
+	     loader, and the jar use literal paths, so MSBuild keeps them in the item
+	     list even before the native build produces them - a wildcard here would
+	     expand at evaluation time (when the .so doesn't exist yet) and drop the
+	     loader from a clean build, so libStereoKitC.so would fail to dlopen.
+	     The from-source build always writes its single loader to the 'standard'
+	     folder (see CMakeLists), so this include only applies to that default. -->
 	<ItemGroup Condition="'$(SKSDKBuildOS)'=='Android'">
 		<!-- <None                 Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKSDKDbgPath)" /> -->
-		<AndroidNativeLibrary Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKSDKLibPath)" />
+		<AndroidNativeLibrary                                            Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKSDKLibPath)" />
+		<AndroidNativeLibrary Condition="'$(SKOpenXRLoader)'=='Standard'" Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKSDKBinDir)standard/libopenxr_loader.so" />
 		<AndroidJavaLibrary   Visible="false" Include="$(SKSDKFolder)\bin\distribute\bin\Android\sk_app.jar" />
 	</ItemGroup>
 
-	<!-- Resolve the OpenXR loader wildcards in a target, so they expand after the
-	     native build instead of at evaluation time (when the .so doesn't exist yet). -->
-	<Target Name="StereoKit_AddAndroidNativeLibraries"
-	        Condition="'$(SKSDKBuildOS)'=='Android'"
-	        AfterTargets="StereoKit_BuildNative"
-	        BeforeTargets="BeforeBuild">
-		<ItemGroup>
-			<AndroidNativeLibrary Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKSDKBinDir)$(SKOpenXRLoader.ToLower())/*.so" />
-			<AndroidNativeLibrary Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKOpenXRLoaderFolder)/$(SKOpenXRLoader)/$(SKSDKBuildMode.ToLower())/*.so" />
-		</ItemGroup>
-	</Target>
+	<!-- A custom prebuilt loader (e.g. Meta's), possibly with sibling .so files,
+	     can be dropped here instead - point SKOpenXRLoader at its folder name.
+	     These files exist before the build, so the wildcard (which also picks up
+	     the siblings) resolves fine at evaluation time. -->
+	<ItemGroup Condition="'$(SKSDKBuildOS)'=='Android' and '$(SKOpenXRLoader)'!='Standard'">
+		<AndroidNativeLibrary Visible="false" CopyToOutputDirectory="PreserveNewest" Abi="$(SKSDKBuildAbi)" Include="$(SKOpenXRLoaderFolder)/$(SKOpenXRLoader)/$(SKSDKBuildMode.ToLower())/*.so" />
+	</ItemGroup>
 
 	<!-- Full rebuilds of this project should also be full rebuilds of StereoKit. -->
 	<Target Name="SKSDKRebuild" AfterTargets="Clean">

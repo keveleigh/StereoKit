@@ -83,6 +83,7 @@ void render_pipeline_draw() {
 		pass.view_count       = s->array_count;
 		pass.views_correlated = s->array_count > 1;
 		render_pass_add_draw(&pass);
+		render_pass_add_global_post_process(&pass);
 		skr_pass_submit(&pass);
 	}
 

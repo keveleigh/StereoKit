@@ -83,9 +83,10 @@ bool tex_format_is_mippable(tex_format_ format) {
 ///////////////////////////////////////////
 
 skr_tex_flags_ tex_type_to_skr_flags(tex_type_ type) {
-	// Z-buffers are write-only depth attachments (not sampled)
+	// Z-buffers are depth attachments (not sampled), in-pass readable so
+	// post-process effects can take depth as an input attachment.
 	if (type & tex_type_zbuffer) {
-		return skr_tex_flags_writeable;
+		return (skr_tex_flags_)(skr_tex_flags_writeable | skr_tex_flags_input_attachment);
 	}
 
 	// Most textures are sampled
@@ -94,7 +95,7 @@ skr_tex_flags_ tex_type_to_skr_flags(tex_type_ type) {
 	if (type & tex_type_dynamic)      flags = (skr_tex_flags_)(flags | skr_tex_flags_dynamic);
 	if (type & tex_type_mips)         flags = (skr_tex_flags_)(flags | skr_tex_flags_gen_mips);
 	if (type & tex_type_rendertarget) flags = (skr_tex_flags_)(flags | skr_tex_flags_writeable);
-	if (type & tex_type_depthtarget)  flags = (skr_tex_flags_)(flags | skr_tex_flags_writeable); // Readable depth (shadow maps)
+	if (type & tex_type_depthtarget)  flags = (skr_tex_flags_)(flags | skr_tex_flags_writeable | skr_tex_flags_input_attachment); // Readable depth (shadow maps)
 	if (type & tex_type_compute)      flags = (skr_tex_flags_)(flags | skr_tex_flags_compute);
 	if (type & tex_type_volume)       flags = (skr_tex_flags_)(flags | skr_tex_flags_3d);
 	return flags;
@@ -2011,7 +2012,7 @@ tex_t tex_gen_cubemap(const gradient_t gradient_bot_to_top, vec3 gradient_dir, i
 	sh_windowing(sh, 0.01f);
 
 	// Set light_info before uploading so _tex_set_color_arr skips the
-	// redundant SH compute — this cubemap was generated from a gradient.
+	// redundant SH compute - this cubemap was generated from a gradient.
 	result->light_info  = sk_malloc_t(spherical_harmonics_t, 1);
 	*result->light_info = sh;
 
@@ -2097,7 +2098,7 @@ tex_t tex_gen_cubemap_sh(const spherical_harmonics_t& lookup, int32_t face_size,
 	}
 
 	// Set light_info before uploading so _tex_set_color_arr skips the
-	// redundant SH compute — this cubemap was generated from SH data.
+	// redundant SH compute - this cubemap was generated from SH data.
 	result->light_info  = sk_malloc_t(spherical_harmonics_t, 1);
 	*result->light_info = lookup;
 
