@@ -933,6 +933,11 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern uint         backend_vulkan_get_queue_family_index(BackendVulkanQueue queue);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         backend_vulkan_queue_lock(BackendVulkanQueue queue);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         backend_vulkan_queue_unlock(BackendVulkanQueue queue);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         backend_vulkan_request_enabled([MarshalAs(UnmanagedType.LPUTF8Str)] string name);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         backend_vulkan_ext_enabled([MarshalAs(UnmanagedType.LPUTF8Str)] string extension_name);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       backend_vulkan_get_function([MarshalAs(UnmanagedType.LPUTF8Str)] string function_name);
 
 		///////////////////////////////////////////
 

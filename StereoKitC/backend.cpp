@@ -215,4 +215,30 @@ void backend_vulkan_queue_unlock(backend_vulkan_queue_ queue) {
 	skr_vk_queue_unlock(backend_vulkan_get_queue_family_index(queue));
 }
 
+///////////////////////////////////////////
+
+void backend_vulkan_request(const backend_vulkan_request_t *request) {
+	if (sk_is_initialized()) {
+		log_err("backend_vulkan_request must be called BEFORE StereoKit initialization!");
+		return;
+	}
+	skr_vk_request_t r = {};
+	r.name                     = request->name;
+	r.required                 = request->required != 0;
+	r.instance_extensions      = request->instance_extensions;
+	r.instance_extension_count = request->instance_extension_count;
+	r.device_extensions        = request->device_extensions;
+	r.device_extension_count   = request->device_extension_count;
+	// backend_vulkan_feature_t is layout-identical to skr_vk_feature_t.
+	r.features                 = (const skr_vk_feature_t*)request->features;
+	r.feature_count            = request->feature_count;
+	skr_vk_request(&r);
+}
+
+///////////////////////////////////////////
+
+bool32_t backend_vulkan_request_enabled(const char *name)            { return skr_vk_request_enabled(name); }
+bool32_t backend_vulkan_ext_enabled    (const char *extension_name) { return skr_vk_ext_enabled(extension_name); }
+void    *backend_vulkan_get_function   (const char *function_name)  { return skr_vk_get_function(function_name); }
+
 }

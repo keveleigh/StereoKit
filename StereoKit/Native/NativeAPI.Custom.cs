@@ -83,6 +83,12 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern void render_to(IntPtr to_rendertarget, int to_target_index, [In] Matrix[] in_arr_cameras, [In] Matrix[] in_arr_projections, int view_count, in RenderSettingsNative opt_settings);
 
+		// backend_vulkan_request takes arrays of extension strings and feature
+		// structs, so it's marshaled by hand in Backend.Vulkan.Request rather
+		// than through the generated binding.
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void backend_vulkan_request(in BackendVulkanRequestT request);
+
 		// tex_create_mem with byte array
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern IntPtr tex_create_mem([In] byte[] data, UIntPtr data_size, [MarshalAs(UnmanagedType.Bool)] bool srgb_data, int priority);
