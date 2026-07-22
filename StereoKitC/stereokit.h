@@ -3641,6 +3641,41 @@ typedef enum backend_vulkan_queue_ {
 
 typedef uint64_t openxr_handle_t;
 
+/*A single Vulkan feature struct to request as part of a
+  backend_vulkan_request_t. See backend_vulkan_request for details.*/
+typedef struct backend_vulkan_feature_t {
+	/*A pointer to a VkPhysicalDevice*Features struct with its sType set, and
+	  the feature bits you want enabled set to VK_TRUE. This must NOT be a
+	  VkPhysicalDeviceFeatures2, the core features chain is handled separately.*/
+	const void* vk_struct;
+	/*The size of the struct vk_struct points at, in bytes.*/
+	int32_t     size;
+} backend_vulkan_feature_t;
+
+/*A request for Vulkan instance/device extensions and device features.
+  Register it with backend_vulkan_request before StereoKit initializes. A
+  request enables atomically: only when all of its extensions are present and
+  every requested feature bit is supported. See backend_vulkan_request.*/
+typedef struct backend_vulkan_request_t {
+	/*An optional name used as a handle for backend_vulkan_request_enabled.
+	  null makes the request anonymous, it still contributes its extensions and
+	  features, but can't be queried by name.*/
+	const char*                     name;
+	/*If true, StereoKit initialization will fail should this request go
+	  unsatisfied. If false, an unmet request is simply left disabled.*/
+	bool32_t                        required;
+	/*An array of Vulkan instance extension names this request needs.*/
+	const char**                    instance_extensions;
+	int32_t                         instance_extension_count;
+	/*An array of Vulkan device extension names this request needs.*/
+	const char**                    device_extensions;
+	int32_t                         device_extension_count;
+	/*An array of Vulkan device features this request needs. Their bits are
+	  queried for support before being enabled.*/
+	const backend_vulkan_feature_t* features;
+	int32_t                         feature_count;
+} backend_vulkan_request_t;
+
 SK_API backend_xr_type_  backend_xr_get_type                (void);
 SK_API openxr_handle_t   backend_openxr_get_instance        (void);
 SK_API openxr_handle_t   backend_openxr_get_session         (void);
@@ -3676,6 +3711,10 @@ SK_API void             *backend_vulkan_get_queue              (backend_vulkan_q
 SK_API uint32_t          backend_vulkan_get_queue_family_index (backend_vulkan_queue_ queue);
 SK_API void              backend_vulkan_queue_lock             (backend_vulkan_queue_ queue);
 SK_API void              backend_vulkan_queue_unlock           (backend_vulkan_queue_ queue);
+SK_API void              backend_vulkan_request                (const backend_vulkan_request_t *request);
+SK_API bool32_t          backend_vulkan_request_enabled        (const char *name);
+SK_API bool32_t          backend_vulkan_ext_enabled            (const char *extension_name);
+SK_API void             *backend_vulkan_get_function           (const char *function_name);
 
 ///////////////////////////////////////////
 

@@ -400,7 +400,184 @@ namespace StereoKit
 			/// frame has been submitted yet.</returns>
 			public static int GetFrameFenceFd()
 				=> NativeAPI.backend_vulkan_get_frame_fence_fd();
+
+			/// <summary>Registers a request for Vulkan instance/device
+			/// extensions and device features. This MUST be called before
+			/// SK.Initialize. A request enables atomically: only when all of
+			/// its extensions are present, and every requested feature bit is
+			/// supported. If <see cref="BackendVulkanRequest.required"/> is true
+			/// and the request can't be satisfied, SK.Initialize will fail!
+			/// After initialization, check the result with
+			/// <see cref="RequestEnabled"/> (by name) or <see cref="ExtEnabled"/>
+			/// (by extension name).</summary>
+			/// <param name="request">The extensions and features to request. Its
+			/// arrays and feature struct pointers only need to remain valid for
+			/// the duration of this call - StereoKit copies everything it needs.
+			/// </param>
+			public static void Request(BackendVulkanRequest request)
+			{
+				IntPtr nameStr = Marshal.StringToCoTaskMemUTF8(request.name);
+				IntPtr instArr = StrArrToNative(request.instanceExtensions, out int instCount);
+				IntPtr devArr  = StrArrToNative(request.deviceExtensions,   out int devCount);
+
+				int    featCount = request.features == null ? 0 : request.features.Length;
+				IntPtr featArr   = IntPtr.Zero;
+				if (featCount > 0)
+				{
+					int size = Marshal.SizeOf<BackendVulkanFeature>();
+					featArr  = Marshal.AllocHGlobal(size * featCount);
+					for (int i = 0; i < featCount; i++)
+						Marshal.StructureToPtr(request.features[i], featArr + i * size, false);
+				}
+
+				BackendVulkanRequestT native = new BackendVulkanRequestT {
+					name                   = nameStr,
+					required               = request.required,
+					instanceExtensions     = instArr,
+					instanceExtensionCount = instCount,
+					deviceExtensions       = devArr,
+					deviceExtensionCount   = devCount,
+					features               = featArr,
+					featureCount           = featCount,
+				};
+				NativeAPI.backend_vulkan_request(native);
+
+				// StereoKit copies the request, so temporaries can be freed now.
+				FreeStrArr(instArr, instCount);
+				FreeStrArr(devArr,  devCount);
+				if (featArr != IntPtr.Zero) Marshal.FreeHGlobal   (featArr);
+				Marshal.FreeCoTaskMem(nameStr);
+			}
+
+			/// <summary>Checks if a named request registered via
+			/// <see cref="Request"/> was successfully enabled. This MUST only be
+			/// called after SK.Initialize.</summary>
+			/// <param name="name">The name given to the BackendVulkanRequest.
+			/// </param>
+			/// <returns>If the request's extensions and features were all
+			/// enabled.</returns>
+			public static bool RequestEnabled(string name)
+				=> NativeAPI.backend_vulkan_request_enabled(name);
+
+			/// <summary>Checks if a Vulkan extension was enabled at init,
+			/// regardless of which request asked for it. This MUST only be
+			/// called after SK.Initialize.</summary>
+			/// <param name="extensionName">The extension name, for example
+			/// "VK_KHR_swapchain".</param>
+			/// <returns>If the extension is available to use.</returns>
+			public static bool ExtEnabled(string extensionName)
+				=> NativeAPI.backend_vulkan_ext_enabled(extensionName);
+
+			/// <summary>Resolves a Vulkan function pointer, using
+			/// `vkGetDeviceProcAddr` with a `vkGetInstanceProcAddr` fallback.
+			/// Use this to call into extensions you've enabled via
+			/// <see cref="Request"/>. You can use
+			/// `Marshal.GetDelegateForFunctionPointer` to turn the result into a
+			/// callable delegate.</summary>
+			/// <param name="functionName">The Vulkan function name, for example
+			/// "vkCmdBeginRenderingKHR".</param>
+			/// <returns>A function pointer, or IntPtr.Zero on failure.</returns>
+			public static IntPtr GetFunctionPtr(string functionName)
+				=> NativeAPI.backend_vulkan_get_function(functionName);
+
+			/// <summary>Resolves a Vulkan function pointer and wraps it as a
+			/// delegate, using `vkGetDeviceProcAddr` with a
+			/// `vkGetInstanceProcAddr` fallback. Use this to call into extensions
+			/// you've enabled via <see cref="Request"/>.</summary>
+			/// <param name="functionName">The Vulkan function name, for example
+			/// "vkCmdBeginRenderingKHR".</param>
+			/// <returns>A delegate, or null on failure.</returns>
+			public static TDelegate GetFunction<TDelegate>(string functionName)
+			{
+				IntPtr fn = NativeAPI.backend_vulkan_get_function(functionName);
+				if (fn == IntPtr.Zero) return default;
+				return Marshal.GetDelegateForFunctionPointer<TDelegate>(fn);
+			}
+
+			static IntPtr StrArrToNative(string[] strings, out int count)
+			{
+				count = strings == null ? 0 : strings.Length;
+				if (count == 0) return IntPtr.Zero;
+				IntPtr block = Marshal.AllocHGlobal(IntPtr.Size * count);
+				for (int i = 0; i < count; i++)
+					Marshal.WriteIntPtr(block, i * IntPtr.Size, Marshal.StringToCoTaskMemUTF8(strings[i]));
+				return block;
+			}
+
+			static void FreeStrArr(IntPtr block, int count)
+			{
+				if (block == IntPtr.Zero) return;
+				for (int i = 0; i < count; i++)
+					Marshal.FreeCoTaskMem(Marshal.ReadIntPtr(block, i * IntPtr.Size));
+				Marshal.FreeHGlobal(block);
+			}
 		}
-		
+
+	}
+
+	/// <summary>A single Vulkan feature struct to request as part of a
+	/// <see cref="BackendVulkanRequest"/>. See
+	/// <see cref="Backend.Vulkan.Request"/> for details.</summary>
+	public struct BackendVulkanFeature
+	{
+		/// <summary>A pointer to a pinned VkPhysicalDevice*Features struct with
+		/// its sType set, and the feature bits you want enabled set to VK_TRUE.
+		/// This must NOT be a VkPhysicalDeviceFeatures2. The pointer only needs
+		/// to remain valid for the duration of the Backend.Vulkan.Request call.
+		/// </summary>
+		public IntPtr vkStruct;
+		/// <summary>The size of the struct vkStruct points at, in bytes.
+		/// </summary>
+		public int    size;
+
+		/// <summary>Creates a feature request from a pointer to a pinned
+		/// VkPhysicalDevice*Features struct and its size in bytes.</summary>
+		/// <param name="vkStruct">A pointer to a pinned VkPhysicalDevice*Features
+		/// struct, with its sType and desired VK_TRUE bits set.</param>
+		/// <param name="size">The size of the struct vkStruct points at, in
+		/// bytes.</param>
+		public BackendVulkanFeature(IntPtr vkStruct, int size)
+		{
+			this.vkStruct = vkStruct;
+			this.size     = size;
+		}
+	}
+
+	/// <summary>A request for Vulkan instance/device extensions and device
+	/// features, registered via <see cref="Backend.Vulkan.Request"/> before
+	/// SK.Initialize.</summary>
+	public struct BackendVulkanRequest
+	{
+		/// <summary>An optional name used as a handle for
+		/// <see cref="Backend.Vulkan.RequestEnabled"/>. null makes the request
+		/// anonymous - it still contributes its extensions and features, but
+		/// can't be queried by name.</summary>
+		public string   name;
+		/// <summary>If true, SK.Initialize will fail should this request go
+		/// unsatisfied. If false, an unmet request is simply left disabled.
+		/// </summary>
+		public bool     required;
+		/// <summary>Vulkan instance extension names this request needs.</summary>
+		public string[] instanceExtensions;
+		/// <summary>Vulkan device extension names this request needs.</summary>
+		public string[] deviceExtensions;
+		/// <summary>Vulkan device features this request needs. Their bits are
+		/// queried for support before being enabled.</summary>
+		public BackendVulkanFeature[] features;
+	}
+
+	// Native ABI mirror of backend_vulkan_request_t, filled and freed by
+	// Backend.Vulkan.Request.
+	[StructLayout(LayoutKind.Sequential)]
+	internal struct BackendVulkanRequestT
+	{
+		public IntPtr name;
+		[MarshalAs(UnmanagedType.Bool)] public bool required;
+		public IntPtr instanceExtensions;
+		public int    instanceExtensionCount;
+		public IntPtr deviceExtensions;
+		public int    deviceExtensionCount;
+		public IntPtr features;
+		public int    featureCount;
 	}
 }
