@@ -1003,6 +1003,14 @@ void render_pass_add_global_post_process(skr_pass_t* pass) {
 
 ///////////////////////////////////////////
 
+// Zero is the default 'clear everything'; render_clear_keep masks to nothing.
+static render_clear_ render_clear_resolve(render_clear_ clear) {
+	if (clear == 0) return render_clear_all;
+	return (render_clear_)(clear & render_clear_all);
+}
+
+///////////////////////////////////////////
+
 // Check and complete any pending async readbacks from previous frames
 void render_check_pending_readbacks() {
 	for (int32_t i = local.pending_readbacks.count - 1; i >= 0; i--) {
@@ -1066,9 +1074,10 @@ void render_check_screenshots() {
 		}
 
 		// Determine clear flags
-		skr_clear_ clear_flags = skr_clear_none;
-		if (local.screenshot_list[i].clear & render_clear_color) clear_flags = (skr_clear_)(clear_flags | skr_clear_color);
-		if (local.screenshot_list[i].clear & render_clear_depth) clear_flags = (skr_clear_)(clear_flags | skr_clear_depth | skr_clear_stencil);
+		render_clear_ clear      = render_clear_resolve(local.screenshot_list[i].clear);
+		skr_clear_    clear_flags = skr_clear_none;
+		if (clear & render_clear_color) clear_flags = (skr_clear_)(clear_flags | skr_clear_color);
+		if (clear & render_clear_depth) clear_flags = (skr_clear_)(clear_flags | skr_clear_depth | skr_clear_stencil);
 
 		// Render!
 		skr_vec4_t clear_color = { local.clear_col.r, local.clear_col.g, local.clear_col.b, local.clear_col.a };
@@ -1255,14 +1264,6 @@ void render_screenshot_capture(void (*render_on_screenshot_callback)(void* data,
 void render_screenshot_viewpoint(void (*render_on_screenshot_callback)(void* data, tex_format_ format, int32_t width, int32_t height, void* context), matrix camera, matrix projection, int32_t width, int32_t height, render_layer_ layer_filter, render_clear_ clear, rect_t viewport, tex_format_ tex_format, void* context) {
 	matrix inv_cam = matrix_invert(camera);
 	local.screenshot_list.add(render_screenshot_t{ render_on_screenshot_callback, context, inv_cam, projection, viewport, width, height, layer_filter, clear, tex_format });
-}
-
-///////////////////////////////////////////
-
-// Zero is the default 'clear everything'; render_clear_keep masks to nothing.
-static render_clear_ render_clear_resolve(render_clear_ clear) {
-	if (clear == 0) return render_clear_all;
-	return (render_clear_)(clear & render_clear_all);
 }
 
 ///////////////////////////////////////////
