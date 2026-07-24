@@ -3722,7 +3722,11 @@ SK_API void             *backend_vulkan_get_function           (const char *func
   colors, which helps with readability, but isn't always supported.
   These are the options available for configuring those colors.*/
 typedef enum log_colors_ {
-	/*Use console coloring annotations.*/
+	/*Use console coloring annotations, when the console supports them!
+	  StereoKit checks the terminal for ANSI support, whether output has
+	  been redirected to a file or pipe, and the NO_COLOR environment
+	  variable. If any of those say no, colors are scraped out and logs
+	  fall back to plain text.*/
 	log_colors_ansi = 0,
 	/*Scrape out any color annotations, so logs are all completely
 	  plain text.*/
