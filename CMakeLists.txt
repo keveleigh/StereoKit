@@ -299,9 +299,9 @@ set(SKR_BUILD_EXAMPLES OFF CACHE PATH "Faster build" FORCE)
 # If we're only using the SVSL shader compiler, we can drop glslang from
 # skshaderc and save ourselves a lot of binary size and build time!
 if (SK_USE_SVSL)
-  set(SKSHADERC_ENABLE_GLSLANG OFF CACHE BOOL "Not needed with SVSL" FORCE)
+  set(SKSHADERC_ENABLE_GLSLANG OFF CACHE BOOL "Not needed with SVSL")
 else()
-  set(SKSHADERC_ENABLE_GLSLANG ON  CACHE BOOL "Required for HLSL shaders" FORCE)
+  set(SKSHADERC_ENABLE_GLSLANG ON  CACHE BOOL "Required for HLSL shaders")
 endif()
 if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
