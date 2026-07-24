@@ -2202,7 +2202,11 @@ namespace StereoKit
 	/// colors, which helps with readability, but isn't always supported.
 	/// These are the options available for configuring those colors.</summary>
 	public enum LogColors {
-		/// <summary>Use console coloring annotations.</summary>
+		/// <summary>Use console coloring annotations, when the console supports them!
+		/// StereoKit checks the terminal for ANSI support, whether output has
+		/// been redirected to a file or pipe, and the NO_COLOR environment
+		/// variable. If any of those say no, colors are scraped out and logs
+		/// fall back to plain text.</summary>
 		Ansi         = 0,
 		/// <summary>Scrape out any color annotations, so logs are all completely
 		/// plain text.</summary>
