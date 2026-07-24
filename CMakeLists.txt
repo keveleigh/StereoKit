@@ -700,11 +700,6 @@ if (NOT MSVC)
         COMMAND ${CMAKE_OBJCOPY} --add-gnu-debuglink=$<TARGET_FILE_DIR:StereoKitC>/$<TARGET_FILE_PREFIX:StereoKitC>$<TARGET_FILE_BASE_NAME:StereoKitC>${SK_BIN_DEBUG_EXT} $<TARGET_FILE:StereoKitC>
       )
     endif()
-    if (SK_DYNAMIC_OPENXR AND SK_STRIP_DEBUG_SYMBOLS)
-      add_custom_command(TARGET StereoKitC POST_BUILD
-        COMMAND ${CMAKE_STRIP} --strip-debug $<TARGET_FILE:openxr_loader>
-      )
-    endif()
   endif()
 else()
   set(SK_BIN_DEBUG_EXT ".pdb")
@@ -861,9 +856,15 @@ if(SK_DISTRIBUTE)
       COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE_DIR:StereoKitC>/$<TARGET_FILE_PREFIX:StereoKitC>$<TARGET_FILE_BASE_NAME:StereoKitC>${SK_BIN_DEBUG_EXT}" "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/bin/${SK_BIN_OS}/${SK_ARCH}/$<CONFIG>/$<TARGET_FILE_PREFIX:StereoKitC>$<TARGET_FILE_BASE_NAME:StereoKitC>${SK_BIN_DEBUG_EXT}" )
   endif()
   if (SK_DYNAMIC_OPENXR)
+    set(SK_OPENXR_LOADER_DIST_SRC "$<TARGET_FILE:openxr_loader>")
+    if (SK_STRIP_DEBUG_SYMBOLS AND NOT MSVC AND NOT APPLE)
+      set(SK_OPENXR_LOADER_DIST_SRC "${CMAKE_CURRENT_BINARY_DIR}/$<TARGET_FILE_NAME:openxr_loader>.stripped")
+      add_custom_command(TARGET StereoKitC POST_BUILD
+        COMMAND ${CMAKE_STRIP} --strip-debug -o "${SK_OPENXR_LOADER_DIST_SRC}" "$<TARGET_FILE:openxr_loader>" )
+    endif()
     add_custom_command(TARGET StereoKitC POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/bin/${SK_BIN_OS}/${SK_ARCH}/$<CONFIG>/standard"
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:openxr_loader>" "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/bin/${SK_BIN_OS}/${SK_ARCH}/$<CONFIG>/standard/$<TARGET_FILE_NAME:openxr_loader>" )
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "${SK_OPENXR_LOADER_DIST_SRC}" "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/bin/${SK_BIN_OS}/${SK_ARCH}/$<CONFIG>/standard/$<TARGET_FILE_NAME:openxr_loader>" )
   endif()
   # Copy sk_app.jar on Android (Java classes for file dialogs, activity results)
   if (ANDROID AND TARGET sk_app_jar)
