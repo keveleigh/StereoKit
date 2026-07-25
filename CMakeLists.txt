@@ -181,8 +181,6 @@ elseif(WIN32)
   if (MSVC)
     set(WINDOWS_LIBS
     Comdlg32)
-
-    list(APPEND WINDOWS_LIBS WindowsApp) # Required for ISAC spatial audio code
   else()
     # MinGW/GCC cross-compile settings
     # GCC spills 256-bit ymm with 32-byte-aligned vmovdqa, but only ever gets the
@@ -411,8 +409,6 @@ set(SK_SRC_LIBRARIES
   StereoKitC/libraries/ferr_hash.h
   StereoKitC/libraries/ferr_hash.cpp
   StereoKitC/libraries/gen_ids.h
-  StereoKitC/libraries/isac_spatial_sound.h
-  StereoKitC/libraries/isac_spatial_sound.cpp
   StereoKitC/libraries/micro_ply.h
   StereoKitC/libraries/miniaudio.h
   StereoKitC/libraries/miniaudio.cpp
@@ -444,6 +440,7 @@ set(SK_SRC_SYSTEMS
   StereoKitC/systems/_stereokit_systems.cpp
   StereoKitC/systems/audio.h
   StereoKitC/systems/audio.cpp
+  StereoKitC/systems/audio_mix.cpp
   StereoKitC/systems/bbox.h
   StereoKitC/systems/bbox.cpp
   StereoKitC/systems/bvh.h
@@ -635,11 +632,6 @@ add_library(StereoKitC ${LIBRARY_TYPE}
 
 if (ANDROID)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 11)
-  set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)
-elseif (MSVC)
-  # C++/WinRT (isac_spatial_sound.cpp) needs C++20's <coroutine>, the
-  # <experimental/coroutine> it falls back to in C++17 is removed in VS2026.
-  set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 20)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)
 else()
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 17)
@@ -973,6 +965,43 @@ if (SK_BUILD_TESTS)
   target_skapp_assets(StereoKitCTest ${CMAKE_CURRENT_SOURCE_DIR}/Examples/Assets)
 
   #target_link_options   (StereoKitCTest PRIVATE ${SK_LINKER_FLAGS})
+endif()
+
+###########################################
+## SKTests                               ##
+###########################################
+
+# Headless native test runner (tools/tests). Each suite self-inits SK in
+# offscreen mode, so it needs no window, shaders, or assets - just StereoKitC.
+# Desktop only: it's a CLI test binary, not an interactive app.
+if (SK_BUILD_TESTS AND NOT ANDROID)
+  add_skapp ( SKTests
+    APP_NAME "StereoKit Native Tests" )
+
+  target_sources( SKTests PRIVATE
+    tools/tests/main.cpp
+    tools/tests/audio_tests.h
+    tools/tests/audio_tests.cpp
+  )
+
+  # See the StereoKitCTest note: pin C++17 so the C API's u8 literals stay char.
+  set_property(TARGET SKTests PROPERTY CXX_STANDARD 17)
+  set_property(TARGET SKTests PROPERTY CXX_STANDARD_REQUIRED ON)
+
+  target_link_libraries( SKTests PRIVATE StereoKitC )
+  if (SK_DYNAMIC_OPENXR)
+    target_link_libraries( SKTests PRIVATE openxr_loader )
+  endif()
+
+  if (MINGW)
+    target_link_options(SKTests PRIVATE -static -Wl,--allow-multiple-definition)
+  endif()
+  if (MSVC AND SK_MULTITHREAD_BUILD_BY_DEFAULT)
+    target_compile_options(SKTests PRIVATE "/MP8")
+  endif()
+
+  # MacOS needs MoltenVK beside the binary for the offscreen device to init.
+  skr_copy_moltenvk(SKTests)
 endif()
 
 ###########################################

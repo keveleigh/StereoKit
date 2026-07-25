@@ -32,7 +32,6 @@ class DemoSound : ITest
 	float       wandIntensity;
 	void StepWand()
 	{
-		if (wandStream == null) { wandStream = Sound.CreateStream(5f); wandStreamInst = wandStream.Play(wandTipPrev); }
 		if (wandModel  == null) wandModel = Model.FromFile("Wand.glb", Shader.UI);
 		if (wandFollow == null) { wandFollow = new LinePoint[10]; for (int i=0;i<wandFollow.Length;i+=1) wandFollow[i] = new LinePoint(Vec3.Zero, new Color(1,1,1,i/(float)wandFollow.Length), (i / (float)wandFollow.Length)*0.01f+0.001f); }
 
@@ -40,7 +39,15 @@ class DemoSound : ITest
 		wandModel.Draw(Matrix.Identity);
 		UI.HandleEnd();
 
-		Vec3  wandTip   = wandPose.ToMatrix() * (wandModel.Bounds.center + wandModel.Bounds.dimensions.y * 0.5f * Vec3.Up);
+		Vec3 wandTip = wandPose.ToMatrix() * (wandModel.Bounds.center + wandModel.Bounds.dimensions.y * 0.5f * Vec3.Up);
+		// The stream is born at the tip, and the previous-tip seed matches
+		// so the first frame has no teleport and no spurious velocity.
+		if (wandStream == null) {
+			wandStream     = Sound.CreateStream(5f);
+			wandTipPrev    = wandTip;
+			wandStreamInst = wandStream.Play(wandTip);
+		}
+
 		Vec3  wandVel   = (wandTip - wandTipPrev) * Time.Stepf;
 		float wandSpeed = wandVel.Magnitude*100;
 			
@@ -156,7 +163,12 @@ class DemoSound : ITest
 				band1 += e * (600 + sample.x * 4000) * 6.28f;
 				band2 += e * (100 + sample.z * 600 ) * 6.28f;
 
-				return (float)(Math.Sin(band1)*0.3 + Math.Sin(band2)*0.3) * sample.y * 0.5f;
+				// A 10ms attack/release window: without it the waveform
+				// starts and ends on a step discontinuity, which is a
+				// sharp audible click at both edges.
+				float envelope = Math.Min(1, Math.Min(t, genDuration - t) / 0.01f);
+
+				return (float)(Math.Sin(band1)*0.3 + Math.Sin(band2)*0.3) * sample.y * 0.5f * envelope;
 			}, genDuration);
 			genSound.Play(genVolume.center);
 		}

@@ -1,23 +1,109 @@
 #pragma once
 
 #include "../stereokit.h"
+#include "../libraries/miniaudio.h"
 
 namespace sk {
 
 #define AU_SAMPLE_RATE        48000
-#define AU_SAMPLE_BUFFER_SIZE 10
+#define AU_SAMPLE_BUFFER_SIZE 10 // ITD padding samples on each side
 #define AU_SAMPLE_FORMAT      ma_format_f32
+// More voice slots exist than the mixer renders: each frame the active
+// voices are ranked by estimated audibility, the top AU_MIX_VOICES render,
+// and the rest go dormant *in place* - handles stay valid, and a quiet
+// loop that ranked out resumes when it ranks back in.
+#define AU_VOICE_COUNT        128
+#define AU_MIX_VOICES         64
+#define AU_CMD_RING_SIZE      256
+#define AU_PREDECODE_MAX      (AU_SAMPLE_RATE*10)  // Frames, larger streams
+#define AU_STREAM_PREFETCH    (AU_SAMPLE_RATE/4)   // Per-voice ring, frames
+#define AU_PITCH_MIN          0.25f
+#define AU_PITCH_MAX          4.0f
+#define AU_MIN_DISTANCE       0.25f  // Attenuation clamp, ~inside the head
+#define AU_ITD_MAX            48     // Direct-path ear tap ring, samples
+#define AU_DIRECT_SPREAD      0.5f   // Spread where a voice is fully bus-rendered
+#define AU_SEEK_NONE          UINT64_MAX
+#define AU_BUS_COUNT          4
+#define AU_SHAPE_MAX_POINTS   32
+#define AU_SMOOTH_TIME        0.05f  // Emit point smoothing constant, sec
 
-struct _sound_inst_t {
-	sound_t  sound;
-	uint16_t id;
-	vec3     position;
-	float    volume;
-	float    prev_buffer[AU_SAMPLE_BUFFER_SIZE*2];
-	int32_t  prev_buffer_ct;
-	int32_t  prev_offset[2];
-	float    intensity_max_frame;
-	float    intensity_max_last_read;
+// Voice lifecycle, the value is atomic. Main reserves free slots, the audio
+// thread activates them on the play command, and finished voices wait for a
+// main thread drain. Stealing moves playing back to reserved from main, and
+// the displaced play's resources are handed off at activation.
+typedef enum au_voice_state_ {
+	au_voice_free = 0,
+	au_voice_reserved,
+	au_voice_playing,
+	au_voice_finished,
+} au_voice_state_;
+
+// Cross-thread parameter snapshot, each field individually atomic. A torn
+// *set* of fields is fine, single fields must not tear.
+struct au_voice_params_t {
+	float    pos_x, pos_y, pos_z;
+	float    volume;   // 0-1 trim over the sound's decibel loudness
+	float    pitch;    // Playback rate, AU_PITCH_MIN..AU_PITCH_MAX
+	float    spread;   // 0 = point source, 1 = fully diffuse
+	float    cutoff;   // Low-pass Hz override, 0 = automatic model
+	int32_t  flags;    // sound_flags_
+	int32_t  paused;
+	int32_t  stop_request;
+	uint64_t seek_request; // Target frame, AU_SEEK_NONE when empty
+};
+
+struct au_voice_t {
+	// Main-thread-owned. Shapes are evaluated on main each frame, the
+	// audio thread only ever consumes the resolved position/spread params.
+	uint16_t          id;              // Generation, increments on reserve
+	float             intensity_frame;
+	vec3              shape_points[AU_SHAPE_MAX_POINTS];
+	int32_t           shape_count;     // 0 = plain point source
+	float             shape_radius;
+	float             base_spread;     // The play settings' spread floor
+	vec3              smooth_pos;      // Emit point smoothing state
+	float             smooth_spread;
+	bool              smooth_init;
+
+	// Cross-thread, atomic access only
+	int32_t           state;           // au_voice_state_
+	int32_t           audible;         // In the mix budget this frame
+	au_voice_params_t params;
+	float             intensity;       // Peak |sample| since last frame
+	int32_t           stream_eof;      // Prefetch decoder hit end of data
+
+	// Written by main only while reserved, consumed by the audio thread at
+	// activation. The command ring publish makes them visible.
+	sound_t           pending_sound;
+	uint64_t          pending_cursor;
+	uint64_t          pending_delay;   // Onset delay in frames
+	sound_bus_        pending_bus;
+	ma_decoder*       pending_decoder;
+	ma_pcm_rb*        pending_ring;
+	float*            pending_ring_data;
+
+	// Audio-thread-owned once playing. Main only reads these where a data
+	// race is provably benign (steal's log line), and frees them through
+	// return ring entries, never through the voice. cursor is written with
+	// relaxed atomic stores so the main thread getter can read it.
+	sound_t           sound;
+	uint64_t          cursor;          // Frames, in *source* samples
+	uint64_t          delay_left;      // Onset frames remaining
+	sound_bus_        bus;
+	float             resample_frac;   // Pitch resampler phase, 0-1
+	float             resample_last[3][4]; // Last 3 consumed frames, per channel
+	ma_decoder*       stream_decoder;  // sound_data_stream_file voices only
+	ma_pcm_rb*        stream_ring;
+	float*            stream_ring_data;
+	float             lpf_state[4];    // Air absorption 4-pole cascade state
+
+	// Direct binaural state for point sources, audio thread owned. The
+	// ring holds the voice's filtered mono history for the two ear taps.
+	float             dir_ring[AU_ITD_MAX];
+	int32_t           dir_ring_at;
+	float             dir_delay[2];    // Smoothed per-ear delay, samples; -1 = snap
+	float             dir_shadow[2];   // Per-ear head shadow one-pole state
+	float             dir_filter[2][4];// Mono voicing biquad states, [stage][x1 x2 y1 y2]
 };
 
 bool audio_init    ();
@@ -32,6 +118,41 @@ void audio_set_default_device_in (const wchar_t *id);
 void audio_set_default_device_out(const wchar_t *id);
 #endif
 
-extern _sound_inst_t au_active_sounds[8];
+// Voice pool interface, main thread only. Stopping isn't here: setting a
+// voice's stop_request param is complete on its own, so it can't fail.
+int16_t audio_voice_reserve(sound_t sound, vec3 at, float volume); // Slot, or -1
+bool    audio_voice_submit (int16_t slot);          // False = ring full, undo
+void    audio_voice_prefetch();                     // Top up streaming rings
+void    audio_voice_rank   ();                      // Audibility -> mix budget
+void    audio_voice_shapes_step(vec3 listener_pos, float dt);
+void    audio_voice_shape_set  (au_voice_t* voice, const vec3* points, int32_t count, float radius, vec3 listener_pos); // Copy + immediate eval
+
+// Listener pose snapshot, published by audio_step, read by the mixer.
+void   audio_listener_publish(pose_t pose);
+pose_t audio_listener_get    ();
+
+// audio_set_listener's stored override, lives in audio.cpp. The offline
+// harness publishes it so listener-dependent tests can steer the head.
+extern pose_t au_listener_override;
+extern bool   au_listener_has_override;
+
+// Offline harness for deterministic tests: enable offline *before* sk_init
+// to skip device creation, then pump blocks manually with render_block and
+// the main-thread work with test_step. Internal, but exported so test
+// executables can reach them through the shared lib.
+SK_API void audio_render_block(float* out_stereo, int32_t frame_count);
+SK_API void audio_test_offline(bool32_t enable);
+SK_API void audio_test_step   ();
+// A/B hook: force point sources through the FOA bus (the pre-direct-
+// binaural render path), switchable live for listening comparisons.
+SK_API void audio_test_force_bus(bool32_t enable);
+extern bool32_t   au_offline;
+extern au_voice_t au_voices[AU_VOICE_COUNT];
+
+void audio_mix_init    (int32_t period_frames);
+void audio_mix_shutdown();  // Call with the device stopped, drains everything
+void audio_mix_drain_returns();
+
+void data_callback(ma_device* device, void* output, const void* input, ma_uint32 frame_count);
 
 } // namespace sk

@@ -6,8 +6,6 @@
 #define MA_NO_DSOUND
 #define MA_NO_WINMM
 
-#define MA_NO_FLAC
-
 #define MA_NO_ENCODING
 #define MA_NO_GENERATION
 

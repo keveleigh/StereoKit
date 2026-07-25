@@ -185,8 +185,8 @@ if ($noCross -eq $true) {
     } else {
         Write-Leg $name
 
-        # Tests on: we never run StereoKitCTest here, but building it keeps the
-        # C API honest, and it's the only thing that link-checks the C++ side.
+        # Tests on: we never run these here, but building StereoKitCTest and
+        # SKTests keeps the C API honest and link-checks the C++ side.
         $preset = "MinGW_x64_$configuration"
         & cmake --preset $preset -DSK_BUILD_TESTS=ON
         Assert-Ok 'MinGW configure'

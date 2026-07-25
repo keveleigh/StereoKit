@@ -50,6 +50,18 @@ namespace StereoKit
 		// Generated signature uses IntPtr for opt/nullable, these provide typed versions
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
 		public static extern Bounds bounds_grow_to_fit_box(Bounds bounds, Bounds box, in Matrix opt_box_transform);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern SoundInst sound_play(IntPtr sound, Vec3 at, in sound_play_t opt_settings);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern void audio_set_listener(in Pose opt_pose);
+		// sound_generate's C callback is the batch form (float*, frame_start,
+		// frame_count) - the generator can't infer that delegate type.
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern IntPtr sound_generate([MarshalAs(UnmanagedType.FunctionPtr)] AudioGeneratorBatch audio_generator, float duration, SoundChannels channels);
+		// sound_create_mem takes a raw byte blob; the generator types void*
+		// arrays as IntPtr[], so the byte[] form is hand-bound here.
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)]
+		public static extern IntPtr sound_create_mem([MarshalAs(UnmanagedType.LPUTF8Str)] string id, [In] byte[] in_arr_data, UIntPtr data_size);
 
 		// tex_set_colors overloads for different array types
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)]

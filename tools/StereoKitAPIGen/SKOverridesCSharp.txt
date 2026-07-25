@@ -117,7 +117,7 @@ ui_scroll_ UIScroll
 @noimpl pose_t bounds_t ray_t plane_t sphere_t
 
 # Complex structs in NativeTypes.cs with special handling
-@noimpl sk_settings_t rect_t
+@noimpl sk_settings_t rect_t sound_play_t
 @noimpl hand_sim_id_t id_hash_t
 # Request struct has string/feature arrays, hand-marshaled in Backend.Vulkan.Request
 @noimpl backend_vulkan_request_t
@@ -133,6 +133,9 @@ ui_scroll_ UIScroll
 # render_to/render_list_draw_now take render_settings_t by typed ref there,
 # rather than the generator's IntPtr.
 @noimpl render_to render_list_draw_now
+# sound_generate's callback is the batch delegate, and sound_create_mem takes
+# a raw byte blob - neither is inferable from the void*/fnptr signature.
+@noimpl sound_generate sound_create_mem
 @noimpl spherical_harmonics_t hand_t controller_t file_filter_t
 # Request takes arrays of strings/features, hand-marshaled in NativeAPI.Custom.cs
 @noimpl backend_vulkan_request
