@@ -99,8 +99,11 @@ namespace StereoKit
 		/// <summary>Position of the mouse relative to the window it's in! This is the number
 		/// of pixels from the top left corner of the screen.</summary>
 		public Vec2 pos;
-		/// <summary>How much has the mouse's position changed in the current frame? Measured
-		/// in pixels.</summary>
+		/// <summary>How much has the mouse moved during this frame? Measured in pixels. This
+		/// is all motion since the last frame, which is not always the same as the
+		/// difference between this frame's position and the last frame's! In relative
+		/// mouse mode, the position doesn't move at all, and this is the only place
+		/// mouse motion shows up.</summary>
 		public Vec2 posChange;
 		/// <summary>What's the current scroll value for the mouse's scroll wheel?</summary>
 		public float scroll;
