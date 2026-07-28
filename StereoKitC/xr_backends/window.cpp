@@ -110,6 +110,7 @@ bool window_init() {
 		window_surface_resize(local->surface, local->skr_surface.size.x, local->skr_surface.size.y);
 
 	interactor_modes_set_default(default_interactors_mouse);
+	input_mouse_set_window(local->ska_win);
 	input_hand_visible(handed_max, false);
 	input_set_finger_glow(false);
 	return true;
@@ -158,6 +159,8 @@ void window_shutdown() {
 	}
 
 	render_pipeline_shutdown();
+
+	input_mouse_set_window(nullptr);
 
 	// Destroy the renderer surface before the window
 	skr_surface_destroy(&local->skr_surface);
