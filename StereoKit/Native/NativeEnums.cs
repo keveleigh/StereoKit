@@ -1718,6 +1718,24 @@ namespace StereoKit
 		Tip          = 4,
 	}
 
+	/// <summary>How should the mouse cursor behave? This is only relevant on backends with a
+	/// real cursor to control, the Simulator and Window backends. Elsewhere, the
+	/// mode is remembered, but has nothing to act on.</summary>
+	public enum MouseMode {
+		/// <summary>The cursor is visible, and free to move anywhere, including outside the
+		/// window. This is the default.</summary>
+		Normal       = 0,
+		/// <summary>The cursor is invisible, but behaves exactly as it does in normal mode.
+		/// The mouse's position is still valid, and it can still leave the window.</summary>
+		Hidden,
+		/// <summary>The cursor is invisible and locked in place, which is what you want for
+		/// mouse-look style camera control. The mouse's position stops moving, and
+		/// its position change becomes the only source of motion - reported in
+		/// pixel-equivalent units, free of pointer acceleration, and never running
+		/// out of room at the edge of the screen.</summary>
+		Relative,
+	}
+
 	/// <summary>A collection of system key codes, representing keyboard
 	/// characters and mouse buttons. Based on VK codes.</summary>
 	public enum Key {
@@ -2305,7 +2323,11 @@ namespace StereoKit
 	/// colors, which helps with readability, but isn't always supported.
 	/// These are the options available for configuring those colors.</summary>
 	public enum LogColors {
-		/// <summary>Use console coloring annotations.</summary>
+		/// <summary>Use console coloring annotations, when the console supports them!
+		/// StereoKit checks the terminal for ANSI support, whether output has
+		/// been redirected to a file or pipe, and the NO_COLOR environment
+		/// variable. If any of those say no, colors are scraped out and logs
+		/// fall back to plain text.</summary>
 		Ansi         = 0,
 		/// <summary>Scrape out any color annotations, so logs are all completely
 		/// plain text.</summary>

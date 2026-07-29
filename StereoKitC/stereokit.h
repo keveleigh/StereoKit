@@ -3059,14 +3059,35 @@ typedef struct mouse_t {
 	/*Position of the mouse relative to the window it's in! This is the number
 	of pixels from the top left corner of the screen.*/
 	vec2          pos;
-	/*How much has the mouse's position changed in the current frame? Measured
-	in pixels.*/
+	/*How much has the mouse moved during this frame? Measured in pixels. This
+	is all motion since the last frame, which is not always the same as the
+	difference between this frame's position and the last frame's! In relative
+	mouse mode, the position doesn't move at all, and this is the only place
+	mouse motion shows up.*/
 	vec2          pos_change;
 	/*What's the current scroll value for the mouse's scroll wheel?*/
 	float         scroll;
 	/*How much has the scroll wheel value changed during this frame?*/
 	float         scroll_change;
 } mouse_t;
+
+/*How should the mouse cursor behave? This is only relevant on backends with a
+  real cursor to control, the Simulator and Window backends. Elsewhere, the
+  mode is remembered, but has nothing to act on.*/
+typedef enum mouse_mode_ {
+	/*The cursor is visible, and free to move anywhere, including outside the
+	  window. This is the default.*/
+	mouse_mode_normal = 0,
+	/*The cursor is invisible, but behaves exactly as it does in normal mode.
+	  The mouse's position is still valid, and it can still leave the window.*/
+	mouse_mode_hidden,
+	/*The cursor is invisible and locked in place, which is what you want for
+	  mouse-look style camera control. The mouse's position stops moving, and
+	  its position change becomes the only source of motion - reported in
+	  pixel-equivalent units, free of pointer acceleration, and never running
+	  out of room at the edge of the screen.*/
+	mouse_mode_relative,
+} mouse_mode_;
 
 /*A collection of system key codes, representing keyboard
   characters and mouse buttons. Based on VK codes.*/
@@ -3535,6 +3556,8 @@ SK_API pose_t                input_head                      (void);
 SK_API pose_t                input_eyes                      (void);
 SK_API button_state_         input_eyes_tracked              (void);
 SK_API const mouse_t*        input_mouse                     (void);
+SK_API void                  input_mouse_mode_set            (mouse_mode_ mode);
+SK_API mouse_mode_           input_mouse_mode_get            (void);
 SK_API void                  input_key_inject_press          (key_ key);
 SK_API void                  input_key_inject_release        (key_ key);
 SK_API char32_t              input_text_consume              (void);
@@ -3913,7 +3936,11 @@ SK_API void             *backend_vulkan_get_function           (const char *func
   colors, which helps with readability, but isn't always supported.
   These are the options available for configuring those colors.*/
 typedef enum log_colors_ {
-	/*Use console coloring annotations.*/
+	/*Use console coloring annotations, when the console supports them!
+	  StereoKit checks the terminal for ANSI support, whether output has
+	  been redirected to a file or pipe, and the NO_COLOR environment
+	  variable. If any of those say no, colors are scraped out and logs
+	  fall back to plain text.*/
 	log_colors_ansi = 0,
 	/*Scrape out any color annotations, so logs are all completely
 	  plain text.*/
