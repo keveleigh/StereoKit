@@ -21,6 +21,13 @@ static bool has_flag(int argc, char** argv, const char* flag) {
 	return false;
 }
 
+static int flag_index(int argc, char** argv, const char* flag) {
+	for (int i = 1; i < argc; i++)
+		if (strcmp(argv[i], flag) == 0)
+			return i;
+	return -1;
+}
+
 int main(int argc, char* argv[]) {
 	bool all      = argc <= 1;
 	int  failures = 0;
@@ -29,6 +36,13 @@ int main(int argc, char* argv[]) {
 	if (all || has_flag(argc, argv, "-audiostress")) failures += audio_stress_run();
 
 	if (has_flag(argc, argv, "-audiobench")) failures += audio_bench_run();
+
+	int render_at = flag_index(argc, argv, "-audiorender");
+	if (render_at >= 0) {
+		const char* dir  = render_at + 1 < argc ? argv[render_at + 1] : ".";
+		const char* ambi = render_at + 2 < argc ? argv[render_at + 2] : nullptr;
+		failures += audio_render_run(dir, ambi);
+	}
 
 	printf("=== SKTests: %d total failure(s) ===\n", failures);
 	return failures;

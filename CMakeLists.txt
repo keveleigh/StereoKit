@@ -982,6 +982,7 @@ if (SK_BUILD_TESTS AND NOT ANDROID)
     tools/tests/main.cpp
     tools/tests/audio_tests.h
     tools/tests/audio_tests.cpp
+    tools/tests/audio_render.cpp
   )
 
   # See the StereoKitCTest note: pin C++17 so the C API's u8 literals stay char.

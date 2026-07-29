@@ -70,25 +70,35 @@ static bool     au_foa_touched = false; // Any encode this block, audio thread
 static int32_t  au_foa_tail    = 0;     // Decode ring-down frames left
 
 ///////////////////////////////////////////
-// Binaural decode: 8 virtual speakers at the cube corners, sampled with
-// cardioid pickups. The symmetric layout makes the coherent sum exactly
-// 1.0 in every direction, so calibration passes straight through. Each
-// speaker feeds both ears through fixed head-relative spherical-head
-// filters; measured HRIRs can replace these later without touching
-// anything upstream.
+// Binaural decode: 6 virtual speakers on an octahedron - hard left/right,
+// up/down, front/back. The symmetric layout makes the coherent sum exactly
+// 1.0 in every direction, so calibration passes straight through, and the
+// hard-lateral pair carries the full interaural delay a real head
+// produces. Each speaker feeds both ears through fixed head-relative
+// spherical-head filters; measured HRIRs can replace these later without
+// touching anything upstream.
 //
-// The 16 ear paths (8 speakers x 2 ears) run structure-of-arrays in four
-// SIMD lane groups - left ears of speakers 0-3 and 4-7, then the same for
-// right - each path padded to a uniform pipeline of head-shadow one-pole
-// plus three biquad stages (identity where unused), so the filter bank
-// steps 4 paths per op. Only the fractional ITD delays stay scalar, they
-// need per-lane buffer indexing.
+// The 12 ear paths (6 speakers x 2 ears) run structure-of-arrays in three
+// SIMD lane groups - lane p = speaker*2 + ear, two speakers per group -
+// each path a uniform pipeline of head-shadow one-pole plus two biquad
+// voicing stages (identity where unused), so the filter bank steps 4 paths
+// per op. Only the fractional ITD delays stay scalar, they need per-lane
+// buffer indexing.
 
-#define AU_SPEAKER_COUNT 8
+#define AU_SPEAKER_COUNT 6
 #define AU_PATH_COUNT    (AU_SPEAKER_COUNT * 2)
 #define AU_PATH_GROUPS   (AU_PATH_COUNT / 4)
-#define AU_DECODE_STAGES 3
+#define AU_DECODE_STAGES 2
 #define AU_EAR_DELAY_MAX 48
+
+// Head shadow depth at a fully lateral source or speaker: the far ear's
+// high band lands at 20*log10(1-wet) dB, scaled down by lateralness in
+// use. Real heads shadow 15-20dB up top; 0.87 lands at ~-18dB.
+#define AU_SHADOW_WET    0.87f
+
+// Spherical head radius, meters - shared by the interaural delay, the
+// coherence crossover, and the near-field ear distances.
+#define AU_HEAD_RADIUS   0.0875f
 
 // Interaural decorrelator sizes: Schroeder allpass delays per [ear][section],
 // distinct primes so the ears' phase responses never line up, sums matched so
@@ -113,15 +123,23 @@ struct au_decode_t {
 	// Head shadow one-pole at ~1.5kHz, mixed in by lateralness, 0 = bypass
 	XMVECTOR shadow_wet  [AU_PATH_GROUPS];
 	XMVECTOR shadow_state[AU_PATH_GROUPS];
-	// Woodworth ITD as a fractional delay per lane, 0 = bypass
+	// Brown-Duda ITD as a fractional delay per lane, 0 = bypass
 	float    delay    [AU_PATH_COUNT];
 	float    delay_buf[AU_PATH_COUNT][AU_EAR_DELAY_MAX];
 	int32_t  delay_at;
+	// Dual-band directional weighting: one-pole low-band state of the bus
+	// channels, split at ~700Hz where ITD hands off to energy cues.
+	XMVECTOR foa_lp;
+	float    xover_k;
 	// Diffuse-field interaural coherence: a real diffuse field is coherent
 	// between the ears only below ~c/(2*ear spacing), but the decode alone
 	// leaves the ears correlated at every frequency - which images as a
 	// narrow band in the head instead of enveloping width. Above the
 	// crossover each ear runs its own allpass chain, below it passes clean.
+	// The wet share tracks the bus's measured diffuseness: a plane wave
+	// *should* reach the ears coherent, and decorrelating it would smear
+	// the envelope cues that localize it, so only diffuse energy widens.
+	float    psi;            // Smoothed diffuseness, 0 = plane wave, 1 = diffuse
 	float    deco_k;         // Crossover one-pole coefficient, ~980Hz
 	float    deco_lp [2];    // Crossover state per ear
 	float    deco_buf[2][AU_DECO_SECTIONS][AU_DECO_MAX];
@@ -161,15 +179,45 @@ static au_biquad_t au_biquad_highshelf(float hz, float gain_db) {
 	return r;
 }
 
+// Direction voicing shared by the direct path and the decode's virtual
+// speakers: a pinna-style dip that rises and deepens with elevation, and a
+// high shelf dulling below and behind. dir is head-relative, unit length,
+// and a zero-gain shelf is an exact identity.
+static void au_voicing(vec3 dir, au_biquad_t* out_pinna, au_biquad_t* out_shelf) {
+	float el01 = dir.y * 0.5f + 0.5f;
+	float dull = -2.0f * (1.0f - el01) - 3.0f * fmaxf(0, dir.z);
+	*out_pinna = au_biquad_peaking  (math_lerp(6500, 8000, el01), 4, math_lerp(-4, -8, el01));
+	*out_shelf = au_biquad_highshelf(5000, dull);
+}
+
+// Brown-Duda spherical head per-ear delay in samples, continuous across
+// the median plane. cos_e is the cosine of the angle between the source
+// direction and that ear's axis; only the difference between ears is
+// audible, the common offset just keeps delays causal.
+static inline float au_ear_delay(float cos_e) {
+	const float r = (AU_HEAD_RADIUS / 343.0f) * AU_SAMPLE_RATE;
+	if (cos_e >= 0) return r * (1.0f - cos_e);
+	return r * (1.0f + acosf(fmaxf(-1.0f, cos_e)) - 1.5707963f);
+}
+
 static void au_speakers_init() {
 	memset(&au_decode, 0, sizeof(au_decode));
 
 	// Coherence crossover at c/(2 * ear spacing) - it falls out of the
-	// head's size, the same 0.0875m radius the ITD model uses.
-	float fc = 343.0f / (4.0f * 0.0875f);
+	// head's size, the same radius the ITD model uses.
+	float fc = 343.0f / (4.0f * AU_HEAD_RADIUS);
 	float RC = 1.0f / (6.2831853f * fc);
 	float dt = 1.0f / AU_SAMPLE_RATE;
 	au_decode.deco_k = dt / (RC + dt);
+
+	// Dual-band decode crossover, ~700Hz: the frequency below which the
+	// ear localizes by interaural time rather than level/energy.
+	float xRC = 1.0f / (6.2831853f * 700.0f);
+	au_decode.xover_k = dt / (xRC + dt);
+
+	// Historical default until the first block measures: silence is
+	// diffuse, so ring-downs and fresh starts stay wide.
+	au_decode.psi = 1;
 
 	// Coefficients build per-lane in scalar staging, packed at the end.
 	float b0[AU_DECODE_STAGES][AU_PATH_COUNT], b1[AU_DECODE_STAGES][AU_PATH_COUNT];
@@ -183,50 +231,41 @@ static void au_speakers_init() {
 		}
 	}
 
-	// Cube corners: az +-45/+-135, el +-35.26. SK frame, -Z forward.
-	const float el_s = 0.5773503f; // sin(35.26)
-	const float el_c = 0.8164966f; // cos(35.26)
-	int32_t at = 0;
-	for (int32_t up = 0; up < 2; up++) {
-	for (int32_t corner = 0; corner < 4; corner++) {
-		float az  = (45.0f + 90.0f * corner) * (3.14159265f / 180.0f);
-		vec3  dir = vec3 {
-			sinf(az) * el_c,
-			up == 0 ? el_s : -el_s,
-			-cosf(az) * el_c };
-		au_decode.speaker_dir[at] = dir;
+	// Octahedron: the lateral pair carries the full interaural delay and
+	// shadow, up/down anchor the elevation voicing, front/back the
+	// front/back voicing. SK frame, -Z forward.
+	static const vec3 dirs[AU_SPEAKER_COUNT] = {
+		{ 0, 0,-1}, {-1, 0, 0}, { 1, 0, 0},
+		{ 0, 0, 1}, { 0, 1, 0}, { 0,-1, 0} };
+	for (int32_t s = 0; s < AU_SPEAKER_COUNT; s++) {
+		vec3 dir = dirs[s];
+		au_decode.speaker_dir[s] = dir;
 
-		// Woodworth ITD and head shadow on the contralateral ear, scaled
-		// by how lateral the speaker sits. Lane p = ear * 8 + speaker.
-		float   lateral = fabsf(dir.x);
-		float   theta   = asinf(lateral);
-		float   itd     = (0.0875f / 343.0f) * (theta + sinf(theta)) * AU_SAMPLE_RATE;
-		int32_t contra  = dir.x > 0 ? 0 : 1;
-		au_decode.delay[contra * AU_SPEAKER_COUNT + at] = itd;
-		shadow         [contra * AU_SPEAKER_COUNT + at] = 0.6f * lateral;
+		// Interaural delay and head shadow scaled by how lateral the
+		// speaker sits - the same Brown-Duda ear model the direct path
+		// uses, near ear normalized to zero. Lane p = speaker*2 + ear.
+		float dl   = au_ear_delay(-dir.x);
+		float dr   = au_ear_delay( dir.x);
+		float base = fminf(dl, dr);
+		au_decode.delay[s*2 + 0] = dl - base;
+		au_decode.delay[s*2 + 1] = dr - base;
+		float lateral = fabsf(dir.x);
+		if (lateral > 0)
+			shadow[s*2 + (dir.x > 0 ? 0 : 1)] = AU_SHADOW_WET * lateral;
 
+		// The same voicing the direct path applies per source, evaluated at
+		// the speaker directions - the two render paths stay matched where
+		// the spread crossfade hands off between them.
+		au_biquad_t pinna, shelf;
+		au_voicing(dir, &pinna, &shelf);
 		for (int32_t ear = 0; ear < 2; ear++) {
-			int32_t     lane  = ear * AU_SPEAKER_COUNT + at;
-			au_biquad_t f[AU_DECODE_STAGES];
-			int32_t     count = 0;
-			// Elevation: a pinna-style dip, deeper and higher for up.
-			if (up == 0) {
-				f[count++] = au_biquad_peaking(8000, 4, -8);
-			} else {
-				f[count++] = au_biquad_peaking  (6500, 4, -4);
-				f[count++] = au_biquad_highshelf(6000, -2);
-			}
-			// Behind loses a little sparkle.
-			if (dir.z > 0)
-				f[count++] = au_biquad_highshelf(4000, -3);
-
-			for (int32_t s = 0; s < count; s++) {
-				b0[s][lane] = f[s].b0; b1[s][lane] = f[s].b1; b2[s][lane] = f[s].b2;
-				a1[s][lane] = f[s].a1; a2[s][lane] = f[s].a2;
-			}
+			int32_t lane = s*2 + ear;
+			b0[0][lane] = pinna.b0; b1[0][lane] = pinna.b1; b2[0][lane] = pinna.b2;
+			a1[0][lane] = pinna.a1; a2[0][lane] = pinna.a2;
+			b0[1][lane] = shelf.b0; b1[1][lane] = shelf.b1; b2[1][lane] = shelf.b2;
+			a1[1][lane] = shelf.a1; a2[1][lane] = shelf.a2;
 		}
-		at += 1;
-	} }
+	}
 
 	for (int32_t g = 0; g < AU_PATH_GROUPS; g++) {
 		for (int32_t s = 0; s < AU_DECODE_STAGES; s++) {
@@ -244,8 +283,15 @@ static void au_speakers_init() {
 // applied to the pickup directions rather than the field, the ear filters
 // stay head-relative - which is also correct under head roll.
 static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) {
-	// Cardioid pickup gains for the rotated speaker directions, speakers
-	// 0-3 and 4-7 as the two lane groups. SK -> ambisonic axes: +X front.
+	// Pickup gains for the rotated speaker directions, packed straight into
+	// path lanes - each group holds two speakers with both their ears
+	// adjacent. The decode is dual-band: below the crossover the
+	// directional weight is velocity-matched (t=3), so the speakers'
+	// superposed ITD comes out physically correct; above it max-rE
+	// (t=sqrt3) concentrates energy toward the source instead. W is
+	// weighted 1 in both bands and the layout's directional terms cancel
+	// in the coherent sum, so calibration holds exactly in each band.
+	// SK -> ambisonic axes: +X front.
 	float gw = (2.0f / AU_SPEAKER_COUNT) * 0.5f;
 	float gys[AU_SPEAKER_COUNT], gzs[AU_SPEAKER_COUNT], gxs[AU_SPEAKER_COUNT];
 	for (int32_t s = 0; s < AU_SPEAKER_COUNT; s++) {
@@ -254,33 +300,44 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 		gys[s] = gw * -u.x;
 		gzs[s] = gw *  u.y;
 	}
-	XMVECTOR gwv  = XMVectorReplicate(gw);
-	XMVECTOR gyA  = XMVectorSet(gys[0], gys[1], gys[2], gys[3]), gyB = XMVectorSet(gys[4], gys[5], gys[6], gys[7]);
-	XMVECTOR gzA  = XMVectorSet(gzs[0], gzs[1], gzs[2], gzs[3]), gzB = XMVectorSet(gzs[4], gzs[5], gzs[6], gzs[7]);
-	XMVECTOR gxA  = XMVectorSet(gxs[0], gxs[1], gxs[2], gxs[3]), gxB = XMVectorSet(gxs[4], gxs[5], gxs[6], gxs[7]);
-	XMVECTOR ones = XMVectorSplatOne();
-	XMVECTOR sh_k = XMVectorReplicate(0.178f);
+	XMVECTOR gwv = XMVectorReplicate(gw);
+	XMVECTOR gy[AU_PATH_GROUPS], gz[AU_PATH_GROUPS], gx[AU_PATH_GROUPS];
+	for (int32_t g = 0; g < AU_PATH_GROUPS; g++) {
+		int32_t a = g*2, b = g*2 + 1;
+		gy[g] = XMVectorSet(gys[a], gys[a], gys[b], gys[b]);
+		gz[g] = XMVectorSet(gzs[a], gzs[a], gzs[b], gzs[b]);
+		gx[g] = XMVectorSet(gxs[a], gxs[a], gxs[b], gxs[b]);
+	}
+	XMVECTOR earl   = XMVectorSet(1, 0, 1, 0);
+	XMVECTOR earr   = XMVectorSet(0, 1, 0, 1);
+	XMVECTOR sh_k   = XMVectorReplicate(0.178f);
+	XMVECTOR xk     = XMVectorReplicate(au_decode.xover_k);
+	XMVECTOR t_hi   = XMVectorSet(1, 1.7320508f, 1.7320508f, 1.7320508f);
+	XMVECTOR t_del  = XMVectorSet(0, 1.2679492f, 1.2679492f, 1.2679492f); // t_lo - t_hi
+	XMVECTOR foa_lp = au_decode.foa_lp;
+	XMVECTOR acc_wv = XMVectorZero(), acc_e = XMVectorZero();
+	float    psi    = au_decode.psi;
 
 	for (ma_uint32 i = 0; i < frame_count; i++) {
-		// All 8 speaker signals from 8 multiply-adds on the broadcast
-		// ambisonic channels. The bus frame is W, Y, Z, X.
-		XMVECTOR foa  = XMLoadFloat4((XMFLOAT4*)(au_foa + i*4));
+		// All speaker signals from multiply-adds on the broadcast ambisonic
+		// channels. The bus frame is W, Y, Z, X. Both ears start from the
+		// same speaker signal, the paths diverge in the filters; ITD delays
+		// run scalar through lane staging.
+		XMVECTOR foa = XMLoadFloat4((XMFLOAT4*)(au_foa + i*4));
+		acc_wv = XMVectorMultiplyAdd(XMVectorSplatX(foa), foa, acc_wv);
+		acc_e  = XMVectorMultiplyAdd(foa, foa, acc_e);
+		foa_lp = XMVectorMultiplyAdd(xk, XMVectorSubtract(foa, foa_lp), foa_lp);
+		foa    = XMVectorMultiplyAdd(t_del, foa_lp, XMVectorMultiply(t_hi, foa));
 		XMVECTOR ambw = XMVectorSplatX(foa), amby = XMVectorSplatY(foa);
 		XMVECTOR ambz = XMVectorSplatZ(foa), ambx = XMVectorSplatW(foa);
-		XMVECTOR sigA = XMVectorMultiply   (gwv, ambw);
-		         sigA = XMVectorMultiplyAdd(gyA, amby, sigA);
-		         sigA = XMVectorMultiplyAdd(gzA, ambz, sigA);
-		         sigA = XMVectorMultiplyAdd(gxA, ambx, sigA);
-		XMVECTOR sigB = XMVectorMultiply   (gwv, ambw);
-		         sigB = XMVectorMultiplyAdd(gyB, amby, sigB);
-		         sigB = XMVectorMultiplyAdd(gzB, ambz, sigB);
-		         sigB = XMVectorMultiplyAdd(gxB, ambx, sigB);
-
-		// Both ears start from the same speaker signal, the paths diverge
-		// in the filters. ITD delays run scalar through lane staging.
 		XMFLOAT4A st[AU_PATH_GROUPS];
-		XMStoreFloat4A(&st[0], sigA); XMStoreFloat4A(&st[1], sigB);
-		XMStoreFloat4A(&st[2], sigA); XMStoreFloat4A(&st[3], sigB);
+		for (int32_t g = 0; g < AU_PATH_GROUPS; g++) {
+			XMVECTOR sig = XMVectorMultiply   (gwv,   ambw);
+			         sig = XMVectorMultiplyAdd(gy[g], amby, sig);
+			         sig = XMVectorMultiplyAdd(gz[g], ambz, sig);
+			         sig = XMVectorMultiplyAdd(gx[g], ambx, sig);
+			XMStoreFloat4A(&st[g], sig);
+		}
 		float*  lanes  = (float*)st;
 		int32_t at_idx = au_decode.delay_at;
 		for (int32_t p = 0; p < AU_PATH_COUNT; p++) {
@@ -296,7 +353,7 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 		}
 		au_decode.delay_at = at_idx + 1 >= AU_EAR_DELAY_MAX ? 0 : at_idx + 1;
 
-		XMVECTOR sig[AU_PATH_GROUPS];
+		XMVECTOR sum = XMVectorZero();
 		for (int32_t g = 0; g < AU_PATH_GROUPS; g++) {
 			XMVECTOR x = XMLoadFloat4A(&st[g]);
 
@@ -306,7 +363,7 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 			au_decode.shadow_state[g] = sh;
 			x = XMVectorMultiplyAdd(au_decode.shadow_wet[g], XMVectorSubtract(sh, x), x);
 
-			// Three direct-form-I biquad stages, 4 paths per step.
+			// Two direct-form-I biquad stages, 4 paths per step.
 			for (int32_t s = 0; s < AU_DECODE_STAGES; s++) {
 				XMVECTOR y = XMVectorMultiply(au_decode.b0[s][g], x);
 				y = XMVectorMultiplyAdd             (au_decode.b1[s][g], au_decode.x1[s][g], y);
@@ -317,31 +374,48 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 				au_decode.y2[s][g] = au_decode.y1[s][g]; au_decode.y1[s][g] = y;
 				x = y;
 			}
-			sig[g] = x;
+			sum = XMVectorAdd(sum, x);
 		}
 
 		// The coherence split: lows pass, highs decorrelate. The allpasses
 		// are unity magnitude, so per-ear energy and calibration hold.
 		float lr[2] = {
-			XMVectorGetX(XMVector4Dot(XMVectorAdd(sig[0], sig[1]), ones)),
-			XMVectorGetX(XMVector4Dot(XMVectorAdd(sig[2], sig[3]), ones)) };
+			XMVectorGetX(XMVector4Dot(sum, earl)),
+			XMVectorGetX(XMVector4Dot(sum, earr)) };
 		for (int32_t e = 0; e < 2; e++) {
 			float lp = au_decode.deco_lp[e] + au_decode.deco_k * (lr[e] - au_decode.deco_lp[e]);
 			au_decode.deco_lp[e] = lp;
-			float hi = lr[e] - lp;
+			float hi  = lr[e] - lp;
+			float wet = hi;
 			for (int32_t a = 0; a < AU_DECO_SECTIONS; a++) {
 				float*  buf = au_decode.deco_buf[e][a];
 				int32_t at2 = au_decode.deco_at [e][a];
 				float   d   = buf[at2];
-				float   v   = hi + AU_DECO_GAIN * d;
-				hi          = d  - AU_DECO_GAIN * v;
+				float   v   = wet + AU_DECO_GAIN * d;
+				wet         = d  - AU_DECO_GAIN * v;
 				buf[at2]    = v;
 				au_decode.deco_at[e][a] = at2 + 1 >= au_deco_len[e][a] ? 0 : at2 + 1;
 			}
-			lr[e] = lp + hi;
+			lr[e] = lp + hi + psi * (wet - hi);
 		}
 		output[i*2  ] += lr[0];
 		output[i*2+1] += lr[1];
+	}
+	au_decode.foa_lp = foa_lp;
+
+	// Block diffuseness from the raw field: the intensity vector's length
+	// against total energy. A plane wave scores 0, direction-free ambience
+	// 1, and silence keeps the previous estimate. Smoothed over ~40ms and
+	// applied next block - one block of lag is well under audibility.
+	XMFLOAT4A wv, en;
+	XMStoreFloat4A(&wv, acc_wv);
+	XMStoreFloat4A(&en, acc_e);
+	float e_total = en.x + en.y + en.z + en.w;
+	if (e_total > 1e-9f) {
+		float iv  = sqrtf(wv.y*wv.y + wv.z*wv.z + wv.w*wv.w);
+		float dif = fmaxf(0.0f, fminf(1.0f, 1.0f - 2.0f * iv / e_total));
+		float k   = 1.0f - expf(-(float)frame_count / (0.04f * AU_SAMPLE_RATE));
+		au_decode.psi += k * (dif - au_decode.psi);
 	}
 }
 
@@ -355,16 +429,6 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 static int32_t au_force_bus = 0;
 void audio_test_force_bus(bool32_t enable) {
 	atomic_store_i32(&au_force_bus, enable ? 1 : 0);
-}
-
-// Brown-Duda spherical head per-ear delay in samples, continuous across
-// the median plane. cos_e is the cosine of the angle between the source
-// direction and that ear's axis; only the difference between ears is
-// audible, the common offset just keeps delays causal.
-static inline float au_ear_delay(float cos_e) {
-	const float r = (0.0875f / 343.0f) * AU_SAMPLE_RATE;
-	if (cos_e >= 0) return r * (1.0f - cos_e);
-	return r * (1.0f + acosf(fmaxf(-1.0f, cos_e)) - 1.5707963f);
 }
 
 // Direct-form-I biquad with caller-owned state, st = [x1 x2 y1 y2].
@@ -909,8 +973,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float*    out  = output + frame_offset * 2;
 		for (ma_uint64 i = 0; i < read; i++) {
 			float l = au_mix_temp[i*2], r = au_mix_temp[i*2+1];
-			if (peak < l) peak = l;
-			if (peak < r) peak = r;
+			if (peak < fabsf(l)) peak = fabsf(l);
+			if (peak < fabsf(r)) peak = fabsf(r);
 			out[i*2  ] += l*gain;
 			out[i*2+1] += r*gain;
 		}
@@ -931,7 +995,7 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		XMVECTOR  enc       = XMVectorSet(gain, dir_scale, dir_scale, dir_scale);
 		for (ma_uint64 i = 0; i < read; i++) {
 			float w = au_mix_temp[i*4];
-			if (peak < w) peak = w;
+			if (peak < fabsf(w)) peak = fabsf(w);
 			float* bus = au_foa + (frame_offset+i)*4;
 			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(
 				XMLoadFloat4((XMFLOAT4*)(au_mix_temp + i*4)), enc,
@@ -952,7 +1016,7 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float*    out  = output + frame_offset * 2;
 		for (ma_uint64 i = 0; i < read; i++) {
 			float s = au_mix_temp[i];
-			if (peak < s) peak = s;
+			if (peak < fabsf(s)) peak = fabsf(s);
 			out[i*2  ] += s*gain;
 			out[i*2+1] += s*gain;
 		}
@@ -1003,6 +1067,12 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	float RC    = 0.43496f / (2.0f * 3.14159265359f * cutoff);
 	float dt    = 1.0f / AU_SAMPLE_RATE;
 	float alpha = dt / (RC + dt);
+	// The model plateaus at 22.2kHz inside ~4.5m where real air absorption
+	// is negligible, but the cascade there still shaves ~1.4dB at 15kHz.
+	// Fade the filter out as the knee nears the plateau, continuous in
+	// distance, so close sources keep their sparkle. The cascade keeps
+	// running dry so its state stays primed for the fade back in.
+	float lpf_wet = fminf(1.0f, fmaxf(0.0f, (22200.0f - cutoff) * (1.0f / 2200.0f)));
 	float lp0   = voice->lpf_state[0], lp1 = voice->lpf_state[1];
 	float lp2   = voice->lpf_state[2], lp3 = voice->lpf_state[3];
 	float peak  = 0;
@@ -1016,12 +1086,12 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	if (k_bus >= 1.0f) {
 		for (ma_uint64 i = 0; i < read; i++) {
 			float s = au_mix_temp[i];
-			if (peak < s) peak = s;
+			if (peak < fabsf(s)) peak = fabsf(s);
 			lp0 += alpha * (s   - lp0);
 			lp1 += alpha * (lp0 - lp1);
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
-			s = lp3;
+			s += lpf_wet * (lp3 - s);
 
 			float* bus = au_foa + (frame_offset+i)*4;
 			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc, XMLoadFloat4((XMFLOAT4*)bus)));
@@ -1051,19 +1121,23 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float delay_r = voice->dir_delay[1], step_r = (tgt_r - delay_r) / (float)read;
 
 		// Head shadow on the far side, scaled by how far around it sits.
-		float wet_l = 0.6f * fmaxf(0, -cosL);
-		float wet_r = 0.6f * fmaxf(0, -cosR);
+		float wet_l = AU_SHADOW_WET * fmaxf(0, -cosL);
+		float wet_r = AU_SHADOW_WET * fmaxf(0, -cosR);
 
-		// Elevation/back voicing, shared mono before the ear split. The
-		// pinna dip rises and deepens with elevation, below and behind
-		// lose sparkle - same voicing the 8-speaker decode had at its
-		// poles, now continuous per source. Rebuilt each block.
-		float       el01  = uh.y * 0.5f + 0.5f;
-		float       dull  = -2.0f * (1.0f - el01) - 3.0f * fmaxf(0, uh.z);
-		au_biquad_t pinna = au_biquad_peaking(math_lerp(6500, 8000, el01), 4, math_lerp(-4, -8, el01));
-		au_biquad_t shelf = au_biquad_highshelf(5000, dull);
+		// Elevation/back voicing, shared mono before the ear split - the
+		// same voicing the decode's speakers carry, continuous per source.
+		// Rebuilt each block.
+		au_biquad_t pinna, shelf;
+		au_voicing(uh, &pinna, &shelf);
 
-		float    g_direct = gain * (1.0f - k_bus);
+		// Inside ~1m the two ears' own path lengths diverge enough to hear:
+		// gain per ear follows its true distance, adding the broadband
+		// near-field ILD a head-centered gain misses - about +-3dB per ear
+		// at the minimum distance, faded to nothing by ~2m.
+		float    d_l      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosL);
+		float    d_r      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosR);
+		float    g_dir_l  = gain * (1.0f - k_bus) * (dist / d_l);
+		float    g_dir_r  = gain * (1.0f - k_bus) * (dist / d_r);
 		float    shadow_l = voice->dir_shadow[0];
 		float    shadow_r = voice->dir_shadow[1];
 		float*   ring     = voice->dir_ring;
@@ -1071,12 +1145,12 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float*   out      = output + frame_offset * 2;
 		for (ma_uint64 i = 0; i < read; i++) {
 			float s = au_mix_temp[i];
-			if (peak < s) peak = s;
+			if (peak < fabsf(s)) peak = fabsf(s);
 			lp0 += alpha * (s   - lp0);
 			lp1 += alpha * (lp0 - lp1);
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
-			s = lp3;
+			s += lpf_wet * (lp3 - s);
 
 			if (k_bus > 0) {
 				float* bus = au_foa + (frame_offset+i)*4;
@@ -1099,8 +1173,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			vl += wet_l * (shadow_l - vl);
 			vr += wet_r * (shadow_r - vr);
 
-			out[i*2  ] += vl * g_direct;
-			out[i*2+1] += vr * g_direct;
+			out[i*2  ] += vl * g_dir_l;
+			out[i*2+1] += vr * g_dir_r;
 
 			delay_l += step_l;
 			delay_r += step_r;
@@ -1150,7 +1224,7 @@ static bool voice_is_direct(const au_voice_t* voice, vec3 listener_pos) {
 static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* offsets, const ma_uint32* blocks, ma_uint32* out_read, float* output, ma_uint32 frame_count) {
 	quat qinv = quat_inverse(head.orientation);
 
-	float       gains[4], alphas[4], wets_l[4], wets_r[4];
+	float       gains_l[4], gains_r[4], lpws[4], alphas[4], wets_l[4], wets_r[4];
 	float       dlys_l[4], dlys_r[4], stps_l[4], stps_r[4], tgts_l[4], tgts_r[4];
 	au_biquad_t pinnas[4], shelfs[4];
 	float*      srcs[4];
@@ -1179,7 +1253,7 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		// The classification can go stale for one block if main moves the
 		// source into the head mid-frame - render it frontal, not NaN.
 		vec3  u     = dist2 > 0.0001f ? dir / sqrtf(dist2) : vec3{0, 0, -1};
-		gains[v]    = decibels_to_signal(decibels - 20.0f*log10f(dist)) * trim_gain;
+		float gain  = decibels_to_signal(decibels - 20.0f*log10f(dist)) * trim_gain;
 
 		float override = atomic_load_f32(&voice->params.cutoff);
 		float cutoff   = override > 0 ? override
@@ -1187,8 +1261,14 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		float RC  = 0.43496f / (2.0f * 3.14159265359f * cutoff);
 		float dt  = 1.0f / AU_SAMPLE_RATE;
 		alphas[v] = dt / (RC + dt);
+		lpws[v]   = fminf(1.0f, fmaxf(0.0f, (22200.0f - cutoff) * (1.0f / 2200.0f)));
 
 		vec3  uh   = qinv * u;
+		// Near-field per-ear distance gain, matching the scalar path.
+		float d_l  = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS + 2.0f*dist*AU_HEAD_RADIUS*uh.x);
+		float d_r  = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*uh.x);
+		gains_l[v] = gain * (dist / d_l);
+		gains_r[v] = gain * (dist / d_r);
 		float tgt_l = au_ear_delay(-uh.x);
 		float tgt_r = au_ear_delay( uh.x);
 		float base  = fminf(tgt_l, tgt_r);
@@ -1199,13 +1279,10 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		dlys_l[v] = voice->dir_delay[0];    dlys_r[v] = voice->dir_delay[1];
 		stps_l[v] = (tgt_l - dlys_l[v]) / (float)frame_count;
 		stps_r[v] = (tgt_r - dlys_r[v]) / (float)frame_count;
-		wets_l[v] = 0.6f * fmaxf(0,  uh.x);
-		wets_r[v] = 0.6f * fmaxf(0, -uh.x);
+		wets_l[v] = AU_SHADOW_WET * fmaxf(0,  uh.x);
+		wets_r[v] = AU_SHADOW_WET * fmaxf(0, -uh.x);
 
-		float el01 = uh.y * 0.5f + 0.5f;
-		float dull = -2.0f * (1.0f - el01) - 3.0f * fmaxf(0, uh.z);
-		pinnas[v]  = au_biquad_peaking(math_lerp(6500, 8000, el01), 4, math_lerp(-4, -8, el01));
-		shelfs[v]  = au_biquad_highshelf(5000, dull);
+		au_voicing(uh, &pinnas[v], &shelfs[v]);
 		rats[v]    = voice->dir_ring_at;
 
 		// Read into this lane's slice at its onset offset, zeros elsewhere.
@@ -1232,7 +1309,9 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMVECTOR shr = XMVectorSet(vs[0]->dir_shadow[1], vs[1]->dir_shadow[1], vs[2]->dir_shadow[1], vs[3]->dir_shadow[1]);
 
 	XMVECTOR alpha4 = XMVectorSet(alphas[0], alphas[1], alphas[2], alphas[3]);
-	XMVECTOR gain4  = XMVectorSet(gains [0], gains [1], gains [2], gains [3]);
+	XMVECTOR lpw4   = XMVectorSet(lpws  [0], lpws  [1], lpws  [2], lpws  [3]);
+	XMVECTOR gnl4   = XMVectorSet(gains_l[0], gains_l[1], gains_l[2], gains_l[3]);
+	XMVECTOR gnr4   = XMVectorSet(gains_r[0], gains_r[1], gains_r[2], gains_r[3]);
 	XMVECTOR wetl4  = XMVectorSet(wets_l[0], wets_l[1], wets_l[2], wets_l[3]);
 	XMVECTOR wetr4  = XMVectorSet(wets_r[0], wets_r[1], wets_r[2], wets_r[3]);
 	XMVECTOR pb0 = XMVectorSet(pinnas[0].b0, pinnas[1].b0, pinnas[2].b0, pinnas[3].b0);
@@ -1251,14 +1330,14 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 
 	for (ma_uint32 i = 0; i < frame_count; i++) {
 		XMVECTOR s = XMVectorSet(srcs[0][i], srcs[1][i], srcs[2][i], srcs[3][i]);
-		peak4 = XMVectorMax(peak4, s);
+		peak4 = XMVectorMax(peak4, XMVectorAbs(s));
 
 		// Air absorption cascade, 4 voices per op.
 		lp0 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(s,   lp0), lp0);
 		lp1 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp0, lp1), lp1);
 		lp2 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp1, lp2), lp2);
 		lp3 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp2, lp3), lp3);
-		s   = lp3;
+		s   = XMVectorMultiplyAdd(lpw4, XMVectorSubtract(lp3, s), s);
 
 		// Pinna dip, then the dull shelf.
 		XMVECTOR y = XMVectorMultiply(pb0, s);
@@ -1303,8 +1382,8 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		shr = XMVectorMultiplyAdd(shk, XMVectorSubtract(vr, shr), shr);
 		vl  = XMVectorMultiplyAdd(wetl4, XMVectorSubtract(shl, vl), vl);
 		vr  = XMVectorMultiplyAdd(wetr4, XMVectorSubtract(shr, vr), vr);
-		output[i*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gain4), ones));
-		output[i*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gain4), ones));
+		output[i*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gnl4), ones));
+		output[i*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gnr4), ones));
 	}
 
 	// Scatter the lane state back to the voices.

@@ -1253,6 +1253,39 @@ static void at_test_direct_bus_level() {
 }
 
 ///////////////////////////////////////////
+
+static float at_sine18k(float t) { return sinf(t * 18000.0f * 6.2831853f) * 0.1f; }
+
+static void at_test_near_field() {
+	// Near-field ILD: the same hard-left source carries a much stronger
+	// left/right split at 30cm than at 3m - inside ~1m the per-ear path
+	// lengths add broadband ILD on top of the head shadow's high band.
+	sound_t sound = at_generate(at_sine8k, 0.25f);
+	double  l = 0, r = 0;
+	sound_play(sound, vec3{-0.3f, 0, 0});
+	at_render(AU_SAMPLE_RATE / 2, &l, &r);
+	double near_ild = r > 0 ? l / r : 0;
+	sound_play(sound, vec3{-3, 0, 0});
+	at_render(AU_SAMPLE_RATE / 2, &l, &r);
+	double far_ild = r > 0 ? l / r : 0;
+	AT_CHECK(near_ild > far_ild * 2, "near sources carry extra broadband ILD");
+	sound_release(sound);
+
+	// Air absorption plateau: within ~4.5m the cutoff model maxes out and
+	// the filter fades to a true bypass, so a bright close source keeps its
+	// top octave - within the direction voicing's ~1dB of head-locked.
+	sound_t bright = at_generate(at_sine18k, 0.25f);
+	sound_play_t locked = {}; locked.flags = sound_flags_head_locked;
+	sound_play(bright, vec3{0, 0, -1}, &locked);
+	double locked_e  = at_render_energy(AU_SAMPLE_RATE / 2);
+	sound_play(bright, vec3{0, 0, -1});
+	double spatial_e = at_render_energy(AU_SAMPLE_RATE / 2);
+	double ratio_db  = spatial_e > 0 ? 10.0 * log10(locked_e / spatial_e) : 99;
+	AT_CHECK(ratio_db < 2.0, "the air filter is a true bypass at close range");
+	sound_release(bright);
+}
+
+///////////////////////////////////////////
 // Mixer performance benchmark. Times audio_render_block - the audio
 // thread's entire per-block cost - in real-time sized blocks, so results
 // read directly as "% of one core at device rate".
@@ -1516,6 +1549,7 @@ int audio_tests_run() {
 	at_test_direct_itd();
 	at_test_direct_bus_level();
 	at_test_direct_batch();
+	at_test_near_field();
 
 	sk_shutdown();
 
