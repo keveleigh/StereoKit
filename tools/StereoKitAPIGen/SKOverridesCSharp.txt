@@ -111,6 +111,9 @@ ui_dir_ UIDir
 ui_corner_ UICorner
 ui_scroll_ UIScroll
 
+# The environment param struct, distinct from the AudioEnv preset enum
+audio_env_t AudioEnvironment
+
 # Skip code generation for hand-written types (use @noimpl directive)
 # Math types with operators, constructors, helpers
 @noimpl vec2 vec3 vec4 color32 color128 quat matrix

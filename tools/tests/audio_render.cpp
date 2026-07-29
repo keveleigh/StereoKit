@@ -17,11 +17,9 @@ static void ar_sleep_ms(int32_t ms) { usleep(ms * 1000); }
 
 using namespace sk;
 
-// Offline listening renders for spatializer tuning, not a test suite. Each
-// render drives the mixer through the same offline harness the audio tests
-// use, writing stereo float32 wavs meant for headphone A/B comparison. The
-// interesting pairs are *_direct vs *_bus: the same orbiting source through
-// the per-voice binaural path and forced through the FOA bus decode.
+// Offline listening renders for spatializer tuning, not a test suite: stereo
+// float32 wavs for headphone A/B comparison. The interesting pairs are
+// *_direct vs *_bus, the same orbiting source through both render paths.
 
 #define AR_BLOCK 480 // 10ms, a typical device period
 
@@ -63,9 +61,8 @@ static float ar_noise(uint64_t i) {
 	return ((int32_t)(h >> 9) - 4194304) * (1.0f / 4194304.0f);
 }
 
-// Noise bursts, 100ms with 5ms edge fades, 4 per second. Broadband with
-// sharp onsets - the easiest content to localize, so decode blur is at its
-// most audible.
+// Noise bursts, 100ms with 5ms edge fades, 4 per second. Broadband sharp
+// onsets are the easiest content to localize, so decode blur shows most.
 static void ar_gen_bursts(float* out, uint64_t start, uint64_t frames) {
 	const uint64_t period = AU_SAMPLE_RATE / 4;
 	const uint64_t burst  = AU_SAMPLE_RATE / 10;
@@ -82,9 +79,8 @@ static void ar_gen_bursts(float* out, uint64_t start, uint64_t frames) {
 
 ///////////////////////////////////////////
 
-// An orbiting burst source, one revolution per 4 seconds. Horizontal is a
-// full circle around the head, vertical is a median-plane loop:
-// front -> overhead -> behind -> below.
+// An orbiting burst source, one revolution per 4s. Horizontal circles the
+// head, vertical loops the median plane: front, overhead, behind, below.
 static void ar_render_orbit(const char* path, sound_t sound, float radius, bool vertical, bool force_bus) {
 	const uint32_t total = AU_SAMPLE_RATE * 8;
 	FILE* file = ar_wav_open(path, total);
@@ -109,6 +105,36 @@ static void ar_render_orbit(const char* path, sound_t sound, float radius, bool 
 
 	sound_inst_stop(inst);
 	audio_test_force_bus(false);
+	ar_flush();
+	log_infof("[audio_render] wrote %s", path);
+}
+
+// Bursts orbiting at 3m for 4s, then spiraling out to 12m. Listen for tail
+// character, and the direct/reverb balance carrying distance on the way out.
+static void ar_render_env(const char* path, sound_t sound, audio_env_ preset) {
+	const uint32_t total = AU_SAMPLE_RATE * 10;
+	const uint32_t hold  = AU_SAMPLE_RATE * 4;
+	FILE* file = ar_wav_open(path, total);
+	if (file == nullptr) return;
+
+	audio_set_env(audio_env_preset(preset));
+	sound_play_t settings = {}; settings.flags = sound_flags_loop;
+	sound_inst_t inst     = sound_play(sound, vec3{0, 0, -3}, &settings);
+
+	static float block[AR_BLOCK * 2];
+	for (uint32_t at = 0; at < total; at += AR_BLOCK) {
+		float ang  = ((float)at / AU_SAMPLE_RATE) * (6.2831853f / 4.0f);
+		float dist = at <= hold ? 3.0f
+			: 3.0f + 9.0f * (float)(at - hold) / (float)(total - hold);
+		sound_inst_set_pos(inst, vec3{sinf(ang) * dist, 0, -cosf(ang) * dist});
+		audio_render_block(block, AR_BLOCK);
+		fwrite(block, sizeof(float), AR_BLOCK * 2, file);
+		audio_test_step();
+	}
+	fclose(file);
+
+	sound_inst_stop(inst);
+	audio_set_env(audio_env_preset(audio_env_off));
 	ar_flush();
 	log_infof("[audio_render] wrote %s", path);
 }
@@ -170,10 +196,20 @@ int audio_render_run(const char* out_dir, const char* ambi_file) {
 	ar_render_orbit(path, bursts, 2.0f, true, true);
 	snprintf(path, sizeof(path), "%s/orbit_near.wav", out_dir);
 	ar_render_orbit(path, bursts, 0.35f, false, false);
+	snprintf(path, sizeof(path), "%s/env_off.wav", out_dir);
+	ar_render_env(path, bursts, audio_env_off);
+	snprintf(path, sizeof(path), "%s/env_room.wav", out_dir);
+	ar_render_env(path, bursts, audio_env_room);
+	snprintf(path, sizeof(path), "%s/env_hall.wav", out_dir);
+	ar_render_env(path, bursts, audio_env_hall);
+	snprintf(path, sizeof(path), "%s/env_forest.wav", out_dir);
+	ar_render_env(path, bursts, audio_env_forest);
+	snprintf(path, sizeof(path), "%s/env_field.wav", out_dir);
+	ar_render_env(path, bursts, audio_env_field);
 	sound_release(bursts);
 
 	if (ambi_file != nullptr) {
-		sound_t bed = sound_create_ambisonic(ambi_file);
+		sound_t bed = sound_create(ambi_file);
 		for (int32_t i = 0; i < 500 && sound_duration(bed) == 0; i++) ar_sleep_ms(10);
 		if (sound_duration(bed) > 0) {
 			sound_set_decibels(bed, 83);

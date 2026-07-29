@@ -21,9 +21,8 @@ struct au_cmd_t {
 	uint16_t id;
 };
 
-// Pushed by the audio thread when a voice finishes, its slot is stolen, or
-// it's stopped. Drained on main where releasing and freeing is safe. A -1
-// slot is steal cleanup, it frees resources without touching voice state.
+// Pushed by the audio thread as voices finish, drained on main where freeing
+// is safe. A -1 slot is steal cleanup, freeing without touching voice state.
 struct au_ret_t {
 	sound_t     sound;
 	ma_decoder* decoder;
@@ -46,9 +45,8 @@ static au_ret_t au_ret_ring[AU_RET_RING_SIZE] = {};
 static int32_t  au_ret_head = 0; // Audio writes
 static int32_t  au_ret_tail = 0; // Main writes
 
-// Listener pose, published field-by-field through the atomics. A read may
-// mix components from two consecutive frames, which is at most one frame
-// of head motion for one mix block - individual fields never tear.
+// Listener pose, published field-by-field through the atomics. A read may mix
+// two consecutive frames' components, but individual fields never tear.
 static pose_t au_listener_pose = {{0,0,0}, {0,0,0,1}};
 
 static uint64_t au_mix_temp_size = 0;
@@ -59,13 +57,16 @@ static bool     au_mix_truncate_warned = false;
 static uint64_t au_resample_temp_size = 0;
 static float*   au_resample_temp      = nullptr;
 
-// The first order ambisonic bus, interleaved ambiX ACN order - one W, Y,
-// Z, X float4 per frame, so encode and decode are single SIMD ops per
-// sample. Spatial voices encode into it, one decode per block renders it
-// binaural. When nothing has touched the bus and the decode filters have
-// rung down, the decode is skipped entirely - a head-locked-only or idle
-// mix costs no spatialization work at all.
-static float*   au_foa         = nullptr;
+// The first order ambisonic bus, interleaved ambiX ACN order - one W, Y, Z, X
+// float4 per frame, so encode and decode are single SIMD ops per sample. It's
+// a power-of-two ring with room past the current block, so early reflections
+// can write *ahead* of the read head without per-voice memory; an untouched,
+// rung-down bus skips the decode entirely.
+static float*   au_foa         = nullptr; // Decode input scratch, linear
+static float*   au_foa_ring    = nullptr;
+static uint32_t au_foa_mask    = 0;     // Ring length in frames, minus one
+static uint32_t au_foa_head    = 0;     // Read head, audio thread
+static int32_t  au_foa_future  = 0;     // Frames written ahead of head
 static bool     au_foa_touched = false; // Any encode this block, audio thread
 static int32_t  au_foa_tail    = 0;     // Decode ring-down frames left
 
@@ -73,26 +74,18 @@ static int32_t  au_foa_tail    = 0;     // Decode ring-down frames left
 // Binaural decode: 6 virtual speakers on an octahedron - hard left/right,
 // up/down, front/back. The symmetric layout makes the coherent sum exactly
 // 1.0 in every direction, so calibration passes straight through, and the
-// hard-lateral pair carries the full interaural delay a real head
-// produces. Each speaker feeds both ears through fixed head-relative
-// spherical-head filters; measured HRIRs can replace these later without
-// touching anything upstream.
-//
-// The 12 ear paths (6 speakers x 2 ears) run structure-of-arrays in three
-// SIMD lane groups - lane p = speaker*2 + ear, two speakers per group -
-// each path a uniform pipeline of head-shadow one-pole plus two biquad
-// voicing stages (identity where unused), so the filter bank steps 4 paths
-// per op. Only the fractional ITD delays stay scalar, they need per-lane
-// buffer indexing.
+// lateral pair carries the full interaural delay. The 12 ear paths (lane
+// p = speaker*2 + ear) run structure-of-arrays in three SIMD lane groups,
+// so the filter bank steps 4 paths per op; only the fractional ITD delays
+// stay scalar, they need per-lane buffer indexing.
 
 #define AU_SPEAKER_COUNT 6
 #define AU_PATH_COUNT    (AU_SPEAKER_COUNT * 2)
 #define AU_PATH_GROUPS   (AU_PATH_COUNT / 4)
-#define AU_DECODE_STAGES 2
-#define AU_EAR_DELAY_MAX 48
+#define AU_DECODE_STAGES AU_VOICING_STAGES
+#define AU_EAR_DELAY_MAX 64   // Pow2 for masked wrap
 
-// Head shadow depth at a fully lateral source or speaker: the far ear's
-// high band lands at 20*log10(1-wet) dB, scaled down by lateralness in
+// Far-ear high band lands at 20*log10(1-wet) dB, scaled by lateralness in
 // use. Real heads shadow 15-20dB up top; 0.87 lands at ~-18dB.
 #define AU_SHADOW_WET    0.87f
 
@@ -100,9 +93,13 @@ static int32_t  au_foa_tail    = 0;     // Decode ring-down frames left
 // coherence crossover, and the near-field ear distances.
 #define AU_HEAD_RADIUS   0.0875f
 
-// Interaural decorrelator sizes: Schroeder allpass delays per [ear][section],
-// distinct primes so the ears' phase responses never line up, sums matched so
-// neither ear leads on average and the image stays centered.
+// Shoulder reflectors ~0.17m below the ears: an elevation-tracked comb up to
+// ~1ms - the low frequency up/down cue, the pinna notches live above 5kHz.
+#define AU_SHOULDER_M    0.17f
+#define AU_SHOULDER_GAIN 0.35f
+
+// Schroeder allpass delays per [ear][section]: distinct primes so the ears'
+// phase responses never line up, sums matched so the image stays centered.
 #define AU_DECO_SECTIONS 2
 #define AU_DECO_MAX      256
 #define AU_DECO_GAIN     0.5f
@@ -131,14 +128,8 @@ struct au_decode_t {
 	// channels, split at ~700Hz where ITD hands off to energy cues.
 	XMVECTOR foa_lp;
 	float    xover_k;
-	// Diffuse-field interaural coherence: a real diffuse field is coherent
-	// between the ears only below ~c/(2*ear spacing), but the decode alone
-	// leaves the ears correlated at every frequency - which images as a
-	// narrow band in the head instead of enveloping width. Above the
-	// crossover each ear runs its own allpass chain, below it passes clean.
-	// The wet share tracks the bus's measured diffuseness: a plane wave
-	// *should* reach the ears coherent, and decorrelating it would smear
-	// the envelope cues that localize it, so only diffuse energy widens.
+	// Diffuse-field coherence: above the crossover each ear runs its own
+	// allpass chain, wet share riding psi so plane waves stay coherent.
 	float    psi;            // Smoothed diffuseness, 0 = plane wave, 1 = diffuse
 	float    deco_k;         // Crossover one-pole coefficient, ~980Hz
 	float    deco_lp [2];    // Crossover state per ear
@@ -179,21 +170,28 @@ static au_biquad_t au_biquad_highshelf(float hz, float gain_db) {
 	return r;
 }
 
-// Direction voicing shared by the direct path and the decode's virtual
-// speakers: a pinna-style dip that rises and deepens with elevation, and a
-// high shelf dulling below and behind. dir is head-relative, unit length,
-// and a zero-gain shelf is an exact identity.
-static void au_voicing(vec3 dir, au_biquad_t* out_pinna, au_biquad_t* out_shelf) {
-	float el01 = dir.y * 0.5f + 0.5f;
-	float dull = -2.0f * (1.0f - el01) - 3.0f * fmaxf(0, dir.z);
-	*out_pinna = au_biquad_peaking  (math_lerp(6500, 8000, el01), 4, math_lerp(-4, -8, el01));
-	*out_shelf = au_biquad_highshelf(5000, dull);
+// Direction voicing shared by the direct path and the decode's speakers,
+// AU_VOICING_STAGES biquads; dir is head-relative unit length. Elevation is
+// Iida-style N1/N2 pinna acoustics: notches rise and fade as the source
+// rises - deeply notched below, smooth and bright overhead - judged against
+// P1, the elevation-independent concha peak.
+static void au_voicing(vec3 dir, au_biquad_t out[AU_VOICING_STAGES]) {
+	float el01  = dir.y * 0.5f + 0.5f;
+	float n1_hz = math_lerp(4800, 11000, el01);
+	float n_db  = math_lerp(-16, -1.5f, el01);
+	out[0] = au_biquad_peaking(n1_hz,         7, n_db);
+	out[1] = au_biquad_peaking(n1_hz * 1.45f, 8, n_db * 0.7f);
+	out[2] = au_biquad_peaking(4200, 1.5f, 3);
+	// Below the horizon leans deliberately dark, steeper than physical -
+	// listeners compress elevation toward the horizon, so the gradient is
+	// exaggerated. Behind loses sparkle; a zero-gain shelf is exact identity.
+	float dull = -10.0f * fmaxf(0, -dir.y) - 3.0f * fmaxf(0, dir.z);
+	out[3] = au_biquad_highshelf(5000, dull);
 }
 
-// Brown-Duda spherical head per-ear delay in samples, continuous across
-// the median plane. cos_e is the cosine of the angle between the source
-// direction and that ear's axis; only the difference between ears is
-// audible, the common offset just keeps delays causal.
+// Brown-Duda spherical head per-ear delay in samples. cos_e is the cosine of
+// the source direction against that ear's axis; only the difference between
+// ears is audible, the common offset just keeps delays causal.
 static inline float au_ear_delay(float cos_e) {
 	const float r = (AU_HEAD_RADIUS / 343.0f) * AU_SAMPLE_RATE;
 	if (cos_e >= 0) return r * (1.0f - cos_e);
@@ -215,8 +213,8 @@ static void au_speakers_init() {
 	float xRC = 1.0f / (6.2831853f * 700.0f);
 	au_decode.xover_k = dt / (xRC + dt);
 
-	// Historical default until the first block measures: silence is
-	// diffuse, so ring-downs and fresh starts stay wide.
+	// Default until the first block measures: silence is diffuse, so
+	// ring-downs and fresh starts stay wide.
 	au_decode.psi = 1;
 
 	// Coefficients build per-lane in scalar staging, packed at the end.
@@ -232,8 +230,7 @@ static void au_speakers_init() {
 	}
 
 	// Octahedron: the lateral pair carries the full interaural delay and
-	// shadow, up/down anchor the elevation voicing, front/back the
-	// front/back voicing. SK frame, -Z forward.
+	// shadow, the other axes anchor the voicing. SK frame, -Z forward.
 	static const vec3 dirs[AU_SPEAKER_COUNT] = {
 		{ 0, 0,-1}, {-1, 0, 0}, { 1, 0, 0},
 		{ 0, 0, 1}, { 0, 1, 0}, { 0,-1, 0} };
@@ -241,9 +238,8 @@ static void au_speakers_init() {
 		vec3 dir = dirs[s];
 		au_decode.speaker_dir[s] = dir;
 
-		// Interaural delay and head shadow scaled by how lateral the
-		// speaker sits - the same Brown-Duda ear model the direct path
-		// uses, near ear normalized to zero. Lane p = speaker*2 + ear.
+		// The same Brown-Duda ear model the direct path uses, near ear
+		// normalized to zero. Lane p = speaker*2 + ear.
 		float dl   = au_ear_delay(-dir.x);
 		float dr   = au_ear_delay( dir.x);
 		float base = fminf(dl, dr);
@@ -253,17 +249,16 @@ static void au_speakers_init() {
 		if (lateral > 0)
 			shadow[s*2 + (dir.x > 0 ? 0 : 1)] = AU_SHADOW_WET * lateral;
 
-		// The same voicing the direct path applies per source, evaluated at
-		// the speaker directions - the two render paths stay matched where
-		// the spread crossfade hands off between them.
-		au_biquad_t pinna, shelf;
-		au_voicing(dir, &pinna, &shelf);
+		// The direct path's per-source voicing at the speaker directions, so
+		// the render paths stay matched where the spread crossfade hands off.
+		au_biquad_t vc[AU_VOICING_STAGES];
+		au_voicing(dir, vc);
 		for (int32_t ear = 0; ear < 2; ear++) {
 			int32_t lane = s*2 + ear;
-			b0[0][lane] = pinna.b0; b1[0][lane] = pinna.b1; b2[0][lane] = pinna.b2;
-			a1[0][lane] = pinna.a1; a2[0][lane] = pinna.a2;
-			b0[1][lane] = shelf.b0; b1[1][lane] = shelf.b1; b2[1][lane] = shelf.b2;
-			a1[1][lane] = shelf.a1; a2[1][lane] = shelf.a2;
+			for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+				b0[f][lane] = vc[f].b0; b1[f][lane] = vc[f].b1; b2[f][lane] = vc[f].b2;
+				a1[f][lane] = vc[f].a1; a2[f][lane] = vc[f].a2;
+			}
 		}
 	}
 
@@ -279,19 +274,13 @@ static void au_speakers_init() {
 	}
 }
 
-// Decodes the FOA bus additively into interleaved stereo. Rotation is
-// applied to the pickup directions rather than the field, the ear filters
-// stay head-relative - which is also correct under head roll.
+// Decodes the FOA bus additively into interleaved stereo. Rotation applies to
+// the pickup directions rather than the field - correct under head roll too.
 static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) {
-	// Pickup gains for the rotated speaker directions, packed straight into
-	// path lanes - each group holds two speakers with both their ears
-	// adjacent. The decode is dual-band: below the crossover the
-	// directional weight is velocity-matched (t=3), so the speakers'
-	// superposed ITD comes out physically correct; above it max-rE
-	// (t=sqrt3) concentrates energy toward the source instead. W is
-	// weighted 1 in both bands and the layout's directional terms cancel
-	// in the coherent sum, so calibration holds exactly in each band.
-	// SK -> ambisonic axes: +X front.
+	// Pickup gains for the rotated speakers, two per lane group with ears
+	// adjacent. Dual-band: velocity-matched (t=3) lows keep the superposed
+	// ITD physical, max-rE (t=sqrt3) highs focus energy; W weighs 1 in both
+	// bands so the coherent-sum calibration holds. Ambisonic +X is front.
 	float gw = (2.0f / AU_SPEAKER_COUNT) * 0.5f;
 	float gys[AU_SPEAKER_COUNT], gzs[AU_SPEAKER_COUNT], gxs[AU_SPEAKER_COUNT];
 	for (int32_t s = 0; s < AU_SPEAKER_COUNT; s++) {
@@ -319,10 +308,8 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 	float    psi    = au_decode.psi;
 
 	for (ma_uint32 i = 0; i < frame_count; i++) {
-		// All speaker signals from multiply-adds on the broadcast ambisonic
-		// channels. The bus frame is W, Y, Z, X. Both ears start from the
-		// same speaker signal, the paths diverge in the filters; ITD delays
-		// run scalar through lane staging.
+		// Speaker signals as multiply-adds on the broadcast W, Y, Z, X frame;
+		// both ears share a signal and diverge in the filters below.
 		XMVECTOR foa = XMLoadFloat4((XMFLOAT4*)(au_foa + i*4));
 		acc_wv = XMVectorMultiplyAdd(XMVectorSplatX(foa), foa, acc_wv);
 		acc_e  = XMVectorMultiplyAdd(foa, foa, acc_e);
@@ -345,13 +332,11 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 			if (d <= 0) continue;
 			float* buf = au_decode.delay_buf[p];
 			buf[at_idx] = lanes[p];
-			float read_at = (float)at_idx - d;
-			if (read_at < 0) read_at += AU_EAR_DELAY_MAX;
-			int32_t i0 = (int32_t)read_at;
-			int32_t i1 = i0 + 1 >= AU_EAR_DELAY_MAX ? 0 : i0 + 1;
-			lanes[p] = math_lerp(buf[i0], buf[i1], read_at - (float)i0);
+			float   read_at = (float)(at_idx + AU_EAR_DELAY_MAX) - d;
+			int32_t i0      = (int32_t)read_at;
+			lanes[p] = math_lerp(buf[i0 & (AU_EAR_DELAY_MAX-1)], buf[(i0+1) & (AU_EAR_DELAY_MAX-1)], read_at - (float)i0);
 		}
-		au_decode.delay_at = at_idx + 1 >= AU_EAR_DELAY_MAX ? 0 : at_idx + 1;
+		au_decode.delay_at = (at_idx + 1) & (AU_EAR_DELAY_MAX-1);
 
 		XMVECTOR sum = XMVectorZero();
 		for (int32_t g = 0; g < AU_PATH_GROUPS; g++) {
@@ -403,10 +388,9 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 	}
 	au_decode.foa_lp = foa_lp;
 
-	// Block diffuseness from the raw field: the intensity vector's length
-	// against total energy. A plane wave scores 0, direction-free ambience
-	// 1, and silence keeps the previous estimate. Smoothed over ~40ms and
-	// applied next block - one block of lag is well under audibility.
+	// Block diffuseness: intensity vector length against total energy - plane
+	// wave 0, ambience 1, silence keeps the last estimate. Smoothed ~40ms and
+	// applied next block; one block of lag is well under audibility.
 	XMFLOAT4A wv, en;
 	XMStoreFloat4A(&wv, acc_wv);
 	XMStoreFloat4A(&en, acc_e);
@@ -416,6 +400,316 @@ static void audio_decode_foa(float* output, ma_uint32 frame_count, pose_t head) 
 		float dif = fmaxf(0.0f, fminf(1.0f, 1.0f - 2.0f * iv / e_total));
 		float k   = 1.0f - expf(-(float)frame_count / (0.04f * AU_SAMPLE_RATE));
 		au_decode.psi += k * (dif - au_decode.psi);
+	}
+}
+
+///////////////////////////////////////////
+// Environment reverb: spatial voices feed a mono send whose gain ignores
+// distance - reverberant energy in a real space barely depends on where the
+// source sits - so the direct/reverb balance carries absolute distance for
+// free. One shared FDN turns the send into a tail on the bus's W channel.
+// Parameters are perceptual, and wet 0 - the default - runs nothing at all.
+
+#define AU_ENV_LINES    8
+#define AU_ENV_MAX_LINE 12480 // Longest line at the 40m size clamp, frames
+#define AU_ENV_APS      4     // Series input diffusion allpasses
+#define AU_ENV_AP_MAX   611   // Longest allpass delay, frames
+#define AU_ER_DELAY_MAX 4096  // Reflection write-ahead cap, frames, ~85ms
+#define AU_ER_LEVEL     0.5f  // Tap level against an equal-distance direct
+// Line read modulation depth, frames - just enough to keep the modes moving.
+// Bigger depths make linear interp's HF rolloff flutter, a sparkle on tails.
+#define AU_ENV_MOD      2.5f
+
+// Mutually prime line lengths at size 10m, ~23-62ms, scaled by size/10.
+// Scaling loses exact primality, but stays incommensurate enough.
+static const int32_t au_env_base_len[AU_ENV_LINES] =
+	{ 1097, 1327, 1559, 1801, 2099, 2371, 2677, 2971 };
+// Injection/tap signs decorrelate the lines' contributions.
+static const float au_env_in_sign [AU_ENV_LINES] = { 1,-1, 1,-1, 1,-1, 1,-1 };
+static const float au_env_out_sign[AU_ENV_LINES] = { 1, 1,-1,-1, 1,-1,-1, 1 };
+// Series diffusion delays, ~3.6-12.7ms - Dattorro-style spacing.
+static const int32_t au_env_ap_len[AU_ENV_APS] = { 173, 229, 447, 611 };
+// Mutually detuned read modulation rates, Hz. A static FDN's modes freeze
+// into a metallic comb; a cent of wobble breaks it, far below audible chorus.
+static const float au_env_mod_rate[AU_ENV_LINES] =
+	{ 0.31f, 0.43f, 0.37f, 0.53f, 0.41f, 0.59f, 0.35f, 0.47f };
+
+struct au_env_t {
+	float*  lines;              // AU_ENV_LINES max-length lines, contiguous
+	float*  send;               // Mono send accumulator, au_mix_temp_size
+	int32_t len[AU_ENV_LINES];  // Active line lengths for the current size
+	int32_t at [AU_ENV_LINES];
+	float   fb [AU_ENV_LINES];  // Per-line decay gain from RT60
+	float   lp [AU_ENV_LINES];  // Damping one-pole state
+	float   mod_phase[AU_ENV_LINES];
+	float   ap[AU_ENV_APS][AU_ENV_AP_MAX];
+	int32_t ap_at[AU_ENV_APS];
+	float   in_lp;              // Input tone one-pole state
+	float*  er_temp;            // Absorbed-mono scratch for the tap writes
+	float   send_ref;           // Send rolloff knee, meters - ~half of size
+	// Early reflection shoebox, listener-centered, world-aligned.
+	bool    er_on;              // Gates all per-voice tap work
+	float   er_hx;              // Wall half-extent, x and z
+	float   er_floor, er_ceil;  // Surface heights relative to the head
+	float   er_reflect;
+	float   er_k;               // Surface absorption one-pole coefficient
+	float   wet_cur;            // Glides toward the target, audio thread
+	float   size_cur;           // Size the lines are laid out for
+	int32_t tail_left;          // Frames of tail worth rendering
+	bool    on;                 // This block: sends accumulate
+	bool    sent;               // A voice touched the send this block
+};
+static au_env_t au_env = {};
+
+// Cross-thread environment params, atomic f32, main writes.
+static float au_env_wet     = 0;
+static float au_env_decay   = 0.45f;
+static float au_env_damp    = 0.35f;
+static float au_env_size    = 5;
+static float au_env_scatter = 0.5f;
+static float au_env_reflect = 0.5f;
+
+audio_env_t audio_env_preset(audio_env_ preset) {
+	switch (preset) {          //  wet  decay damp  size scatter reflect
+	case audio_env_room:   return { 0.17f, 0.4f,  0.55f,  7, 0.6f, 0.55f };
+	case audio_env_hall:   return { 0.22f, 1.4f,  0.45f, 16, 0.7f, 0.55f };
+	case audio_env_cave:   return { 0.3f,  2.6f,  0.2f,  22, 0.8f, 0.7f  };
+	case audio_env_forest: return { 0.11f, 0.5f,  0.9f,  12, 0.9f, 0.12f };
+	case audio_env_field:  return { 0.05f, 0.25f, 0.9f,   8, 0.7f, 0.06f };
+	default:               return { 0,     0.4f,  0.55f,  7, 0.6f, 0.55f };
+	}
+}
+
+void audio_set_env(audio_env_t env) {
+	atomic_store_f32(&au_env_wet,     fmaxf(0,     fminf(1,  env.wet)));
+	atomic_store_f32(&au_env_decay,   fmaxf(0.05f, fminf(10, env.decay)));
+	atomic_store_f32(&au_env_damp,    fmaxf(0,     fminf(1,  env.damp)));
+	atomic_store_f32(&au_env_size,    fmaxf(2,     fminf(40, env.size)));
+	atomic_store_f32(&au_env_scatter, fmaxf(0,     fminf(1,  env.scatter)));
+	atomic_store_f32(&au_env_reflect, fmaxf(0,     fminf(1,  env.reflect)));
+}
+
+audio_env_t audio_get_env() {
+	audio_env_t result;
+	result.wet     = atomic_load_f32(&au_env_wet);
+	result.decay   = atomic_load_f32(&au_env_decay);
+	result.damp    = atomic_load_f32(&au_env_damp);
+	result.size    = atomic_load_f32(&au_env_size);
+	result.scatter = atomic_load_f32(&au_env_scatter);
+	result.reflect = atomic_load_f32(&au_env_reflect);
+	return result;
+}
+
+// Audio thread, before the voice sweep: glide the wet level and ready the
+// send buffer. `on` gates every per-voice send, so off costs nothing.
+static void audio_env_begin(ma_uint32 frame_count) {
+	float wet = atomic_load_f32(&au_env_wet);
+	float k   = 1.0f - expf(-(float)frame_count / (0.05f * AU_SAMPLE_RATE));
+	au_env.wet_cur += k * (wet - au_env.wet_cur);
+	if (wet <= 0 && au_env.wet_cur < 0.001f) au_env.wet_cur = 0;
+
+	au_env.on = au_env.wet_cur > 0;
+	if (!au_env.on) { au_env.er_on = false; return; }
+
+	// A size change re-lays the lines and restarts the tail - which reads
+	// as the space changing anyway. Other params glide.
+	float size = atomic_load_f32(&au_env_size);
+	au_env.send_ref = fmaxf(2.0f, size * 0.5f);
+
+	// Shoebox: walls from size, floor at head height, slow-growing ceiling.
+	// Absorption rides damp - a perfect bounce combs against the direct.
+	au_env.er_on      = true;
+	au_env.er_hx      = fmaxf(2.0f, size * 0.5f);
+	au_env.er_floor   = -1.6f;
+	au_env.er_ceil    = fminf(8.0f, fmaxf(1.2f, size * 0.25f));
+	au_env.er_reflect = atomic_load_f32(&au_env_reflect);
+	float er_RC  = 1.0f / (6.2831853f * math_lerp(6000, 2000, atomic_load_f32(&au_env_damp)));
+	au_env.er_k  = (1.0f / AU_SAMPLE_RATE) / (er_RC + 1.0f / AU_SAMPLE_RATE);
+	if (size != au_env.size_cur) {
+		au_env.size_cur = size;
+		float scale = size * 0.1f;
+		for (int32_t l = 0; l < AU_ENV_LINES; l++) {
+			au_env.len[l] = (int32_t)fminf(AU_ENV_MAX_LINE, fmaxf(96, au_env_base_len[l] * scale));
+			au_env.at [l] = 0;
+			au_env.lp [l] = 0;
+		}
+		memset(au_env.lines, 0, sizeof(float) * AU_ENV_LINES * AU_ENV_MAX_LINE);
+	}
+
+	// Per-line feedback for -60dB after `decay` seconds of round trips.
+	float decay = atomic_load_f32(&au_env_decay);
+	for (int32_t l = 0; l < AU_ENV_LINES; l++)
+		au_env.fb[l] = powf(10.0f, -3.0f * (float)au_env.len[l] / (decay * AU_SAMPLE_RATE));
+
+	memset(au_env.send, 0, sizeof(float) * frame_count);
+	au_env.sent = false;
+}
+
+// Audio thread, after the voice sweep: run the FDN over the block's send and
+// add the tail to the bus. A send silent longer than the tail turns this off.
+static void audio_env_mix(ma_uint32 frame_count) {
+	if (!au_env.on) return;
+	if (au_env.sent)
+		au_env.tail_left = (int32_t)(atomic_load_f32(&au_env_decay) * 1.5f * AU_SAMPLE_RATE);
+	if (au_env.tail_left <= 0) return;
+	au_env.tail_left -= mini((int32_t)frame_count, au_env.tail_left);
+
+	float damp    = atomic_load_f32(&au_env_damp);
+	float scatter = atomic_load_f32(&au_env_scatter);
+	float wet     = au_env.wet_cur * 0.22f; // Tail level norm, tuned by ear
+
+	// Input tone: a real space's tail is never as bright as its source,
+	// and full-bandwidth injection reads as harsh. Cutoff rides damp.
+	float tone_RC = 1.0f / (6.2831853f * math_lerp(8000, 2500, damp));
+	float tone_k  = (1.0f / AU_SAMPLE_RATE) / (tone_RC + 1.0f / AU_SAMPLE_RATE);
+	// Diffusion gain from scatter, floored so line injections never
+	// arrive as discrete slapback copies of a transient.
+	float g_ap    = 0.35f + 0.4f * scatter;
+
+	// Read-tap modulation offsets, stepped linearly across the block.
+	float mod_at[AU_ENV_LINES], mod_step[AU_ENV_LINES];
+	for (int32_t l = 0; l < AU_ENV_LINES; l++) {
+		float ph0 = au_env.mod_phase[l];
+		float ph1 = ph0 + au_env_mod_rate[l] * (float)frame_count / AU_SAMPLE_RATE;
+		au_env.mod_phase[l] = ph1 - (int32_t)ph1;
+		float o0 = 1.5f + AU_ENV_MOD * (0.5f + 0.5f * sinf(ph0 * 6.2831853f));
+		float o1 = 1.5f + AU_ENV_MOD * (0.5f + 0.5f * sinf(ph1 * 6.2831853f));
+		mod_at  [l] = o0;
+		mod_step[l] = (o1 - o0) / (float)frame_count;
+	}
+
+	for (ma_uint32 i = 0; i < frame_count; i++) {
+		// Tone, then four series Schroeder allpasses smear the send so
+		// the lines fill with a wash instead of echo copies.
+		float in = au_env.send[i];
+		au_env.in_lp += tone_k * (in - au_env.in_lp);
+		in = au_env.in_lp;
+		for (int32_t a = 0; a < AU_ENV_APS; a++) {
+			float d = au_env.ap[a][au_env.ap_at[a]];
+			float v = in + g_ap * d;
+			in      = d  - g_ap * v;
+			au_env.ap[a][au_env.ap_at[a]] = v;
+			au_env.ap_at[a] = au_env.ap_at[a] + 1 >= au_env_ap_len[a] ? 0 : au_env.ap_at[a] + 1;
+		}
+
+		// Modulated fractional line reads, then Householder feedback - an
+		// orthogonal reflection, so decay comes only from fb.
+		float y[AU_ENV_LINES];
+		float sum = 0;
+		for (int32_t l = 0; l < AU_ENV_LINES; l++) {
+			float*  buf = au_env.lines + l * AU_ENV_MAX_LINE;
+			float   rp  = (float)au_env.at[l] + mod_at[l];
+			mod_at[l] += mod_step[l];
+			int32_t r0  = (int32_t)rp;
+			float   fr  = rp - (float)r0;
+			if (r0 >= au_env.len[l]) r0 -= au_env.len[l];
+			int32_t r1  = r0 + 1 >= au_env.len[l] ? 0 : r0 + 1;
+			y[l] = math_lerp(buf[r0], buf[r1], fr);
+			sum += y[l];
+		}
+		float h   = sum * (2.0f / AU_ENV_LINES);
+		float out = 0;
+		for (int32_t l = 0; l < AU_ENV_LINES; l++) {
+			float fbv = y[l] - h;
+			au_env.lp[l] = fbv + damp * (au_env.lp[l] - fbv);
+			au_env.lines[l * AU_ENV_MAX_LINE + au_env.at[l]] =
+				in * au_env_in_sign[l] * 0.5f + au_env.fb[l] * au_env.lp[l];
+			au_env.at[l] = au_env.at[l] + 1 >= au_env.len[l] ? 0 : au_env.at[l] + 1;
+			out += au_env_out_sign[l] * y[l];
+		}
+		au_foa_ring[((au_foa_head + i) & au_foa_mask) * 4] += out * wet;
+	}
+	au_foa_touched = true;
+}
+
+///////////////////////////////////////////
+// Early reflection taps, computed per voice per block and written from
+// the voice's filtered mono signal as a post-pass.
+
+// A spatial voice's reflection tap set for one block.
+struct au_er_taps_t {
+	int32_t  count;
+	int32_t  slot[AU_ER_TAPS]; // Shoebox surface index, addresses state
+	float    tgt [AU_ER_TAPS]; // Target delay in frames, fractional
+	XMVECTOR enc [AU_ER_TAPS];
+};
+
+// First-order images in the listener-centered shoebox, each tap a delayed,
+// attenuated copy encoded from the image's direction. Sources past the walls
+// clamp into the box, but taps still fade with *true* distance (far_k) -
+// frozen reflections under a fading direct read as the source approaching.
+static void au_er_setup(au_er_taps_t* out, vec3 dir, float dist, float decibels, float trim_gain, float spread, int32_t grant) {
+	out->count = 0;
+	if (grant == 0 || !au_env.er_on || spread >= 1) return;
+
+	float hx = au_env.er_hx, fy = au_env.er_floor, cy = au_env.er_ceil;
+	vec3  pc = vec3{
+		fmaxf(-hx*0.9f, fminf(hx*0.9f, dir.x)),
+		fmaxf( fy*0.9f, fminf(cy*0.9f, dir.y)),
+		fmaxf(-hx*0.9f, fminf(hx*0.9f, dir.z)) };
+	float dist_c = fmaxf(AU_MIN_DISTANCE, vec3_magnitude(pc));
+	float far_k  = fminf(1.0f, dist_c / dist);
+	vec3  imgs[AU_ER_TAPS] = {
+		{pc.x, 2*fy - pc.y, pc.z}, {pc.x, 2*cy - pc.y, pc.z},
+		{ 2*hx - pc.x, pc.y, pc.z}, {-2*hx - pc.x, pc.y, pc.z},
+		{pc.x, pc.y,  2*hx - pc.z}, {pc.x, pc.y, -2*hx - pc.z} };
+
+	float delay_max = 0;
+	for (int32_t t = 0; t < AU_ER_TAPS; t++) {
+		float lvl = fmaxf(t == 0 ? 0.35f : 0, au_env.er_reflect) * AU_ER_LEVEL * (1.0f - spread) * far_k;
+		if (lvl < 0.01f) continue;
+		float d_img = fmaxf(AU_MIN_DISTANCE, vec3_magnitude(imgs[t]));
+		float tgt   = (d_img - dist_c) * (AU_SAMPLE_RATE / 343.0f);
+		tgt = fmaxf(1.0f, fminf((float)(AU_ER_DELAY_MAX - 3), tgt));
+		if (tgt > delay_max) delay_max = tgt;
+		vec3  u_img = imgs[t] / d_img;
+		float g     = decibels_to_signal(decibels - 20.0f*log10f(d_img)) * trim_gain * lvl;
+		out->enc [out->count] = XMVectorSet(g, g * -u_img.x, g * u_img.y, g * -u_img.z);
+		out->tgt [out->count] = tgt;
+		out->slot[out->count] = t;
+		out->count += 1;
+	}
+	if (out->count > 0) {
+		au_foa_touched = true;
+		au_foa_future  = maxi(au_foa_future, (int32_t)delay_max + 2);
+	}
+}
+
+// Writes a voice's taps from its filtered mono block. Delays slew across the
+// block through two-point interpolated writes - integer jumps on sustained
+// content read as a rattle. The absorption softens each copy's attack, and
+// runs once for the whole tap set: same input, same coefficient, same result.
+static void au_er_write(au_voice_t* voice, const au_er_taps_t* taps, const float* mono, ma_uint32 frame_offset, ma_uint32 count) {
+	if (taps->count == 0 || count == 0) return;
+
+	float k = au_env.er_k, lp = voice->er_lp, lp2 = voice->er_lp2;
+	for (ma_uint32 i = 0; i < count; i++) {
+		lp  += k * (mono[i] - lp);
+		lp2 += k * (lp - lp2);
+		au_env.er_temp[i] = lp2;
+	}
+	voice->er_lp  = lp;
+	voice->er_lp2 = lp2;
+
+	uint32_t base = au_foa_head + frame_offset;
+	for (int32_t t = 0; t < taps->count; t++) {
+		int32_t  slot = taps->slot[t];
+		float    cur  = voice->er_delay[slot];
+		if (cur < 0) cur = taps->tgt[t];
+		float    step = (taps->tgt[t] - cur) / (float)count;
+		XMVECTOR enc  = taps->enc[t];
+		for (ma_uint32 i = 0; i < count; i++) {
+			float    v    = au_env.er_temp[i];
+			float    fi   = (float)i + cur;
+			uint32_t at0  = base + (uint32_t)fi;
+			float    frac = fi - (float)(uint32_t)fi;
+			float*   tap0 = au_foa_ring + (( at0      & au_foa_mask) * 4);
+			float*   tap1 = au_foa_ring + (((at0 + 1) & au_foa_mask) * 4);
+			XMStoreFloat4((XMFLOAT4*)tap0, XMVectorMultiplyAdd(XMVectorReplicate(v * (1.0f - frac)), enc, XMLoadFloat4((XMFLOAT4*)tap0)));
+			XMStoreFloat4((XMFLOAT4*)tap1, XMVectorMultiplyAdd(XMVectorReplicate(v * frac),          enc, XMLoadFloat4((XMFLOAT4*)tap1)));
+			cur += step;
+		}
+		voice->er_delay[slot] = taps->tgt[t];
 	}
 }
 
@@ -512,6 +806,21 @@ void audio_mix_init(int32_t period_frames) {
 	au_foa = sk_malloc_t(float, au_mix_temp_size * 4);
 	memset(au_foa, 0, sizeof(float) * au_mix_temp_size * 4);
 
+	uint32_t ring = 1;
+	while (ring < au_mix_temp_size + AU_ER_DELAY_MAX + 64) ring <<= 1;
+	au_foa_ring = sk_malloc_t(float, (uint64_t)ring * 4);
+	memset(au_foa_ring, 0, sizeof(float) * ring * 4);
+	au_foa_mask   = ring - 1;
+	au_foa_head   = 0;
+	au_foa_future = 0;
+
+	au_env.lines = sk_malloc_t(float, AU_ENV_LINES * AU_ENV_MAX_LINE);
+	memset(au_env.lines, 0, sizeof(float) * AU_ENV_LINES * AU_ENV_MAX_LINE);
+	au_env.send  = sk_malloc_t(float, au_mix_temp_size);
+	memset(au_env.send, 0, sizeof(float) * au_mix_temp_size);
+	au_env.er_temp = sk_malloc_t(float, au_mix_temp_size);
+	memset(au_env.er_temp, 0, sizeof(float) * au_mix_temp_size);
+
 	au_speakers_init();
 	audio_listener_publish(pose_identity);
 }
@@ -533,14 +842,12 @@ static void voice_free_resources(sound_t sound, ma_decoder* decoder, ma_pcm_rb* 
 
 ///////////////////////////////////////////
 
-// Estimated audibility of a voice at the listener's ear. Sounds that
-// don't scale with distance - ambisonic fields and head-locked audio -
-// are always exactly as audible as declared, so they rank as infinite:
-// nothing displaces them, and they're never dormant.
+// Estimated audibility of a voice at the listener's ear. Distance-less
+// sounds (ambisonic fields, head-locked audio) rank infinite: nothing
+// displaces them, and they're never dormant.
 static float voice_audibility(const au_voice_t* voice, vec3 listener_pos) {
-	// An atomic read because activation writes it on the audio thread.
-	// The pointer stays valid regardless: frees happen on this thread's
-	// own drain, and can't precede this scan.
+	// Atomic because activation writes it on the audio thread. The pointer
+	// stays valid regardless: frees happen on this thread's own drain.
 	_sound_t* snd = (_sound_t*)atomic_load_ptr(&voice->sound);
 	if (snd == nullptr) snd = (_sound_t*)atomic_load_ptr(&voice->pending_sound);
 	if (snd == nullptr) return 0;
@@ -583,11 +890,9 @@ int16_t audio_voice_reserve(sound_t sound, vec3 at, float volume) {
 		}
 	}
 
-	// Genuinely full. Stealing is about audibility: find the quietest
-	// playing voice, and take its slot only if the incoming sound would
-	// be *more* audible - otherwise the incoming sound is the least
-	// audible thing here, and refusing it is the least-bad choice.
-	// Distance-less voices rank infinite and are never victims.
+	// Genuinely full: steal the quietest playing voice, but only if the new
+	// sound is *more* audible - otherwise refusing it is the least-bad
+	// choice. Distance-less voices rank infinite and are never victims.
 	pose_t  head      = audio_listener_get();
 	int16_t best_slot = -1;
 	float   best_gain = 1e30f;
@@ -610,10 +915,9 @@ int16_t audio_voice_reserve(sound_t sound, vec3 at, float volume) {
 
 ///////////////////////////////////////////
 
-// Main thread, once per frame: rank the active voices by audibility and
-// grant the top AU_MIX_VOICES the mix budget. Everything else goes
-// dormant in place - still alive, still owning its slot and handle, its
-// cursor frozen - and resumes seamlessly when it ranks back in.
+// Main thread, once per frame: rank active voices by audibility, grant the
+// top AU_MIX_VOICES the mix budget. The rest go dormant in place - cursor
+// frozen, slot and handle intact - and resume when they rank back in.
 void audio_voice_rank() {
 	pose_t  head = audio_listener_get();
 	float   gains[AU_VOICE_COUNT];
@@ -627,6 +931,30 @@ void audio_voice_rank() {
 		}
 		gains[i] = voice_audibility(&au_voices[i], head.position);
 		active  += 1;
+	}
+
+	// Reflection budget: taps for the AU_ER_VOICES loudest spatial voices.
+	// Distance-less voices never render taps, so they can't waste grants.
+	float   er_gain[AU_VOICE_COUNT];
+	int32_t er_n = 0;
+	for (int16_t i = 0; i < AU_VOICE_COUNT; i++)
+		if (gains[i] >= 0 && gains[i] < 1e29f) er_gain[er_n++] = gains[i];
+	float er_thresh = 0;
+	if (er_n > AU_ER_VOICES) {
+		for (int32_t i = 1; i < er_n; i++) {
+			float   v = er_gain[i];
+			int32_t j = i - 1;
+			while (j >= 0 && er_gain[j] < v) { er_gain[j+1] = er_gain[j]; j -= 1; }
+			er_gain[j+1] = v;
+		}
+		er_thresh = er_gain[AU_ER_VOICES - 1];
+	}
+	int32_t er_granted = 0;
+	for (int16_t i = 0; i < AU_VOICE_COUNT; i++) {
+		bool er = gains[i] >= 0 && gains[i] < 1e29f
+		       && gains[i] >= er_thresh && er_granted < AU_ER_VOICES;
+		if (er) er_granted += 1;
+		atomic_store_i32(&au_voices[i].er_grant, er ? 1 : 0);
 	}
 
 	// Under budget: everyone plays, skip the ranking work.
@@ -748,14 +1076,19 @@ static void voice_activate(au_voice_t* voice) {
 	voice->resample_frac    = 0;
 	memset(voice->resample_last, 0, sizeof(voice->resample_last));
 	memset(voice->lpf_state,     0, sizeof(voice->lpf_state));
+	voice->er_lp  = 0;
+	voice->er_lp2 = 0;
+	for (int32_t t = 0; t < AU_ER_TAPS; t++) voice->er_delay[t] = -1;
 	memset(voice->dir_ring,   0, sizeof(voice->dir_ring));
 	memset(voice->dir_filter, 0, sizeof(voice->dir_filter));
 	voice->dir_ring_at      = 0;
+	voice->dir_shoulder     = -1;
 	voice->dir_delay[0]     = -1;
 	voice->dir_delay[1]     = -1;
 	voice->dir_shadow[0]    = 0;
 	voice->dir_shadow[1]    = 0;
-	atomic_store_i32(&voice->audible, 1);
+	atomic_store_i32(&voice->audible,  1);
+	atomic_store_i32(&voice->er_grant, 1);
 	// Release so main's prefetch sees the stream fields once it's playing.
 	atomic_store_i32_rel(&voice->state, au_voice_playing);
 }
@@ -778,11 +1111,9 @@ static void audio_drain_commands() {
 
 ///////////////////////////////////////////
 
-// Audio thread. Reads source-rate *frames* for a voice into dest
-// (interleaved for multi-channel sounds), honoring looping. Underruns on
-// a live source zero-fill so the voice stays alive, a short return means
-// the source is done for good. The cursor is stored atomically for the
-// main thread's getter.
+// Audio thread. Reads source-rate *frames* into dest (interleaved), honoring
+// looping. Live-source underruns zero-fill so the voice stays alive, a short
+// return means done for good. The cursor stores atomically for main's getter.
 static ma_uint64 voice_read_source(au_voice_t* voice, float* dest, ma_uint64 frames, bool loop) {
 	_sound_t* sound = voice->sound;
 	int32_t   ch    = sound_channel_count(sound->channels);
@@ -804,9 +1135,8 @@ static ma_uint64 voice_read_source(au_voice_t* voice, float* dest, ma_uint64 fra
 		return total;
 	}
 	case sound_data_stream_file: {
-		// Looping streamed files is handled by the prefetch re-seeking the
-		// decoder, from here it's just a ring that never runs eof. The
-		// ring is channel-aware, its counts are frames.
+		// Prefetch handles looping by re-seeking the decoder, from here it's
+		// a ring that never runs eof. Ring counts are channel-aware frames.
 		ma_uint64 read = 0;
 		while (read < frames) {
 			ma_uint32 request = (ma_uint32)(frames - read);
@@ -838,17 +1168,15 @@ static ma_uint64 voice_read_source(au_voice_t* voice, float* dest, ma_uint64 fra
 
 ///////////////////////////////////////////
 
-// 4-point Catmull-Rom, interpolating between p1 and p2. Flat to near
-// Nyquist where linear interpolation shaves the top octave and folds
-// images down as inharmonic aliasing.
+// 4-point Catmull-Rom between p1 and p2 - flat to near Nyquist, where linear
+// interpolation shaves the top octave and folds images down as aliasing.
 static inline float au_catmull(float p0, float p1, float p2, float p3, float t) {
 	return p1 + 0.5f*t*(p2 - p0 + t*(2*p0 - 5*p1 + 4*p2 - p3 + t*(3*(p1 - p2) + p3 - p0)));
 }
 
-// Audio thread. voice_read_source plus Catmull-Rom resampling, covering
-// both pitch and source sample rate. resample_last carries the final three
-// consumed source frames across blocks so the 4-point window stays
-// continuous at block edges. `rate` is source frames per output frame.
+// Audio thread. voice_read_source plus Catmull-Rom resampling for both pitch
+// and source rate. resample_last carries three frames across blocks so the
+// 4-point window stays continuous. `rate` is source frames per output frame.
 static ma_uint64 voice_read(au_voice_t* voice, float* dest, ma_uint64 frames, float rate, bool loop) {
 	int32_t ch = sound_channel_count(voice->sound->channels);
 	if (rate == 1.0f) {
@@ -881,10 +1209,9 @@ static ma_uint64 voice_read(au_voice_t* voice, float* dest, ma_uint64 frames, fl
 	ma_uint64 out  = 0;
 	float     frac = voice->resample_frac;
 	if (ch == 1) {
-		// Four outputs per pass: each lane loads its own 4-point window,
-		// one transpose turns the windows into p0..p3 across lanes, and
-		// the polynomial evaluates 4-wide. The scalar Horner chain is
-		// latency-bound, so this wins ~2x despite the shuffles.
+		// Four outputs per pass: each lane loads its own 4-point window, one
+		// transpose makes p0..p3 across lanes, the polynomial runs 4-wide.
+		// The scalar Horner chain is latency-bound, so this wins ~2x.
 		XMVECTOR rate4 = XMVectorSet(0, rate, rate * 2, rate * 3);
 		for (; out + 4 <= frames; out += 4) {
 			float     base = frac + (float)out * rate;
@@ -941,11 +1268,9 @@ static ma_uint64 voice_read(au_voice_t* voice, float* dest, ma_uint64 frames, fl
 
 ///////////////////////////////////////////
 
-// Audio thread. Per-voice mono processing: read at pitch, gain from the
-// decibel model, air absorption low-pass, then either a direct add for
-// head-locked voices or an encode into the FOA bus at frame_offset. All
-// localization happens later at the decode, per-voice spatial cost is
-// just the four encode multiply-adds.
+// Audio thread. Per-voice processing: read at pitch, gain from the decibel
+// model, air absorption, then a head-locked add, an FOA bus encode, or the
+// direct binaural render, all at frame_offset.
 static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uint32 frame_offset, ma_uint64 frame_count) {
 	int32_t flags  = atomic_load_i32(&voice->params.flags);
 	float   volume = atomic_load_f32(&voice->params.volume);
@@ -953,10 +1278,9 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	pitch = pitch <= 0 ? 1 : fminf(AU_PITCH_MAX, fmaxf(AU_PITCH_MIN, pitch));
 	bool loop = (flags & sound_flags_loop) != 0;
 
-	// The gain model: the sound declares real-world loudness at 1m, heard
-	// loudness attenuates -6dB per distance doubling, and the calibration
-	// maps that to signal. Normalization makes declared decibels truthful,
-	// and volume/bus/master are plain 0-1 trims.
+	// The sound declares real-world loudness at 1m, attenuated -6dB per
+	// distance doubling. Normalization makes declared decibels truthful, and
+	// volume/bus/master are plain 0-1 trims.
 	float decibels  = atomic_load_f32(&voice->sound->decibels);
 	float trim_gain = voice->sound->norm_gain * volume
 	                * atomic_load_f32(&au_bus_volumes[voice->bus])
@@ -983,9 +1307,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		return (ma_uint32)read;
 	}
 
-	// Ambisonic sounds are already a sound field, they add straight onto
-	// the bus - world-fixed, so the decode counter-rotates them against
-	// the head. Spread still works, fading the directional channels out.
+	// Ambisonic sounds add straight onto the bus, world-fixed - the decode
+	// counter-rotates them. Spread fades the directional channels out.
 	if (voice->sound->channels == sound_channels_ambisonic1) {
 		float     gain      = decibels_to_signal(decibels) * trim_gain;
 		float     spread    = fmaxf(0, fminf(1, atomic_load_f32(&voice->params.spread)));
@@ -996,7 +1319,7 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		for (ma_uint64 i = 0; i < read; i++) {
 			float w = au_mix_temp[i*4];
 			if (peak < fabsf(w)) peak = fabsf(w);
-			float* bus = au_foa + (frame_offset+i)*4;
+			float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
 			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(
 				XMLoadFloat4((XMFLOAT4*)(au_mix_temp + i*4)), enc,
 				XMLoadFloat4((XMFLOAT4*)bus)));
@@ -1030,10 +1353,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		atomic_load_f32(&voice->params.pos_y),
 		atomic_load_f32(&voice->params.pos_z) };
 
-	// Volume from distance is modeled on amplitude's 1/d falloff, not
-	// intensity's 1/d^2, since perceived loudness tracks pressure. The
-	// minimum distance clamp stands in for "the source is inside your
-	// head".
+	// Distance falloff is amplitude's 1/d, not intensity's 1/d^2 - loudness
+	// tracks pressure. The min clamp stands in for "inside your head".
 	vec3  dir    = position - head.position;
 	float dist2  = vec3_magnitude_sq(dir);
 	float dist   = fmaxf(AU_MIN_DISTANCE, sqrtf(dist2));
@@ -1045,20 +1366,28 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	if (dist2 > 0.0001f) u = dir / sqrtf(dist2);
 	else                 spread = 1;
 
-	// Point sources render direct binaural for per-source ITD precision,
-	// and crossfade onto the FOA bus as spread widens - diffuse width is
-	// what the bus renders well.
+	// Point sources render direct binaural for per-source ITD precision, and
+	// crossfade onto the FOA bus as spread widens - width is the bus's job.
 	float k_bus = fminf(1.0f, spread / AU_DIRECT_SPREAD);
 	if (atomic_load_i32(&au_force_bus)) k_bus = 1;
 
+	// gain*dist strips the distance term back out, keeping the send constant
+	// while the source shares the space; past ~half the size the min() lets
+	// it parallel the direct falloff so the tail doesn't swell as the source
+	// fades. Wide sources are already diffuse and send less.
+	float send_gain = au_env.on ? gain * fminf(dist, au_env.send_ref) * (1.0f - spread) : 0;
+
+	// Reflection taps write after the render loops from the block's filtered
+	// mono - both branches store it back over the read buffer as they go.
+	au_er_taps_t er_taps;
+	au_er_setup(&er_taps, dir, dist, decibels, trim_gain, spread, atomic_load_i32(&voice->er_grant));
+
 	ma_uint64 read = voice_read(voice, au_mix_temp, frame_count, rate, loop);
 
-	// Distance rolls off high frequencies, air absorption as four cascaded
-	// poles - a single pole's shallow skirt leaks enough far hiss that
-	// dense distant fields sound synthetic. Cutoff from distance:
+	// Air absorption as four cascaded poles - a single pole's shallow skirt
+	// leaks enough far hiss that dense distant fields sound synthetic. A
+	// per-voice override replaces the automatic distance model:
 	// https://www.desmos.com/calculator/h5tssewqbl
-	// A per-voice override replaces the automatic model. The old behind-
-	// the-listener muffling is gone, the back voicing filters cover it.
 	float override = atomic_load_f32(&voice->params.cutoff);
 	float cutoff   = override > 0 ? override
 		: fmaxf(1000, -4000.f * logf(fmaxf(1, dist-3.5f)) + 22200);
@@ -1067,11 +1396,9 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	float RC    = 0.43496f / (2.0f * 3.14159265359f * cutoff);
 	float dt    = 1.0f / AU_SAMPLE_RATE;
 	float alpha = dt / (RC + dt);
-	// The model plateaus at 22.2kHz inside ~4.5m where real air absorption
-	// is negligible, but the cascade there still shaves ~1.4dB at 15kHz.
-	// Fade the filter out as the knee nears the plateau, continuous in
-	// distance, so close sources keep their sparkle. The cascade keeps
-	// running dry so its state stays primed for the fade back in.
+	// Inside ~4.5m the cutoff model plateaus but the cascade still shaves
+	// highs, so the filter fades to a true bypass - close sources keep their
+	// sparkle. It keeps running dry, primed for the fade back in.
 	float lpf_wet = fminf(1.0f, fmaxf(0.0f, (22200.0f - cutoff) * (1.0f / 2200.0f)));
 	float lp0   = voice->lpf_state[0], lp1 = voice->lpf_state[1];
 	float lp2   = voice->lpf_state[2], lp3 = voice->lpf_state[3];
@@ -1092,8 +1419,10 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
 			s += lpf_wet * (lp3 - s);
+			if (send_gain > 0) au_env.send[frame_offset+i] += s * send_gain;
+			au_mix_temp[i] = s;
 
-			float* bus = au_foa + (frame_offset+i)*4;
+			float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
 			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc, XMLoadFloat4((XMFLOAT4*)bus)));
 		}
 		voice->lpf_state[0] = lp0; voice->lpf_state[1] = lp1;
@@ -1107,10 +1436,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float cosL = -uh.x;
 		float cosR =  uh.x;
 
-		// Per-ear delays slew across the block, so a moving source sweeps
-		// its ITD continuously instead of stepping. Only the interaural
-		// *difference* is audible - the near ear is normalized to zero so
-		// onsets stay sample exact.
+		// Delays slew across the block so a moving source's ITD sweeps, not
+		// steps. The near ear normalizes to zero - onsets stay sample exact.
 		float tgt_l = au_ear_delay(cosL);
 		float tgt_r = au_ear_delay(cosR);
 		float base  = fminf(tgt_l, tgt_r);
@@ -1124,16 +1451,21 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float wet_l = AU_SHADOW_WET * fmaxf(0, -cosL);
 		float wet_r = AU_SHADOW_WET * fmaxf(0, -cosR);
 
-		// Elevation/back voicing, shared mono before the ear split - the
-		// same voicing the decode's speakers carry, continuous per source.
-		// Rebuilt each block.
-		au_biquad_t pinna, shelf;
-		au_voicing(uh, &pinna, &shelf);
+		// Elevation/back voicing, shared mono before the ear split - the same
+		// voicing the decode's speakers carry. Rebuilt each block.
+		au_biquad_t vc[AU_VOICING_STAGES];
+		au_voicing(uh, vc);
 
-		// Inside ~1m the two ears' own path lengths diverge enough to hear:
-		// gain per ear follows its true distance, adding the broadband
-		// near-field ILD a head-centered gain misses - about +-3dB per ear
-		// at the minimum distance, faded to nothing by ~2m.
+		// Shoulder bounce for sources above the horizon, slewed like the
+		// ear delays so a rising source's comb glides.
+		float sh_g    = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
+		float sh_tgt  = (2.0f * AU_SHOULDER_M / 343.0f) * AU_SAMPLE_RATE * fmaxf(0, uh.y);
+		float sh_del  = voice->dir_shoulder < 0 ? sh_tgt : voice->dir_shoulder;
+		float sh_step = (sh_tgt - sh_del) / (float)read;
+
+		// Inside ~1m the ears' own path lengths diverge audibly: per-ear gain
+		// follows true distance, the broadband near-field ILD a head-centered
+		// gain misses - about +-3dB per ear at the minimum distance.
 		float    d_l      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosL);
 		float    d_r      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosR);
 		float    g_dir_l  = gain * (1.0f - k_bus) * (dist / d_l);
@@ -1151,23 +1483,33 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
 			s += lpf_wet * (lp3 - s);
+			if (send_gain > 0) au_env.send[frame_offset+i] += s * send_gain;
+			au_mix_temp[i] = s;
 
 			if (k_bus > 0) {
-				float* bus = au_foa + (frame_offset+i)*4;
+				float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
 				XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc, XMLoadFloat4((XMFLOAT4*)bus)));
 			}
 
-			s = au_biquad_apply(&pinna, voice->dir_filter[0], s);
-			s = au_biquad_apply(&shelf, voice->dir_filter[1], s);
+			for (int32_t f = 0; f < AU_VOICING_STAGES; f++)
+				s = au_biquad_apply(&vc[f], voice->dir_filter[f], s);
 			ring[ring_at] = s;
 
-			// Fractional ear taps, then the far-side shadow one-pole.
-			float rp_l = (float)ring_at - delay_l; if (rp_l < 0) rp_l += AU_ITD_MAX;
-			float rp_r = (float)ring_at - delay_r; if (rp_r < 0) rp_r += AU_ITD_MAX;
-			int32_t l0 = (int32_t)rp_l, l1 = l0 + 1 >= AU_ITD_MAX ? 0 : l0 + 1;
-			int32_t r0 = (int32_t)rp_r, r1 = r0 + 1 >= AU_ITD_MAX ? 0 : r0 + 1;
-			float   vl = math_lerp(ring[l0], ring[l1], rp_l - (float)l0);
-			float   vr = math_lerp(ring[r0], ring[r1], rp_r - (float)r0);
+			// Fractional ear taps - positive-offset masked wrap, matching
+			// the batch path - then the far-side shadow one-pole.
+			float rp_l = (float)(ring_at + AU_ITD_MAX) - delay_l;
+			float rp_r = (float)(ring_at + AU_ITD_MAX) - delay_r;
+			int32_t l0 = (int32_t)rp_l, r0 = (int32_t)rp_r;
+			float   vl = math_lerp(ring[l0 & (AU_ITD_MAX-1)], ring[(l0+1) & (AU_ITD_MAX-1)], rp_l - (float)l0);
+			float   vr = math_lerp(ring[r0 & (AU_ITD_MAX-1)], ring[(r0+1) & (AU_ITD_MAX-1)], rp_r - (float)r0);
+			if (sh_g > 0.01f) {
+				float   rp_s = (float)(ring_at + AU_ITD_MAX) - sh_del;
+				int32_t s0   = (int32_t)rp_s;
+				float   vb   = math_lerp(ring[s0 & (AU_ITD_MAX-1)], ring[(s0+1) & (AU_ITD_MAX-1)], rp_s - (float)s0);
+				vl += sh_g * vb;
+				vr += sh_g * vb;
+				sh_del += sh_step;
+			}
 			shadow_l += 0.178f * (vl - shadow_l);
 			shadow_r += 0.178f * (vr - shadow_r);
 			vl += wet_l * (shadow_l - vl);
@@ -1178,10 +1520,11 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 
 			delay_l += step_l;
 			delay_r += step_r;
-			ring_at  = ring_at + 1 >= AU_ITD_MAX ? 0 : ring_at + 1;
+			ring_at  = (ring_at + 1) & (AU_ITD_MAX-1);
 		}
 		voice->lpf_state[0]  = lp0; voice->lpf_state[1] = lp1;
 		voice->lpf_state[2]  = lp2; voice->lpf_state[3] = lp3;
+		voice->dir_shoulder  = sh_tgt;
 		voice->dir_delay[0]  = tgt_l;
 		voice->dir_delay[1]  = tgt_r;
 		voice->dir_shadow[0] = shadow_l;
@@ -1189,6 +1532,8 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		voice->dir_ring_at   = ring_at;
 		if (k_bus > 0) au_foa_touched = true;
 	}
+	au_er_write(voice, &er_taps, au_mix_temp, frame_offset, (ma_uint32)read);
+	if (send_gain > 0 && read > 0) au_env.sent = true;
 
 	// Track the block's peak for the intensity getter. Main zeroes this
 	// each frame, a lost reset here just makes the meter sticky one frame.
@@ -1215,20 +1560,19 @@ static bool voice_is_direct(const au_voice_t* voice, vec3 listener_pos) {
 }
 
 // Audio thread. Four pure-direct voices rendered as SIMD lanes across one
-// block: the air cascade, voicing biquads, and ear shadows run 4 voices
-// wide with per-voice coefficients in the lanes, and the batch sums into
-// the output once instead of four read-modify-write passes. Only the
-// fractional ear taps stay scalar - per-voice ring indexing. Lanes hold
-// lockstep by zero-padding outside each voice's live span; filters of
-// zeros are exact silence, so onsets and finishes match the scalar path.
+// block; only the fractional ear taps stay scalar. Lanes hold lockstep by
+// zero-padding outside each voice's live span - filtered zeros are exact
+// silence, so onsets and finishes match the scalar path.
 static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* offsets, const ma_uint32* blocks, ma_uint32* out_read, float* output, ma_uint32 frame_count) {
 	quat qinv = quat_inverse(head.orientation);
 
-	float       gains_l[4], gains_r[4], lpws[4], alphas[4], wets_l[4], wets_r[4];
-	float       dlys_l[4], dlys_r[4], stps_l[4], stps_r[4], tgts_l[4], tgts_r[4];
-	au_biquad_t pinnas[4], shelfs[4];
-	float*      srcs[4];
-	int32_t     rats[4];
+	float        gains_l[4], gains_r[4], sends[4], lpws[4], alphas[4], wets_l[4], wets_r[4];
+	float        dlys_l[4], dlys_r[4], stps_l[4], stps_r[4], tgts_l[4], tgts_r[4];
+	au_biquad_t  vcs[4][AU_VOICING_STAGES];
+	float        shg[4], shd[4], shstp[4], shtgt[4];
+	au_er_taps_t ers[4];
+	float*       srcs[4];
+	int32_t      rats[4];
 
 	for (int32_t v = 0; v < 4; v++) {
 		au_voice_t* voice  = vs[v];
@@ -1269,6 +1613,8 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		float d_r  = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*uh.x);
 		gains_l[v] = gain * (dist / d_l);
 		gains_r[v] = gain * (dist / d_r);
+		sends  [v] = au_env.on ? gain * fminf(dist, au_env.send_ref) : 0; // Direct voices have spread 0
+		au_er_setup(&ers[v], dir, dist, decibels, trim_gain, 0, atomic_load_i32(&voice->er_grant));
 		float tgt_l = au_ear_delay(-uh.x);
 		float tgt_r = au_ear_delay( uh.x);
 		float base  = fminf(tgt_l, tgt_r);
@@ -1282,7 +1628,11 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		wets_l[v] = AU_SHADOW_WET * fmaxf(0,  uh.x);
 		wets_r[v] = AU_SHADOW_WET * fmaxf(0, -uh.x);
 
-		au_voicing(uh, &pinnas[v], &shelfs[v]);
+		au_voicing(uh, vcs[v]);
+		shg  [v] = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
+		shtgt[v] = (2.0f * AU_SHOULDER_M / 343.0f) * AU_SAMPLE_RATE * fmaxf(0, uh.y);
+		shd  [v] = voice->dir_shoulder < 0 ? shtgt[v] : voice->dir_shoulder;
+		shstp[v] = (shtgt[v] - shd[v]) / (float)frame_count;
 		rats[v]    = voice->dir_ring_at;
 
 		// Read into this lane's slice at its onset offset, zeros elsewhere.
@@ -1297,14 +1647,14 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMVECTOR lp1 = XMVectorSet(vs[0]->lpf_state[1], vs[1]->lpf_state[1], vs[2]->lpf_state[1], vs[3]->lpf_state[1]);
 	XMVECTOR lp2 = XMVectorSet(vs[0]->lpf_state[2], vs[1]->lpf_state[2], vs[2]->lpf_state[2], vs[3]->lpf_state[2]);
 	XMVECTOR lp3 = XMVectorSet(vs[0]->lpf_state[3], vs[1]->lpf_state[3], vs[2]->lpf_state[3], vs[3]->lpf_state[3]);
-	XMVECTOR px1 = XMVectorSet(vs[0]->dir_filter[0][0], vs[1]->dir_filter[0][0], vs[2]->dir_filter[0][0], vs[3]->dir_filter[0][0]);
-	XMVECTOR px2 = XMVectorSet(vs[0]->dir_filter[0][1], vs[1]->dir_filter[0][1], vs[2]->dir_filter[0][1], vs[3]->dir_filter[0][1]);
-	XMVECTOR py1 = XMVectorSet(vs[0]->dir_filter[0][2], vs[1]->dir_filter[0][2], vs[2]->dir_filter[0][2], vs[3]->dir_filter[0][2]);
-	XMVECTOR py2 = XMVectorSet(vs[0]->dir_filter[0][3], vs[1]->dir_filter[0][3], vs[2]->dir_filter[0][3], vs[3]->dir_filter[0][3]);
-	XMVECTOR sx1 = XMVectorSet(vs[0]->dir_filter[1][0], vs[1]->dir_filter[1][0], vs[2]->dir_filter[1][0], vs[3]->dir_filter[1][0]);
-	XMVECTOR sx2 = XMVectorSet(vs[0]->dir_filter[1][1], vs[1]->dir_filter[1][1], vs[2]->dir_filter[1][1], vs[3]->dir_filter[1][1]);
-	XMVECTOR sy1 = XMVectorSet(vs[0]->dir_filter[1][2], vs[1]->dir_filter[1][2], vs[2]->dir_filter[1][2], vs[3]->dir_filter[1][2]);
-	XMVECTOR sy2 = XMVectorSet(vs[0]->dir_filter[1][3], vs[1]->dir_filter[1][3], vs[2]->dir_filter[1][3], vs[3]->dir_filter[1][3]);
+	XMVECTOR vx1[AU_VOICING_STAGES], vx2[AU_VOICING_STAGES];
+	XMVECTOR vy1[AU_VOICING_STAGES], vy2[AU_VOICING_STAGES];
+	for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+		vx1[f] = XMVectorSet(vs[0]->dir_filter[f][0], vs[1]->dir_filter[f][0], vs[2]->dir_filter[f][0], vs[3]->dir_filter[f][0]);
+		vx2[f] = XMVectorSet(vs[0]->dir_filter[f][1], vs[1]->dir_filter[f][1], vs[2]->dir_filter[f][1], vs[3]->dir_filter[f][1]);
+		vy1[f] = XMVectorSet(vs[0]->dir_filter[f][2], vs[1]->dir_filter[f][2], vs[2]->dir_filter[f][2], vs[3]->dir_filter[f][2]);
+		vy2[f] = XMVectorSet(vs[0]->dir_filter[f][3], vs[1]->dir_filter[f][3], vs[2]->dir_filter[f][3], vs[3]->dir_filter[f][3]);
+	}
 	XMVECTOR shl = XMVectorSet(vs[0]->dir_shadow[0], vs[1]->dir_shadow[0], vs[2]->dir_shadow[0], vs[3]->dir_shadow[0]);
 	XMVECTOR shr = XMVectorSet(vs[0]->dir_shadow[1], vs[1]->dir_shadow[1], vs[2]->dir_shadow[1], vs[3]->dir_shadow[1]);
 
@@ -1312,21 +1662,22 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMVECTOR lpw4   = XMVectorSet(lpws  [0], lpws  [1], lpws  [2], lpws  [3]);
 	XMVECTOR gnl4   = XMVectorSet(gains_l[0], gains_l[1], gains_l[2], gains_l[3]);
 	XMVECTOR gnr4   = XMVectorSet(gains_r[0], gains_r[1], gains_r[2], gains_r[3]);
+	XMVECTOR sg4    = XMVectorSet(sends  [0], sends  [1], sends  [2], sends  [3]);
 	XMVECTOR wetl4  = XMVectorSet(wets_l[0], wets_l[1], wets_l[2], wets_l[3]);
 	XMVECTOR wetr4  = XMVectorSet(wets_r[0], wets_r[1], wets_r[2], wets_r[3]);
-	XMVECTOR pb0 = XMVectorSet(pinnas[0].b0, pinnas[1].b0, pinnas[2].b0, pinnas[3].b0);
-	XMVECTOR pb1 = XMVectorSet(pinnas[0].b1, pinnas[1].b1, pinnas[2].b1, pinnas[3].b1);
-	XMVECTOR pb2 = XMVectorSet(pinnas[0].b2, pinnas[1].b2, pinnas[2].b2, pinnas[3].b2);
-	XMVECTOR pa1 = XMVectorSet(pinnas[0].a1, pinnas[1].a1, pinnas[2].a1, pinnas[3].a1);
-	XMVECTOR pa2 = XMVectorSet(pinnas[0].a2, pinnas[1].a2, pinnas[2].a2, pinnas[3].a2);
-	XMVECTOR sb0 = XMVectorSet(shelfs[0].b0, shelfs[1].b0, shelfs[2].b0, shelfs[3].b0);
-	XMVECTOR sb1 = XMVectorSet(shelfs[0].b1, shelfs[1].b1, shelfs[2].b1, shelfs[3].b1);
-	XMVECTOR sb2 = XMVectorSet(shelfs[0].b2, shelfs[1].b2, shelfs[2].b2, shelfs[3].b2);
-	XMVECTOR sa1 = XMVectorSet(shelfs[0].a1, shelfs[1].a1, shelfs[2].a1, shelfs[3].a1);
-	XMVECTOR sa2 = XMVectorSet(shelfs[0].a2, shelfs[1].a2, shelfs[2].a2, shelfs[3].a2);
+	XMVECTOR vb0[AU_VOICING_STAGES], vb1[AU_VOICING_STAGES], vb2[AU_VOICING_STAGES];
+	XMVECTOR va1[AU_VOICING_STAGES], va2[AU_VOICING_STAGES];
+	for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+		vb0[f] = XMVectorSet(vcs[0][f].b0, vcs[1][f].b0, vcs[2][f].b0, vcs[3][f].b0);
+		vb1[f] = XMVectorSet(vcs[0][f].b1, vcs[1][f].b1, vcs[2][f].b1, vcs[3][f].b1);
+		vb2[f] = XMVectorSet(vcs[0][f].b2, vcs[1][f].b2, vcs[2][f].b2, vcs[3][f].b2);
+		va1[f] = XMVectorSet(vcs[0][f].a1, vcs[1][f].a1, vcs[2][f].a1, vcs[3][f].a1);
+		va2[f] = XMVectorSet(vcs[0][f].a2, vcs[1][f].a2, vcs[2][f].a2, vcs[3][f].a2);
+	}
 	XMVECTOR shk   = XMVectorReplicate(0.178f);
 	XMVECTOR peak4 = XMVectorZero();
 	XMVECTOR ones  = XMVectorSplatOne();
+	bool     env_on = au_env.on;
 
 	for (ma_uint32 i = 0; i < frame_count; i++) {
 		XMVECTOR s = XMVectorSet(srcs[0][i], srcs[1][i], srcs[2][i], srcs[3][i]);
@@ -1338,21 +1689,25 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		lp2 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp1, lp2), lp2);
 		lp3 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp2, lp3), lp3);
 		s   = XMVectorMultiplyAdd(lpw4, XMVectorSubtract(lp3, s), s);
+		if (env_on) {
+			au_env.send[i] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(s, sg4), ones));
+			// The reflection post-pass reads the filtered mono back out of
+			// the lane slices, scatter it as we go.
+			XMFLOAT4A sfe;
+			XMStoreFloat4A(&sfe, s);
+			srcs[0][i] = sfe.x; srcs[1][i] = sfe.y;
+			srcs[2][i] = sfe.z; srcs[3][i] = sfe.w;
+		}
 
-		// Pinna dip, then the dull shelf.
-		XMVECTOR y = XMVectorMultiply(pb0, s);
-		y = XMVectorMultiplyAdd             (pb1, px1, y);
-		y = XMVectorMultiplyAdd             (pb2, px2, y);
-		y = XMVectorNegativeMultiplySubtract(pa1, py1, y);
-		y = XMVectorNegativeMultiplySubtract(pa2, py2, y);
-		px2 = px1; px1 = s; py2 = py1; py1 = y; s = y;
-
-		y = XMVectorMultiply(sb0, s);
-		y = XMVectorMultiplyAdd             (sb1, sx1, y);
-		y = XMVectorMultiplyAdd             (sb2, sx2, y);
-		y = XMVectorNegativeMultiplySubtract(sa1, sy1, y);
-		y = XMVectorNegativeMultiplySubtract(sa2, sy2, y);
-		sx2 = sx1; sx1 = s; sy2 = sy1; sy1 = y; s = y;
+		// The voicing chain: N1/N2 notches, P1 peak, then the dull shelf.
+		for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+			XMVECTOR y = XMVectorMultiply(vb0[f], s);
+			y = XMVectorMultiplyAdd             (vb1[f], vx1[f], y);
+			y = XMVectorMultiplyAdd             (vb2[f], vx2[f], y);
+			y = XMVectorNegativeMultiplySubtract(va1[f], vy1[f], y);
+			y = XMVectorNegativeMultiplySubtract(va2[f], vy2[f], y);
+			vx2[f] = vx1[f]; vx1[f] = s; vy2[f] = vy1[f]; vy1[f] = y; s = y;
+		}
 
 		// Per-voice fractional ear taps, the one scalar stage.
 		XMFLOAT4A sf, vlf, vrf;
@@ -1364,15 +1719,24 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 			float* ring = vs[v]->dir_ring;
 			int32_t rat = rats[v];
 			ring[rat] = sfp[v];
-			float rp_l = (float)rat - dlys_l[v]; if (rp_l < 0) rp_l += AU_ITD_MAX;
-			float rp_r = (float)rat - dlys_r[v]; if (rp_r < 0) rp_r += AU_ITD_MAX;
-			int32_t l0 = (int32_t)rp_l, l1 = l0 + 1 >= AU_ITD_MAX ? 0 : l0 + 1;
-			int32_t r0 = (int32_t)rp_r, r1 = r0 + 1 >= AU_ITD_MAX ? 0 : r0 + 1;
-			vlp[v] = math_lerp(ring[l0], ring[l1], rp_l - (float)l0);
-			vrp[v] = math_lerp(ring[r0], ring[r1], rp_r - (float)r0);
+			// Offset by a full ring so the reads stay positive, wrap by
+			// mask - branches here were the mixer's hottest instructions.
+			float rp_l = (float)(rat + AU_ITD_MAX) - dlys_l[v];
+			float rp_r = (float)(rat + AU_ITD_MAX) - dlys_r[v];
+			int32_t l0 = (int32_t)rp_l, r0 = (int32_t)rp_r;
+			vlp[v] = math_lerp(ring[l0 & (AU_ITD_MAX-1)], ring[(l0+1) & (AU_ITD_MAX-1)], rp_l - (float)l0);
+			vrp[v] = math_lerp(ring[r0 & (AU_ITD_MAX-1)], ring[(r0+1) & (AU_ITD_MAX-1)], rp_r - (float)r0);
+			if (shg[v] > 0.01f) {
+				float   rp_s = (float)(rat + AU_ITD_MAX) - shd[v];
+				int32_t s0   = (int32_t)rp_s;
+				float   vb   = math_lerp(ring[s0 & (AU_ITD_MAX-1)], ring[(s0+1) & (AU_ITD_MAX-1)], rp_s - (float)s0);
+				vlp[v] += shg[v] * vb;
+				vrp[v] += shg[v] * vb;
+				shd[v] += shstp[v];
+			}
 			dlys_l[v] += stps_l[v];
 			dlys_r[v] += stps_r[v];
-			rats[v] = rat + 1 >= AU_ITD_MAX ? 0 : rat + 1;
+			rats[v] = (rat + 1) & (AU_ITD_MAX-1);
 		}
 
 		// Far-side shadow one-pole and gain, then one sum into the output.
@@ -1385,6 +1749,13 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		output[i*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gnl4), ones));
 		output[i*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gnr4), ones));
 	}
+	if (env_on) {
+		// Zero-padded lane regions write silence through the taps, which
+		// keeps the filters exact and costs only the pad width.
+		for (int32_t v = 0; v < 4; v++)
+			au_er_write(vs[v], &ers[v], srcs[v], 0, frame_count);
+		au_env.sent = true;
+	}
 
 	// Scatter the lane state back to the voices.
 	XMFLOAT4A st;
@@ -1393,21 +1764,20 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMStoreFloat4A(&st, lp1); for (int32_t v = 0; v < 4; v++) vs[v]->lpf_state[1]     = stp[v];
 	XMStoreFloat4A(&st, lp2); for (int32_t v = 0; v < 4; v++) vs[v]->lpf_state[2]     = stp[v];
 	XMStoreFloat4A(&st, lp3); for (int32_t v = 0; v < 4; v++) vs[v]->lpf_state[3]     = stp[v];
-	XMStoreFloat4A(&st, px1); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[0][0] = stp[v];
-	XMStoreFloat4A(&st, px2); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[0][1] = stp[v];
-	XMStoreFloat4A(&st, py1); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[0][2] = stp[v];
-	XMStoreFloat4A(&st, py2); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[0][3] = stp[v];
-	XMStoreFloat4A(&st, sx1); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[1][0] = stp[v];
-	XMStoreFloat4A(&st, sx2); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[1][1] = stp[v];
-	XMStoreFloat4A(&st, sy1); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[1][2] = stp[v];
-	XMStoreFloat4A(&st, sy2); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[1][3] = stp[v];
+	for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+		XMStoreFloat4A(&st, vx1[f]); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[f][0] = stp[v];
+		XMStoreFloat4A(&st, vx2[f]); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[f][1] = stp[v];
+		XMStoreFloat4A(&st, vy1[f]); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[f][2] = stp[v];
+		XMStoreFloat4A(&st, vy2[f]); for (int32_t v = 0; v < 4; v++) vs[v]->dir_filter[f][3] = stp[v];
+	}
 	XMStoreFloat4A(&st, shl); for (int32_t v = 0; v < 4; v++) vs[v]->dir_shadow[0]    = stp[v];
 	XMStoreFloat4A(&st, shr); for (int32_t v = 0; v < 4; v++) vs[v]->dir_shadow[1]    = stp[v];
 	XMStoreFloat4A(&st, peak4);
 	for (int32_t v = 0; v < 4; v++) {
-		vs[v]->dir_delay[0] = tgts_l[v];
-		vs[v]->dir_delay[1] = tgts_r[v];
-		vs[v]->dir_ring_at  = rats[v];
+		vs[v]->dir_delay[0]  = tgts_l[v];
+		vs[v]->dir_delay[1]  = tgts_r[v];
+		vs[v]->dir_shoulder  = shtgt[v];
+		vs[v]->dir_ring_at   = rats[v];
 		if (stp[v] > atomic_load_f32(&vs[v]->intensity))
 			atomic_store_f32(&vs[v]->intensity, stp[v]);
 	}
@@ -1428,8 +1798,8 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		frame_count = (ma_uint32)(au_mix_temp_size - AU_SAMPLE_BUFFER_SIZE*2);
 	}
 
-	memset(au_foa, 0, sizeof(float) * frame_count * 4);
 	au_foa_touched = false;
+	audio_env_begin(frame_count);
 
 	// Pure point sources gather here during the sweep and render 4-wide
 	// after it; everything else mixes inline.
@@ -1509,18 +1879,28 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 			voice_finish(direct[b], direct_slot[b]);
 	}
 
-	// An untouched bus still decodes briefly - the ear filters and delays
-	// need to ring down - then the whole decode turns off until the next
-	// spatial voice arrives.
-	if (au_foa_touched) au_foa_tail = AU_SAMPLE_RATE / 10;
+	audio_env_mix(frame_count);
+
+	// An untouched bus still decodes briefly - filters ring down, reflections
+	// may sit ahead of the head - then turns off until the next spatial voice.
+	if (au_foa_touched) au_foa_tail = maxi(au_foa_tail, au_foa_future + AU_SAMPLE_RATE / 10);
 	if (au_foa_tail > 0) {
 		au_foa_tail -= mini((int32_t)frame_count, au_foa_tail);
+
+		// Pull the consumed window into the linear scratch, zeroing behind -
+		// the head only advances on consumption, idle blocks leave it alone.
+		for (ma_uint32 i = 0; i < frame_count; i++) {
+			uint32_t idx = ((au_foa_head + i) & au_foa_mask) * 4;
+			memcpy(au_foa + i*4, au_foa_ring + idx, sizeof(float) * 4);
+			memset(au_foa_ring + idx, 0, sizeof(float) * 4);
+		}
+		au_foa_head   = (au_foa_head + frame_count) & au_foa_mask;
+		au_foa_future = au_foa_future > (int32_t)frame_count ? au_foa_future - (int32_t)frame_count : 0;
 		audio_decode_foa(output, frame_count, head);
 	}
 
-	// The limiter replaces per-voice clamping: transparent until -1dBFS,
-	// then a smooth squash, so a hot mix distorts gently instead of
-	// hard clipping. The meter reads the post-limit result.
+	// The limiter replaces per-voice clamping: transparent until -1dBFS, then
+	// a smooth squash instead of hard clipping. The meter reads post-limit.
 	double sum = 0;
 	for (ma_uint32 i = 0; i < frame_count*2; i++) {
 		output[i] = au_limit(output[i]);
@@ -1545,9 +1925,8 @@ void audio_test_offline(bool32_t enable) {
 	au_offline = enable;
 }
 
-// The main-thread half of a frame for offline tests. The listener stays
-// at identity unless the test steers it through audio_set_listener, and
-// shapes step with a fixed dt for determinism.
+// The main-thread half of a frame for offline tests. The listener stays at
+// identity unless steered via audio_set_listener; fixed dt for determinism.
 void audio_test_step() {
 	pose_t pose = au_listener_has_override ? au_listener_override : pose_identity;
 	audio_listener_publish(pose);
@@ -1586,10 +1965,9 @@ static vec3 shape_closest(const vec3* points, int32_t count, vec3 from) {
 	return best;
 }
 
-// Emit position is the closest point on the shape, apparent size is how
-// much of the view the shape fills - up to fully diffuse when inside it.
-// Both are smoothed so polyline corners and equidistant flips glide
-// instead of popping.
+// Emit position is the closest point on the shape, apparent size how much of
+// the view it fills - fully diffuse inside. Both are smoothed so polyline
+// corners and equidistant flips glide instead of popping.
 static void voice_shape_eval(au_voice_t* voice, vec3 listener_pos, float dt) {
 	vec3  closest = shape_closest(voice->shape_points, voice->shape_count, listener_pos);
 	float dist    = vec3_magnitude(listener_pos - closest);
@@ -1611,9 +1989,8 @@ static void voice_shape_eval(au_voice_t* voice, vec3 listener_pos, float dt) {
 	}
 	spread = fmaxf(spread, voice->base_spread);
 
-	// Inside the tube the sound surrounds you: emit from the head, fully
-	// diffuse. The asin hits 1 exactly at the boundary, so this continues
-	// the outside curve rather than jumping.
+	// Inside the tube: emit from the head, fully diffuse. The asin hits 1
+	// exactly at the boundary, continuing the outside curve without a jump.
 	vec3 emit = closest;
 	if (dist < voice->shape_radius) {
 		emit   = listener_pos;
@@ -1661,10 +2038,9 @@ void audio_voice_shapes_step(vec3 listener_pos, float dt) {
 
 ///////////////////////////////////////////
 
-// Main thread, from audio_step, strictly after the return drain. Tops up
-// streaming voices' prefetch rings. The decoder is main-owned, the audio
-// thread only ever consumes the ring. A voice finishing concurrently is
-// safe: its resources aren't freed until the *next* frame's drain.
+// Main thread, strictly after the return drain: top up streaming prefetch
+// rings. The decoder is main-owned, audio only consumes the ring; a voice
+// finishing concurrently isn't freed until the *next* frame's drain.
 void audio_voice_prefetch() {
 	for (int16_t i = 0; i < AU_VOICE_COUNT; i++) {
 		au_voice_t* voice = &au_voices[i];
@@ -1680,6 +2056,8 @@ void audio_voice_prefetch() {
 				break;
 			ma_uint64 decoded = 0;
 			ma_result result  = ma_decoder_read_pcm_frames(voice->stream_decoder, into, request, &decoded);
+			if (voice->sound->fuma)
+				sound_fuma_to_ambix((float*)into, decoded);
 			ma_pcm_rb_commit_write(voice->stream_ring, (ma_uint32)decoded);
 			if (result != MA_SUCCESS || decoded < request) {
 				// Looping streams rewind the decoder and keep filling, the
@@ -1696,9 +2074,8 @@ void audio_voice_prefetch() {
 
 ///////////////////////////////////////////
 
-// Main thread, with the audio device already stopped. Everything left in
-// the pool and rings gets released inline. Queued plays activate first so
-// each voice's resources are freed exactly once, through one path.
+// Main thread, device already stopped: release everything inline. Queued
+// plays activate first so each voice's resources free once, through one path.
 void audio_mix_shutdown() {
 	audio_drain_commands(); // No audio thread anymore, safe to run here
 	audio_mix_drain_returns();
@@ -1720,6 +2097,15 @@ void audio_mix_shutdown() {
 	au_resample_temp_size = 0;
 	sk_free(au_foa);
 	au_foa = nullptr;
+	sk_free(au_foa_ring);
+	au_foa_ring   = nullptr;
+	au_foa_mask   = 0;
+	au_foa_head   = 0;
+	au_foa_future = 0;
+	sk_free(au_env.lines);
+	sk_free(au_env.send);
+	sk_free(au_env.er_temp);
+	memset(&au_env,    0, sizeof(au_env));
 	memset(&au_decode, 0, sizeof(au_decode));
 	au_mix_truncate_warned = false;
 	atomic_store_f32(&au_output_dbfs, -120);

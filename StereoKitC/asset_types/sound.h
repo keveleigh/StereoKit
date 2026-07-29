@@ -20,6 +20,7 @@ struct _sound_t {
 	float           decibels;
 	float           norm_gain;  // Loudness normalization from load-time RMS
 	int32_t         sample_rate;
+	bool32_t        fuma;       // Stream bytes are FuMa order, convert on read
 
 	// sound_data_pcm
 	float*         pcm;
@@ -40,6 +41,7 @@ struct _sound_t {
 
 void  sound_destroy      (sound_t sound);
 float decibels_to_signal (float decibel);
+void  sound_fuma_to_ambix(float* frames, uint64_t frame_count);
 
 inline int32_t sound_channel_count(sound_channels_ channels) {
 	switch (channels) {

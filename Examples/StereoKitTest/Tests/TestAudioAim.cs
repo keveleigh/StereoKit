@@ -32,15 +32,25 @@ class TestAudioAim : ITest
 
 	public void Initialize()
 	{
-		// Broadband click bursts localize far better than tones: wide
-		// spectrum for the pinna/shadow cues, sharp onsets for the ITD.
+		// Broadband bursts localize far better than tones. For elevation:
+		// every burst is the exact same waveform (cycle-local hash), since
+		// the ear judges pinna notches against a known reference spectrum,
+		// and the tilt is pink - white noise's treble excess reads as "up".
+		float lp1 = 0, lp2 = 0;
 		clicks = Sound.Generate((t) => {
 			float cycle = t % 0.25f;
-			if (cycle > 0.02f) return 0;
-			uint  h     = (uint)(t * 48000);
+			if (cycle > 0.08f) { lp1 = 0; lp2 = 0; return 0; }
+			uint  h = (uint)(cycle * 48000);
 			h ^= h << 13; h ^= h >> 17; h ^= h << 5;
-			float noise = (h / (float)uint.MaxValue) * 2 - 1;
-			return noise * (1.0f - cycle / 0.02f) * 0.5f;
+			float white = (h / (float)uint.MaxValue) * 2 - 1;
+			lp1 += 0.25f * (white - lp1);
+			lp2 += 0.05f * (white - lp2);
+			float pink = white * 0.12f + lp1 * 0.25f + lp2 * 0.45f;
+			// A sharp double-click: onset at 0, echo at 30ms - repetition
+			// gives the ear structure to hang the spectral cues on.
+			float env = MathF.Exp(cycle * -90);
+			if (cycle >= 0.03f) env += MathF.Exp((cycle - 0.03f) * -90) * 0.7f;
+			return pink * env;
 		}, 1.0f);
 		clicks.Decibels = 70;
 	}

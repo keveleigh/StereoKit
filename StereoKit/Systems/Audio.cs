@@ -36,6 +36,25 @@ namespace StereoKit
 		public static float OutputDecibels
 			=> NativeAPI.audio_get_output_decibels();
 
+		/// <summary>The acoustic environment that spatial sounds play in!
+		/// This drives a shared reverb and early reflections that carry a
+		/// sense of space and absolute distance. The default is fully off
+		/// (wet 0), which costs nothing and never fights the real room's
+		/// acoustics - the right resting state for AR. Assign a preset via
+		/// AudioEnvironment.Preset, or build custom values.</summary>
+		public static AudioEnvironment Environment
+		{
+			get => NativeAPI.audio_get_env();
+			set => NativeAPI.audio_set_env(value);
+		}
+
+		/// <summary>Sets the acoustic environment straight from a preset,
+		/// shorthand for assigning AudioEnvironment.Preset to Environment.
+		/// AudioEnv.Off returns to dry, zero cost playback.</summary>
+		/// <param name="preset">The environment preset to switch to.</param>
+		public static void SetEnvironment(AudioEnv preset)
+			=> NativeAPI.audio_set_env(NativeAPI.audio_env_preset(preset));
+
 		private static Pose? listenerOverride = null;
 		/// <summary>Normally the audio listener follows the user's head.
 		/// Set this to hear the scene from somewhere else - a third person

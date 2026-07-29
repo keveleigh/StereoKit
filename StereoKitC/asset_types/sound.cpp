@@ -41,8 +41,58 @@ const char* sound_get_id(const sound_t sound) {
 struct sound_load_t {
 	void*    file_data;
 	size_t   file_size;
-	bool32_t require_ambisonic;
 };
+
+// FuMa B-format marker: the .amb convention tags its wav with an ambisonic
+// subformat GUID (PCM 01 or float 03 variant) in a WAVE_FORMAT_EXTENSIBLE
+// fmt chunk. ambiX carries no marker at all.
+static bool sound_wav_is_fuma(const uint8_t* data, size_t size) {
+	static const uint8_t guid_tail[12] = {
+		0x21,0x07,0xd3,0x11, 0x86,0x44, 0xc8,0xc1,0xca,0x00,0x00,0x00 };
+	if (size < 12 || memcmp(data, "RIFF", 4) != 0 || memcmp(data + 8, "WAVE", 4) != 0)
+		return false;
+	size_t at = 12;
+	while (at + 8 <= size) {
+		uint32_t chunk;
+		memcpy(&chunk, data + at + 4, 4);
+		if (memcmp(data + at, "fmt ", 4) == 0) {
+			const uint8_t* fmt = data + at + 8;
+			if (chunk < 40 || at + 8 + 40 > size) return false;
+			return fmt[0] == 0xFE && fmt[1] == 0xFF // WAVE_FORMAT_EXTENSIBLE
+			    && (fmt[24] == 0x01 || fmt[24] == 0x03)
+			    && fmt[25] == 0 && fmt[26] == 0 && fmt[27] == 0
+			    && memcmp(fmt + 28, guid_tail, 12) == 0;
+		}
+		at += 8 + chunk + (chunk & 1);
+	}
+	return false;
+}
+
+// The .amb extension implies FuMa even without the GUID - older tools wrote
+// plain headers and relied on the name.
+static bool sound_id_is_amb(const char* id) {
+	size_t len = strlen(id);
+	if (len < 4) return false;
+	const char* ext = id + len - 4;
+	return ext[0] == '.'
+	    && (ext[1] == 'a' || ext[1] == 'A')
+	    && (ext[2] == 'm' || ext[2] == 'M')
+	    && (ext[3] == 'b' || ext[3] == 'B');
+}
+
+// FuMa B-format (W,X,Y,Z with W at -3dB) to ambiX (W,Y,Z,X SN3D), in place.
+// First order maxN matches SN3D on the directional channels, so this is a
+// reorder plus restoring W to unity weight.
+void sound_fuma_to_ambix(float* frames, uint64_t frame_count) {
+	for (uint64_t i = 0; i < frame_count; i++) {
+		float* f = frames + i * 4;
+		float  x = f[1];
+		f[0] *= 1.4142135f;
+		f[1]  = f[2];
+		f[2]  = f[3];
+		f[3]  = x;
+	}
+}
 
 // Loudness normalization makes declared decibels truthful: the waveform
 // is the *shape* of a sound, decibels are how loud it is, and measuring
@@ -106,9 +156,9 @@ static bool32_t sound_load_decode(asset_task_t*, asset_header_t* asset, void* jo
 	sound_t       sound = (sound_t)asset;
 	sound_load_t* data  = (sound_load_t*)job_data;
 
-	// Probe with the file's own channel count, then constrain: ambisonic
-	// loads require exactly 4, everything else keeps 1-2 and downmixes
-	// surround to stereo.
+	// Probe with the file's own channel count, then constrain: 4 channels
+	// reads as first order ambisonics - the only 4ch content XR apps see in
+	// practice - and other surround layouts downmix to stereo.
 	ma_decoder        decoder;
 	ma_decoder_config config = ma_decoder_config_init(AU_SAMPLE_FORMAT, 0, AU_SAMPLE_RATE);
 	if (ma_decoder_init_memory(data->file_data, data->file_size, &config, &decoder) != MA_SUCCESS) {
@@ -117,24 +167,23 @@ static bool32_t sound_load_decode(asset_task_t*, asset_header_t* asset, void* jo
 		return false;
 	}
 	ma_uint32 file_ch = decoder.outputChannels;
-	if (data->require_ambisonic) {
-		if (file_ch != 4) {
-			log_errf("Ambisonic sound '%s' needs exactly 4 channels, found %u.", sound->header.id_text, file_ch);
-			ma_decoder_uninit(&decoder);
+	bool      fuma    = false;
+	if (file_ch == 4) {
+		// FuMa-tagged files convert to the ambiX frame the mixer speaks;
+		// untagged 4ch is ambiX already by the dominant convention.
+		sound->channels = sound_channels_ambisonic1;
+		fuma = sound_wav_is_fuma((const uint8_t*)data->file_data, data->file_size)
+		    || sound_id_is_amb(sound->header.id_text);
+	} else if (file_ch > 2) {
+		log_warnf("Sound '%s' has %u channels, downmixing to stereo.", sound->header.id_text, file_ch);
+		ma_decoder_uninit(&decoder);
+		config = ma_decoder_config_init(AU_SAMPLE_FORMAT, 2, AU_SAMPLE_RATE);
+		if (ma_decoder_init_memory(data->file_data, data->file_size, &config, &decoder) != MA_SUCCESS) {
 			atomic_store_i32_rel((int32_t*)&sound->header.state, asset_state_error_unsupported);
 			return false;
 		}
-		sound->channels = sound_channels_ambisonic1;
-	} else if (file_ch >= 2) {
-		if (file_ch > 2) {
-			log_warnf("Sound '%s' has %u channels, downmixing to stereo. 4 channel ambiX content should use sound_create_ambisonic.", sound->header.id_text, file_ch);
-			ma_decoder_uninit(&decoder);
-			config = ma_decoder_config_init(AU_SAMPLE_FORMAT, 2, AU_SAMPLE_RATE);
-			if (ma_decoder_init_memory(data->file_data, data->file_size, &config, &decoder) != MA_SUCCESS) {
-				atomic_store_i32_rel((int32_t*)&sound->header.state, asset_state_error_unsupported);
-				return false;
-			}
-		}
+		sound->channels = sound_channels_stereo;
+	} else if (file_ch == 2) {
 		sound->channels = sound_channels_stereo;
 	} else {
 		sound->channels = sound_channels_mono;
@@ -153,6 +202,7 @@ static bool32_t sound_load_decode(asset_task_t*, asset_header_t* asset, void* jo
 		ma_uint64 read = 0;
 		ma_decoder_read_pcm_frames(&decoder, pcm, frames, &read);
 		ma_decoder_uninit(&decoder);
+		if (fuma) sound_fuma_to_ambix(pcm, read);
 
 		sound->pcm       = pcm;
 		sound->pcm_count = read;
@@ -165,6 +215,7 @@ static bool32_t sound_load_decode(asset_task_t*, asset_header_t* asset, void* jo
 		sound->file_data   = data->file_data;
 		sound->file_size   = data->file_size;
 		sound->file_frames = frames;
+		sound->fuma        = fuma; // Converted at prefetch instead
 		data->file_data    = nullptr; // Ownership moved to the sound
 		atomic_store_i32_rel((int32_t*)&sound->data_type, sound_data_stream_file);
 	}
@@ -196,7 +247,7 @@ static asset_load_action_t sound_load_actions[] = {
 ///////////////////////////////////////////
 
 // Shared async-decode creation, takes ownership of the data buffer.
-static sound_t sound_create_data(const char *id, void *data, size_t length, bool32_t require_ambisonic) {
+static sound_t sound_create_data(const char *id, void *data, size_t length) {
 	sound_t result = (_sound_t*)assets_allocate(asset_type_sound);
 	result->decibels     = 80;
 	result->norm_gain    = 1;
@@ -205,9 +256,8 @@ static sound_t sound_create_data(const char *id, void *data, size_t length, bool
 	sound_set_id(result, id);
 
 	sound_load_t* load = sk_malloc_zero_t(sound_load_t, 1);
-	load->file_data         = data;
-	load->file_size         = length;
-	load->require_ambisonic = require_ambisonic;
+	load->file_data = data;
+	load->file_size = length;
 
 	asset_task_t task = {};
 	task.asset        = &result->header;
@@ -236,23 +286,7 @@ sound_t sound_create(const char *filename) {
 		log_warnf("Sound file failed to load: %s", filename);
 		return nullptr;
 	}
-	return sound_create_data(filename, data, length, false);
-}
-
-///////////////////////////////////////////
-
-sound_t sound_create_ambisonic(const char *filename) {
-	sound_t result = sound_find(filename);
-	if (result != nullptr)
-		return result;
-
-	void*  data;
-	size_t length;
-	if (!platform_read_file(filename, &data, &length)) {
-		log_warnf("Sound file failed to load: %s", filename);
-		return nullptr;
-	}
-	return sound_create_data(filename, data, length, true);
+	return sound_create_data(filename, data, length);
 }
 
 ///////////////////////////////////////////
@@ -264,7 +298,7 @@ sound_t sound_create_mem(const char *id, const void *data, size_t data_size) {
 
 	void* copy = sk_malloc(data_size);
 	memcpy(copy, data, data_size);
-	return sound_create_data(id, copy, data_size, false);
+	return sound_create_data(id, copy, data_size);
 }
 
 ///////////////////////////////////////////

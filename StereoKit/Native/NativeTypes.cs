@@ -70,6 +70,38 @@ namespace StereoKit
 		public Color32 color;
 	}
 
+	/// <summary>A perceptual description of the acoustic space sounds play in - an
+	/// environment rather than a literal room, so it covers halls through
+	/// forests. Spatial sounds feed a shared reverb whose level stays constant
+	/// with distance, so the direct-to-reverb balance naturally carries how far
+	/// away a sound is. A wet of 0 disables the system entirely at zero cost.
+	/// Start from audio_env_preset and adjust, or build values directly.</summary>
+	[StructLayout(LayoutKind.Sequential)]
+	public partial struct AudioEnvironment
+	{
+		/// <summary>Reverb level, 0-1. 0 turns environmental acoustics off completely,
+		/// and is the default.</summary>
+		public float wet;
+		/// <summary>Decay time in seconds - how long the tail takes to fall 60dB at mid
+		/// frequencies. Rooms are ~0.4s, cathedrals a few seconds.</summary>
+		public float decay;
+		/// <summary>0-1, extra high frequency decay. Soft or leafy spaces are high,
+		/// tiled rooms are low.</summary>
+		public float damp;
+		/// <summary>Size of the space in meters. Drives the spacing of the echoes that
+		/// build the tail. Changing this restarts the tail, where the other
+		/// fields all glide smoothly.</summary>
+		public float size;
+		/// <summary>0-1, how quickly discrete echoes blur into a dense wash. Scattered
+		/// spaces like forests are high, bare rooms lower.</summary>
+		public float scatter;
+		/// <summary>0-1, level of the distinct early reflections off the space's
+		/// surfaces - the first bounces that glue a sound to the room. The
+		/// ground bounce keeps a minimum presence; walls and ceiling scale
+		/// fully with this, so outdoor spaces sit near 0.</summary>
+		public float reflect;
+	}
+
 	/// <summary>Pointer is an abstraction of a number of different input sources,
 	/// and a way to surface input events!</summary>
 	[StructLayout(LayoutKind.Sequential)]

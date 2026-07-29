@@ -66,10 +66,8 @@ static double at_render_energy(int32_t frames) {
 static float at_sine(float t) { return sinf(t * 440.0f * 6.2831853f) * 0.1f; }
 static float at_dc  (float  ) { return 0.5f; }
 
-// Pan/elevation assertions use high frequency content: an honest binaural
-// decode has only ~1dB of level difference at low frequencies (real heads
-// too - LF localizes by arrival time), it's head shadow at high
-// frequencies that produces measurable ILD.
+// Pan/elevation assertions use high frequency content: real heads only
+// shadow highs - low frequencies localize by arrival time, ~1dB of level.
 static float at_sine8k(float t) { return sinf(t * 8000.0f * 6.2831853f) * 0.1f; }
 
 // The decode has filter/delay state that rings down briefly after content
@@ -81,10 +79,8 @@ static void at_flush() {
 	audio_test_step();
 }
 
-// With loudness normalization, 83dB declared renders any measurable
-// content at -20dBFS RMS at 1m - for the sine sources here that's an
-// amplitude of ~0.14, close to the levels these tests were written
-// against originally.
+// With loudness normalization, 83dB declared renders any measurable content
+// at -20dBFS RMS at 1m - amplitude ~0.14 for the sine sources here.
 #define AT_UNIT_GAIN_DB 83.0f
 
 // Adapts the per-sample helpers to the batch generate signature.
@@ -150,9 +146,8 @@ static void at_gen_ambi_w(float* out, uint64_t start, uint64_t frames);
 static void at_test_steal() {
 	sound_t sound = at_generate(at_sine, 2.0f);
 
-	// Stealing is about audibility: fill the pool with one very quiet far
-	// voice among moderate ones, all *activated* - reserved slots are
-	// mid-handoff to the audio thread and can't be safely reclaimed.
+	// Fill the pool with one very quiet far voice among moderate ones, all
+	// *activated* - reserved slots are mid-handoff and can't be reclaimed.
 	sound_play_t quiet_play = {}; quiet_play.volume = 0.05f;
 	sound_play_t mid_play   = {}; mid_play  .volume = 0.5f;
 	sound_inst_t quiet = sound_play(sound, vec3{0, 0, -50}, &quiet_play);
@@ -332,9 +327,8 @@ static void at_test_write_overwrites_oldest() {
 
 ///////////////////////////////////////////
 
-// Writes a float32 sine wav with the tone on selected channels (a bit
-// mask), silence elsewhere. Files over 10s take the per-voice streaming
-// decoder path rather than the predecode path.
+// Writes a float32 sine wav with the tone on masked channels. Files over 10s
+// take the per-voice streaming decoder path rather than predecode.
 static bool at_write_wav_ch(const char* path, float seconds, float amplitude, int16_t channels, int32_t active_mask, float hz) {
 	int32_t frames    = (int32_t)(AU_SAMPLE_RATE * seconds);
 	int32_t data_size = frames * channels * sizeof(float);
@@ -364,6 +358,35 @@ static bool at_write_wav_ch(const char* path, float seconds, float amplitude, in
 
 static bool at_write_wav(const char* path, float seconds, float amplitude) {
 	return at_write_wav_ch(path, seconds, amplitude, 1, 1, 440.0f);
+}
+
+// Writes a FuMa-tagged wav: WAVE_FORMAT_EXTENSIBLE with the ambisonic float
+// GUID, FuMa channel order W,X,Y,Z at the given amplitudes.
+static bool at_write_wav_fuma(const char* path, float seconds, float w_amp, float x_amp, float hz) {
+	int32_t frames    = (int32_t)(AU_SAMPLE_RATE * seconds);
+	int32_t data_size = frames * 4 * sizeof(float);
+	FILE* file = fopen(path, "wb");
+	if (file == nullptr) return false;
+
+	int32_t chunk_size = 60 + data_size;
+	int32_t fmt_size = 40, rate = AU_SAMPLE_RATE, byte_rate = rate * 16, mask = 0;
+	int16_t tag = (int16_t)0xFFFE, channels = 4, align = 16, bits = 32, cb = 22, valid = 32;
+	uint8_t guid[16] = {0x03,0,0,0, 0x21,0x07,0xd3,0x11, 0x86,0x44, 0xc8,0xc1,0xca,0,0,0};
+	fwrite("RIFF", 1, 4, file); fwrite(&chunk_size, 4, 1, file); fwrite("WAVE", 1, 4, file);
+	fwrite("fmt ", 1, 4, file); fwrite(&fmt_size,   4, 1, file);
+	fwrite(&tag,   2, 1, file); fwrite(&channels,   2, 1, file);
+	fwrite(&rate,  4, 1, file); fwrite(&byte_rate,  4, 1, file);
+	fwrite(&align, 2, 1, file); fwrite(&bits,       2, 1, file);
+	fwrite(&cb,    2, 1, file); fwrite(&valid,      2, 1, file);
+	fwrite(&mask,  4, 1, file); fwrite(guid,        1, 16, file);
+	fwrite("data", 1, 4, file); fwrite(&data_size,  4, 1, file);
+	for (int32_t i = 0; i < frames; i++) {
+		float s    = sinf((float)i / AU_SAMPLE_RATE * hz * 6.2831853f);
+		float v[4] = { s * w_amp, s * x_amp, 0, 0 };
+		fwrite(v, 4, 4, file);
+	}
+	fclose(file);
+	return true;
 }
 
 // Loads a wav and waits out the async decode. Null on timeout.
@@ -485,9 +508,8 @@ static void at_gen_stereo_seek(float* out, uint64_t start, uint64_t frames) {
 	}
 }
 
-// Cursor and seek speak interleaved samples in the public API, but the
-// mixer counts frames - for multi-channel sounds they differ by the channel
-// count, and a mono-only suite never exercises that conversion.
+// Cursor and seek speak interleaved samples, the mixer counts frames - they
+// differ by channel count, and a mono-only suite never exercises that.
 static void at_test_seek_multichannel() {
 	sound_t      sound = sound_generate(at_gen_stereo_seek, 2.0f, sound_channels_stereo);
 	sound_set_decibels(sound, AT_UNIT_GAIN_DB);
@@ -496,15 +518,13 @@ static void at_test_seek_multichannel() {
 	int32_t rendered = AT_BLOCK * 2;
 	at_render(rendered, nullptr, nullptr);
 
-	// A stereo voice advances two samples per frame, so the sample-domain
-	// cursor clearly outpaces the frame count rendered - half that (the
-	// missing conversion) would fail this.
+	// A stereo voice advances two samples per frame, so the cursor clearly
+	// outpaces frames rendered - half that (the missing conversion) fails.
 	uint64_t cursor = sound_inst_get_cursor(inst);
 	AT_CHECK(cursor > (uint64_t)rendered + rendered/2, "stereo cursor counts interleaved samples");
 
-	// Seek to the sample-domain midpoint. Read as frames (the bug) this
-	// target lands past the end and finishes the voice; read as samples it
-	// lands halfway and playback continues.
+	// Seek to the sample midpoint: read as frames (the bug) it lands past the
+	// end and finishes the voice, read as samples playback continues.
 	uint64_t total = sound_total_samples(sound);
 	sound_inst_seek(inst, total / 2);
 	at_render(AT_BLOCK, nullptr, nullptr);
@@ -541,9 +561,8 @@ static int64_t at_first_audible(int32_t frames) {
 static void at_test_delay() {
 	sound_t sound = at_generate(at_dc, 0.25f);
 
-	// A 0.1s delay must land on exactly sample 4800. The source is DC 0.5
-	// so the very first mixed sample is already audible. Stop + drain after
-	// each measurement so nothing bleeds into later checks.
+	// A 0.1s delay lands on exactly sample 4800; DC 0.5 makes the first mixed
+	// sample audible. Stop + drain each measurement so nothing bleeds.
 	sound_play_t delayed = {}; delayed.delay = 0.1f;
 	sound_inst_t inst = sound_play(sound, vec3{0,0,-1}, &delayed);
 	int64_t first = at_first_audible(AU_SAMPLE_RATE/2);
@@ -610,10 +629,9 @@ static void at_test_normalization() {
 	double ratio   = hot_e > 0 ? quiet_e / hot_e : 0;
 	AT_CHECK(ratio > 0.9 && ratio < 1.1, "equal declared dB renders equal energy regardless of recording level");
 
-	// Absolute calibration: 83dB declared must render at -20dBFS, an
-	// output RMS of 0.1 per ear. Head-locked pins the pure gain path;
-	// the spatial decode gets a looser check since ITD phase interference
-	// legitimately costs ~1dB in the coherent sum (real ears comb too).
+	// Absolute calibration: 83dB declared renders -20dBFS, RMS 0.1 per ear.
+	// Head-locked pins the pure gain path; the spatial decode gets a looser
+	// check, ITD phase interference costs ~1dB (real ears comb too).
 	sound_set_decibels(hot, 83);
 	sound_play_t locked = {}; locked.flags = sound_flags_head_locked;
 	sound_play(hot, vec3{0,0,-1}, &locked);
@@ -636,9 +654,8 @@ static void at_test_normalization() {
 ///////////////////////////////////////////
 
 static void at_test_norm_gating() {
-	// The same audible content with and without trailing silence must
-	// render at the same loudness - gated measurement ignores the padding
-	// instead of letting it dilute RMS and boost the padded copy.
+	// The same content with and without trailing silence must render equally
+	// loud - gated measurement ignores padding instead of diluting RMS.
 	int32_t tone_ct = AU_SAMPLE_RATE / 10;
 	int32_t pad_ct  = tone_ct * 5;
 	float*  padded  = (float*)malloc(sizeof(float) * pad_ct);
@@ -664,9 +681,8 @@ static void at_test_norm_gating() {
 ///////////////////////////////////////////
 
 static void at_test_norm_peak_cap() {
-	// A near-silent tone with one full-scale sample: gating keeps the
-	// measurement sane, and the crest allowance caps the boost so the
-	// result stays far below what raw RMS normalization would demand.
+	// A near-silent tone with one full-scale sample: the crest allowance caps
+	// the boost far below what raw RMS normalization would demand.
 	int32_t count   = AU_SAMPLE_RATE / 2;
 	float*  samples = (float*)malloc(sizeof(float) * count);
 	for (int32_t i = 0; i < count; i++)
@@ -690,14 +706,14 @@ static void at_test_norm_peak_cap() {
 static void at_test_decode_direction() {
 	sound_t sound = at_generate(at_sine8k, 0.5f);
 
-	// Elevation contrast: the up corners carry a deeper, higher pinna dip
-	// than the down corners, so at 8kHz an overhead source reads quieter
-	// than one below. Sanity ordering, not golden values.
+	// Measured pinna acoustics are deeply notched below and nearly smooth
+	// overhead (Blauert's 8kHz "above" band agrees), so at 8kHz an overhead
+	// source reads *brighter* than one underneath. Ordering, not golden.
 	sound_play(sound, vec3{0, 2, 0});
 	double above_e = at_render_energy(AU_SAMPLE_RATE / 2);
 	sound_play(sound, vec3{0, -2, 0});
 	double below_e = at_render_energy(AU_SAMPLE_RATE / 2);
-	AT_CHECK(below_e > above_e * 1.2, "elevation filters separate above from below");
+	AT_CHECK(above_e > below_e * 1.2, "elevation notches separate above from below");
 
 	// Behind loses sparkle relative to front.
 	sound_play(sound, vec3{0, 0, -2});
@@ -760,9 +776,8 @@ static double at_render_corr(int32_t frames) {
 }
 
 static void at_test_decode_decorrelation() {
-	// A diffuse field reaches real ears decorrelated above ~1kHz. The bed
-	// is W-only noise: without the decode's decorrelator both ears would
-	// receive the identical signal, interaural correlation 1.0.
+	// A diffuse field reaches real ears decorrelated above ~1kHz. The bed is
+	// W-only noise - without the decorrelator, interaural correlation is 1.0.
 	sound_t bed = sound_generate(at_gen_noise_w, 0.5f, sound_channels_ambisonic1);
 	sound_set_decibels(bed, AT_UNIT_GAIN_DB);
 	sound_play(bed, vec3{0,0,0});
@@ -943,11 +958,11 @@ static void at_test_channel_formats() {
 		remove(path);
 	}
 
-	// A W-only ambisonic bed is omnidirectional: head rotation must not
-	// change its energy.
+	// A 4 channel file loads as an ambisonic bed with no separate loader
+	// call, and a W-only bed is omni: head rotation must not change energy.
 	snprintf(path, sizeof(path), "%saudio_test_ambi_w.wav", dir);
 	if (at_write_wav_ch(path, 1, 0.25f, 4, 1, 8000.0f)) {
-		sound_t bed = sound_create_ambisonic(path);
+		sound_t bed = sound_create(path);
 		for (int32_t i = 0; i < 500 && sound_duration(bed) == 0; i++) at_sleep_ms(10);
 		AT_CHECK(sound_get_channels(bed) == sound_channels_ambisonic1, "4ch wav loads as ambisonic");
 
@@ -970,7 +985,7 @@ static void at_test_channel_formats() {
 	// pushes its energy through the duller back corners.
 	snprintf(path, sizeof(path), "%saudio_test_ambi_wx.wav", dir);
 	if (at_write_wav_ch(path, 1, 0.25f, 4, 1 | 8, 8000.0f)) {
-		sound_t front = sound_create_ambisonic(path);
+		sound_t front = sound_create(path);
 		for (int32_t i = 0; i < 500 && sound_duration(front) == 0; i++) at_sleep_ms(10);
 
 		sound_play(front, vec3{0,0,0});
@@ -987,14 +1002,27 @@ static void at_test_channel_formats() {
 		remove(path);
 	}
 
-	// Non-4-channel content must refuse to load as ambisonic.
-	snprintf(path, sizeof(path), "%saudio_test_ambi_bad.wav", dir);
-	if (at_write_wav_ch(path, 1, 0.25f, 2, 3, 440.0f)) {
-		sound_t bad = sound_create_ambisonic(path);
-		at_sleep_ms(300);
-		sound_inst_t inst = sound_play(bad, vec3{0,0,-1});
-		AT_CHECK(bad != nullptr && inst._slot < 0, "a stereo file refuses to load as ambisonic");
-		sound_release(bad);
+	// A FuMa-tagged file converts to ambiX on load: its X channel sits in
+	// FuMa slot 1, which would read as ambiX Y (left/right, yaw-symmetric)
+	// without the reorder. Converted, it's the same forward cardioid as the
+	// ambiX W+X case - front-heavy, so a 180 yaw drops energy.
+	snprintf(path, sizeof(path), "%saudio_test_ambi_fuma.wav", dir);
+	if (at_write_wav_fuma(path, 1, 0.177f, 0.25f, 8000.0f)) {
+		sound_t fuma = sound_create(path);
+		for (int32_t i = 0; i < 500 && sound_duration(fuma) == 0; i++) at_sleep_ms(10);
+		AT_CHECK(sound_get_channels(fuma) == sound_channels_ambisonic1, "a FuMa-tagged wav loads as ambisonic");
+
+		sound_play(fuma, vec3{0,0,0});
+		double id_e = at_render_energy(AU_SAMPLE_RATE + AT_BLOCK);
+		pose_t flipped = {{0,0,0}, quat_from_angles(0, 180, 0)};
+		audio_set_listener(&flipped);
+		audio_test_step();
+		sound_play(fuma, vec3{0,0,0});
+		double flip_e = at_render_energy(AU_SAMPLE_RATE + AT_BLOCK);
+		AT_CHECK(id_e > flip_e * 1.1, "FuMa channel order converts to ambiX on load");
+		audio_set_listener(nullptr);
+		audio_test_step();
+		sound_release(fuma);
 		remove(path);
 	}
 }
@@ -1152,16 +1180,15 @@ static int32_t at_argmax_ear(const float* block, int32_t frames, int32_t ear) {
 	return best;
 }
 
-// The direct binaural path gives each point source its own exact ITD -
-// that per-source delay is the azimuth precision cue, so it gets asserted
-// at the sample level.
+// The direct path gives each point source its own exact ITD - the azimuth
+// precision cue - so it gets asserted at the sample level.
 static void at_test_direct_itd() {
 	sound_t imp = sound_generate(at_gen_impulse, 0.05f, sound_channels_mono);
 	sound_set_decibels(imp, AT_UNIT_GAIN_DB);
 	static float block[AT_BLOCK * 2];
 
-	// Hard left: the right ear lags by the full Woodworth-scale ITD,
-	// ~31.5 samples at 48kHz. The near ear is normalized to zero delay.
+	// Hard left: the right ear lags by the full interaural delay, ~31.5
+	// samples at 48kHz. The near ear is normalized to zero delay.
 	sound_inst_t inst = sound_play(imp, vec3{-3, 0, 0});
 	audio_render_block(block, AT_BLOCK);
 	audio_test_step();
@@ -1182,10 +1209,9 @@ static void at_test_direct_itd() {
 	sound_release(imp);
 }
 
-// Four+ point voices render through the SIMD batch path; below four is
-// the scalar path. They must agree: four coherent copies of a source sum
-// to exactly 4x the amplitude (+12dB) of one, and batched ear taps keep
-// the same sample-exact ITD the scalar path asserts.
+// Four+ point voices render through the SIMD batch path, fewer take the
+// scalar path. They must agree: four coherent copies sum to exactly 4x the
+// amplitude (+12dB), and batched ear taps keep the sample-exact ITD.
 static void at_test_direct_batch() {
 	sound_t      sine = at_generate(at_sine8k, 0.25f);
 	vec3         pos  = vec3{-2, 0.3f, -1};
@@ -1257,9 +1283,8 @@ static void at_test_direct_bus_level() {
 static float at_sine18k(float t) { return sinf(t * 18000.0f * 6.2831853f) * 0.1f; }
 
 static void at_test_near_field() {
-	// Near-field ILD: the same hard-left source carries a much stronger
-	// left/right split at 30cm than at 3m - inside ~1m the per-ear path
-	// lengths add broadband ILD on top of the head shadow's high band.
+	// Near-field ILD: inside ~1m the per-ear path lengths add broadband ILD,
+	// so a hard-left source splits far more at 30cm than at 3m.
 	sound_t sound = at_generate(at_sine8k, 0.25f);
 	double  l = 0, r = 0;
 	sound_play(sound, vec3{-0.3f, 0, 0});
@@ -1271,9 +1296,8 @@ static void at_test_near_field() {
 	AT_CHECK(near_ild > far_ild * 2, "near sources carry extra broadband ILD");
 	sound_release(sound);
 
-	// Air absorption plateau: within ~4.5m the cutoff model maxes out and
-	// the filter fades to a true bypass, so a bright close source keeps its
-	// top octave - within the direction voicing's ~1dB of head-locked.
+	// Within ~4.5m the air filter fades to a true bypass - a bright close
+	// source keeps its top octave, within ~1dB of head-locked.
 	sound_t bright = at_generate(at_sine18k, 0.25f);
 	sound_play_t locked = {}; locked.flags = sound_flags_head_locked;
 	sound_play(bright, vec3{0, 0, -1}, &locked);
@@ -1283,6 +1307,70 @@ static void at_test_near_field() {
 	double ratio_db  = spatial_e > 0 ? 10.0 * log10(locked_e / spatial_e) : 99;
 	AT_CHECK(ratio_db < 2.0, "the air filter is a true bypass at close range");
 	sound_release(bright);
+}
+
+///////////////////////////////////////////
+
+static void at_test_environment() {
+	sound_t burst = at_generate(at_noise, 0.15f);
+
+	// Environment off - the default - leaves true silence after a voice
+	// finishes and its decode state rings down.
+	sound_play(burst, vec3{0, 0, -2});
+	at_render(AU_SAMPLE_RATE / 2, nullptr, nullptr);
+	double dry_tail = at_render_energy(AU_SAMPLE_RATE / 4);
+	AT_CHECK(dry_tail < 1e-7, "no environment leaves no tail");
+
+	// A room leaves a decaying tail behind the same burst.
+	audio_set_env(audio_env_preset(audio_env_room));
+	sound_play(burst, vec3{0, 0, -2});
+	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
+	double tail_a = at_render_energy(AU_SAMPLE_RATE / 4);
+	double tail_b = at_render_energy(AU_SAMPLE_RATE / 4);
+	AT_CHECK(tail_a > 1e-6, "an environment leaves a reverb tail");
+	AT_CHECK(tail_b < tail_a * 0.7, "the tail decays");
+	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
+
+	// The send ignores distance while the source shares the space - similar
+	// tails under direct signals ~10dB apart is the absolute distance cue.
+	// Past ~half the size the send parallels the direct falloff instead.
+	sound_play(burst, vec3{0, 0, -1});
+	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
+	double tail_near = at_render_energy(AU_SAMPLE_RATE / 4);
+	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
+	sound_play(burst, vec3{0, 0, -3});
+	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
+	double tail_mid = at_render_energy(AU_SAMPLE_RATE / 4);
+	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
+	sound_play(burst, vec3{0, 0, -12});
+	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
+	double tail_far = at_render_energy(AU_SAMPLE_RATE / 4);
+	AT_CHECK(tail_mid > tail_near * 0.4 && tail_mid < tail_near * 2.5, "the tail is distance-constant within the space");
+	AT_CHECK(tail_far < tail_near * 0.4 && tail_far > tail_near * 0.01, "the send falls off beyond the space");
+	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
+
+	// With reflect up, an impulse grows wall bounce copies in the 10-110ms
+	// window that a reflection-free space lacks. Wet is near zero to keep the
+	// tail away, and the always-on floor tap (~5ms) lands inside the skip.
+	sound_t imp = sound_generate(at_gen_impulse, 0.05f, sound_channels_mono);
+	sound_set_decibels(imp, AT_UNIT_GAIN_DB);
+	audio_env_t er_env = { 0.01f, 0.3f, 0.5f, 8, 0.5f, 1.0f };
+	audio_set_env(er_env);
+	sound_play(imp, vec3{0, 0, -2});
+	at_render(480, nullptr, nullptr);
+	double er_e = at_render_energy(AU_SAMPLE_RATE / 10);
+	at_render(AU_SAMPLE_RATE / 2, nullptr, nullptr);
+	er_env.reflect = 0;
+	audio_set_env(er_env);
+	sound_play(imp, vec3{0, 0, -2});
+	at_render(480, nullptr, nullptr);
+	double flat_e = at_render_energy(AU_SAMPLE_RATE / 10);
+	AT_CHECK(er_e > flat_e * 2, "reflections add early bounce copies");
+	sound_release(imp);
+
+	audio_set_env(audio_env_preset(audio_env_off));
+	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
+	sound_release(burst);
 }
 
 ///////////////////////////////////////////
@@ -1307,9 +1395,8 @@ static int64_t at_time_ns() {
 #define AT_BENCH_FRAMES 480 // 10ms at 48kHz, a typical device period
 #define AT_BENCH_BLOCKS 1000
 
-// The mix does identical work every block, so the fastest block is the
-// true hardware cost - frequency scaling and scheduler noise only ever
-// make blocks slower. Median shows the typical, worst shows the spikes.
+// The fastest block is the true hardware cost - frequency scaling and
+// scheduler noise only slow blocks down. Median is typical, worst is spikes.
 static void at_bench(const char* name) {
 	static float   block[AT_BENCH_FRAMES * 2];
 	static int64_t times[AT_BENCH_BLOCKS];
@@ -1405,6 +1492,15 @@ int audio_bench_run() {
 	at_bench("64 spatial voices, pitched");
 	at_bench_stop(insts, 64);
 
+	// The full environment: per-voice sends and reflection taps, plus the
+	// shared FDN. The delta against plain 64-voice is the env's price.
+	audio_set_env(audio_env_preset(audio_env_room));
+	for (int32_t i = 0; i < 64; i++) insts[i] = sound_play(mono, at_bench_pos(i), &loop);
+	at_bench("64 spatial voices, environment");
+	at_bench_stop(insts, 64);
+	audio_set_env(audio_env_preset(audio_env_off));
+	at_bench_stop(insts, 0); // Just settles the wet ramp-down
+
 	// A demo-shaped blend: beds and music alongside the transient swarm.
 	for (int32_t i = 0; i <  4; i++) insts[i] = sound_play(ambi,   vec3_zero,       &loop);
 	for (int32_t i = 4; i <  8; i++) insts[i] = sound_play(stereo, vec3_zero,       &loop);
@@ -1456,8 +1552,7 @@ int audio_bench_run() {
 
 int audio_stress_run() {
 	// Live device on purpose: this hammers the real audio callback. Explicit
-	// like the offline suites set audio_test_offline(true), so the mode is
-	// declared rather than inherited from the global default.
+	// so the mode is declared rather than inherited from the global default.
 	audio_test_offline(false);
 
 	sk_settings_t settings = {};
@@ -1550,6 +1645,7 @@ int audio_tests_run() {
 	at_test_direct_bus_level();
 	at_test_direct_batch();
 	at_test_near_field();
+	at_test_environment();
 
 	sk_shutdown();
 

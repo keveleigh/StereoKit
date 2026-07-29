@@ -8,10 +8,8 @@ namespace sk {
 #define AU_SAMPLE_RATE        48000
 #define AU_SAMPLE_BUFFER_SIZE 10 // ITD padding samples on each side
 #define AU_SAMPLE_FORMAT      ma_format_f32
-// More voice slots exist than the mixer renders: each frame the active
-// voices are ranked by estimated audibility, the top AU_MIX_VOICES render,
-// and the rest go dormant *in place* - handles stay valid, and a quiet
-// loop that ranked out resumes when it ranks back in.
+// More slots than the mixer renders: the top AU_MIX_VOICES by audibility
+// render, the rest go dormant *in place* and resume when they rank back in.
 #define AU_VOICE_COUNT        128
 #define AU_MIX_VOICES         64
 #define AU_CMD_RING_SIZE      256
@@ -20,17 +18,21 @@ namespace sk {
 #define AU_PITCH_MIN          0.25f
 #define AU_PITCH_MAX          4.0f
 #define AU_MIN_DISTANCE       0.25f  // Attenuation clamp, ~inside the head
-#define AU_ITD_MAX            48     // Direct-path ear tap ring, samples
+#define AU_ITD_MAX            64     // Ear tap ring, samples - pow2 masked wrap
+#define AU_VOICING_STAGES     4      // Voicing biquads: N1, N2, P1, shelf
 #define AU_DIRECT_SPREAD      0.5f   // Spread where a voice is fully bus-rendered
 #define AU_SEEK_NONE          UINT64_MAX
 #define AU_BUS_COUNT          4
 #define AU_SHAPE_MAX_POINTS   32
+#define AU_ER_TAPS            6      // Environment reflection images per voice
+// Reflection taps go to the most audible spatial voices only - quiet voices'
+// bounces are masked anyway, and the cap bounds cost under voice swarms.
+#define AU_ER_VOICES          16
 #define AU_SMOOTH_TIME        0.05f  // Emit point smoothing constant, sec
 
-// Voice lifecycle, the value is atomic. Main reserves free slots, the audio
-// thread activates them on the play command, and finished voices wait for a
-// main thread drain. Stealing moves playing back to reserved from main, and
-// the displaced play's resources are handed off at activation.
+// Voice lifecycle, the value is atomic. Main reserves free slots, audio
+// activates them on the play command, finished voices wait for a main drain.
+// Stealing moves playing back to reserved, resources hand off at activation.
 typedef enum au_voice_state_ {
 	au_voice_free = 0,
 	au_voice_reserved,
@@ -68,6 +70,7 @@ struct au_voice_t {
 	// Cross-thread, atomic access only
 	int32_t           state;           // au_voice_state_
 	int32_t           audible;         // In the mix budget this frame
+	int32_t           er_grant;        // In the reflection budget this frame
 	au_voice_params_t params;
 	float             intensity;       // Peak |sample| since last frame
 	int32_t           stream_eof;      // Prefetch decoder hit end of data
@@ -82,10 +85,9 @@ struct au_voice_t {
 	ma_pcm_rb*        pending_ring;
 	float*            pending_ring_data;
 
-	// Audio-thread-owned once playing. Main only reads these where a data
-	// race is provably benign (steal's log line), and frees them through
-	// return ring entries, never through the voice. cursor is written with
-	// relaxed atomic stores so the main thread getter can read it.
+	// Audio-thread-owned once playing. Main only reads where a race is
+	// provably benign, and frees through return ring entries, never the
+	// voice. cursor writes are relaxed atomics for the main-thread getter.
 	sound_t           sound;
 	uint64_t          cursor;          // Frames, in *source* samples
 	uint64_t          delay_left;      // Onset frames remaining
@@ -101,9 +103,12 @@ struct au_voice_t {
 	// ring holds the voice's filtered mono history for the two ear taps.
 	float             dir_ring[AU_ITD_MAX];
 	int32_t           dir_ring_at;
+	float             dir_shoulder;    // Shoulder bounce delay, samples; -1 = snap
+	float             er_delay[AU_ER_TAPS]; // Slewed tap delay per surface; -1 = snap
+	float             er_lp, er_lp2;   // Shared surface-absorption two-pole
 	float             dir_delay[2];    // Smoothed per-ear delay, samples; -1 = snap
 	float             dir_shadow[2];   // Per-ear head shadow one-pole state
-	float             dir_filter[2][4];// Mono voicing biquad states, [stage][x1 x2 y1 y2]
+	float             dir_filter[AU_VOICING_STAGES][4]; // Voicing biquad states, [stage][x1 x2 y1 y2]
 };
 
 bool audio_init    ();
@@ -136,10 +141,9 @@ pose_t audio_listener_get    ();
 extern pose_t au_listener_override;
 extern bool   au_listener_has_override;
 
-// Offline harness for deterministic tests: enable offline *before* sk_init
-// to skip device creation, then pump blocks manually with render_block and
-// the main-thread work with test_step. Internal, but exported so test
-// executables can reach them through the shared lib.
+// Offline harness for deterministic tests: enable offline *before* sk_init to
+// skip device creation, then pump blocks with render_block and main-thread
+// work with test_step. Exported so test executables can reach them.
 SK_API void audio_render_block(float* out_stereo, int32_t frame_count);
 SK_API void audio_test_offline(bool32_t enable);
 SK_API void audio_test_step   ();

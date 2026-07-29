@@ -630,6 +630,17 @@ add_library(StereoKitC ${LIBRARY_TYPE}
   ${SK_SRC_UI}
   ${SK_SRC_SHADERS_H} )
 
+# Realtime DSP built on inline SIMD wrappers is ~10x slower at -O0 and misses
+# the device deadline, so these files compile optimized in every config - the
+# trade is optimized-out values when stepping through them in a debugger.
+# (MSVC skipped: /O2 conflicts with Debug's default /RTC1 checks.)
+if (NOT MSVC)
+  set_source_files_properties(
+    StereoKitC/systems/audio_mix.cpp
+    StereoKitC/libraries/miniaudio.cpp
+    PROPERTIES COMPILE_OPTIONS "$<$<CONFIG:Debug>:-O2>")
+endif()
+
 if (ANDROID)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD 11)
   set_property(TARGET StereoKitC PROPERTY CXX_STANDARD_REQUIRED ON)

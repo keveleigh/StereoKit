@@ -1,29 +1,89 @@
-﻿// SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 // The authors below grant copyright rights under the MIT license:
 // Copyright (c) 2019-2023 Nick Klingensmith
 // Copyright (c) 2023 Qualcomm Technologies, Inc.
- 
+
 using StereoKit;
 using System;
 using System.Collections.Generic;
+using System.IO;
 
 class DemoSound : ITest
 {
 	string title       = "Sound";
-	string description = "";
+	string description = "Sounds in StereoKit are spatial by default! This scene has sounds loaded from file on a grabbable emitter - mono spatializes, stereo plays head-locked, and ambisonic files are world-fixed sound fields - plus a sound you draw with your finger, a live synth stream on the wand, and acoustic environments.";
 
-	Pose  windowPose = (Demo.contentPose * Matrix.T(0.1f,0,0)).Pose;
-	Sound fileSound  = Sound.FromFile("BlipNoise.wav");
+	Pose windowPose = (Demo.contentPose * Matrix.T(0.3f, 0.2f, 0)).Pose;
 
+	// Sounds loaded from file live on a grabbable, scalable sphere in the
+	// scene. Under 10cm across it plays as a point source, larger than
+	// that it becomes a volume emitter - scale it up and walk inside!
+	Sound     sphereSound  = Sound.FromFile("BlipNoise.wav");
+	Pose      spherePose   = (Demo.contentPose * Matrix.T(-0.2f, 0.02f, 0)).Pose;
+	float     sphereScale  = 1;
+	SoundInst sphereInst;
+	bool      sphereLoop;
+	Material  sphereMat;
+	const float sphereRadius = 0.04f;
+
+	void StepSoundSphere()
+	{
+		float radius = sphereRadius * sphereScale;
+		bool  area   = radius * 2 >= 0.1f;
+
+		bool grabbed = UI.HandleBegin("soundSphere", ref spherePose,
+			new Bounds(Vec3.Zero, Vec3.One * (sphereRadius * 2)), ref sphereScale);
+
+		float pulse = sphereInst.IsPlaying ? sphereInst.Intensity : 0;
+		float alpha = (grabbed ? 0.45f : 0.3f) + pulse * 0.4f;
+		Mesh.Sphere.Draw(sphereMat, Matrix.S(radius * 2), new Color(0.5f, 0.7f, 1, alpha));
+
+		// The controls sit where the line to the user's head crosses the
+		// sphere's surface, facing the user - inside the sphere they fight
+		// the handle for grabs, and hide behind the blended surface.
+		Vec3 headLocal = Hierarchy.ToLocal(Input.Head.position);
+		if (headLocal.MagnitudeSq < 0.0001f) headLocal = Vec3.Forward;
+		Vec3 surface     = headLocal.Normalized * (radius + 0.005f);
+		Quat facing      = Quat.LookAt(surface, headLocal);
+		// The pose is the window's top center, offset up to center the row.
+		Pose optionsPose = new Pose(surface + facing * V.XYZ(0, 0.016f, 0), facing);
+		UI.WindowBegin("sphereOptions", ref optionsPose, UIWin.Body, UIMove.None);
+		if (UI.Toggle("Loop", ref sphereLoop, Sprite.ToggleOff, Sprite.ToggleOn, UIBtnLayout.CenterNoText))
+		{
+			if (sphereLoop) sphereInst = sphereSound.Play(spherePose.position, new SoundPlay { flags = SoundFlags.Loop, volume = FileTrim() });
+			else            sphereInst.Stop();
+		}
+		UI.SameLine();
+		UI.PushEnabled(!sphereLoop);
+		if (UI.ButtonImg("Play", Sprite.ArrowRight, UIBtnLayout.CenterNoText))
+			sphereInst = sphereSound.Play(spherePose.position, new SoundPlay { volume = FileTrim() });
+		UI.PopEnabled();
+		UI.SameLine();
+		UI.Label(area ? $"Area {radius * 2 * 100:0}cm" : "Point");
+		UI.WindowEnd();
+		UI.HandleEnd();
+
+		// Keep the voice glued to the sphere: a sphere shape when it's an
+		// area, and a plain position - which clears the shape - when not.
+		// Only mono spatializes, other formats ignore position entirely.
+		if (sphereInst.IsPlaying && sphereSound.Channels == SoundChannels.Mono)
+		{
+			if (area) sphereInst.SetShape(spherePose.position, radius);
+			else      sphereInst.Position = spherePose.position;
+		}
+	}
+
+	// Major pentatonic in just intonation - the scale where nothing clashes.
+	static readonly float[] pentatonic = { 1, 9/8f, 5/4f, 3/2f, 5/3f };
 	float      genDuration = 0.5f;
 	Sound      genSound;
-	Bounds     genVolume = new Bounds( Demo.contentPose.Translation + new Vec3(0, -0.3f, 0), new Vec3(0.25f, 0.25f, 0.25f));
-	bool       genPrevContains = false;
+	Bounds     genVolume = new Bounds( Demo.contentPose.Translation, new Vec3(0.25f, 0.25f, 0.25f));
+	bool       genPrevDrawing = false;
 	List<LinePoint> genPath = new List<LinePoint>();
 
 	Sound       wandStream;
 	SoundInst   wandStreamInst;
-	Pose        wandPose = (Demo.contentPose * Matrix.T(-0.1f,0,0)).Pose;
+	Pose        wandPose = (Demo.contentPose * Matrix.T(-0.38f, -0.05f, 0)).Pose;
 	Model       wandModel;
 	Vec3        wandTipPrev;
 	LinePoint[] wandFollow = null;
@@ -32,14 +92,15 @@ class DemoSound : ITest
 	float       wandIntensity;
 	void StepWand()
 	{
-		if (wandModel  == null) wandModel = Model.FromFile("Wand.glb", Shader.UI);
-		if (wandFollow == null) { wandFollow = new LinePoint[10]; for (int i=0;i<wandFollow.Length;i+=1) wandFollow[i] = new LinePoint(Vec3.Zero, new Color(1,1,1,i/(float)wandFollow.Length), (i / (float)wandFollow.Length)*0.01f+0.001f); }
+		if (wandModel == null) wandModel = Model.FromFile("Wand.glb", Shader.UI);
 
 		UI.HandleBegin("wand", ref wandPose, wandModel.Bounds);
 		wandModel.Draw(Matrix.Identity);
 		UI.HandleEnd();
 
 		Vec3 wandTip = wandPose.ToMatrix() * (wandModel.Bounds.center + wandModel.Bounds.dimensions.y * 0.5f * Vec3.Up);
+		// The trail seeds at the tip, so the first frame has no streak.
+		if (wandFollow == null) { wandFollow = new LinePoint[10]; for (int i=0;i<wandFollow.Length;i+=1) wandFollow[i] = new LinePoint(wandTip, new Color(1,1,1,i/(float)wandFollow.Length), (i / (float)wandFollow.Length)*0.01f+0.001f); }
 		// The stream is born at the tip, and the previous-tip seed matches
 		// so the first frame has no teleport and no spurious velocity.
 		if (wandStream == null) {
@@ -50,7 +111,7 @@ class DemoSound : ITest
 
 		Vec3  wandVel   = (wandTip - wandTipPrev) * Time.Stepf;
 		float wandSpeed = wandVel.Magnitude*100;
-			
+
 		int count = Math.Max(0, (int)(0.1f*48000) - (wandStream.TotalSamples - wandStream.CursorSamples));
 		if (wandSamples.Length < count)
 			wandSamples = new float[count];
@@ -71,84 +132,125 @@ class DemoSound : ITest
 		wandTipPrev = wandTip;
 	}
 
-	public void Initialize() {
-		/// :CodeSample: Sound Sound.FromFile Sound.Play
-		/// ### Basic usage
-		Sound sound = Sound.FromFile("BlipNoise.wav");
-		sound.Play(Vec3.Zero);
-		/// :End:
+	static readonly string[] envNames = { "Off", "Room", "Hall", "Cave", "Forest", "Field" };
+	AudioEnv envActive = AudioEnv.Off;
 
-		/// :CodeSample: Sound Sound.Generate
-		/// ### Generating a sound via generator
-		/// Making a procedural sound is pretty straightforward! Here's
-		/// an example of building a 500ms sound from two frequencies of
-		/// sin wave.
-		Sound genSound = Sound.Generate((t) =>
+	// The acoustic environment is global state, so the demo owns it only
+	// while it's up - Shutdown always hands back a dry mix.
+	void StepEnvironment()
+	{
+		for (int i = 0; i < envNames.Length; i++)
 		{
-			float band1 = SKMath.Sin(t * 523.25f * SKMath.Tau); // a 'C' tone
-			float band2 = SKMath.Sin(t * 659.25f * SKMath.Tau); // an 'E' tone
-			const float volume = 0.1f;
-			return (band1*0.6f + band2*0.4f) * volume;
-		}, 0.5f);
-		genSound.Play(Vec3.Zero);
-		/// :End:
-
-		/// :CodeSample: Sound Sound.FromSamples
-		/// ### Generating a sound via samples
-		/// Making a procedural sound is pretty straightforward! Here's
-		/// an example of building a 500ms sound from two frequencies of
-		/// sin wave.
-		float[] samples = new float[(int)(48000*0.5f)];
-		for (int i = 0; i < samples.Length; i++)
-		{
-			float t = i/48000.0f;
-			float band1 = SKMath.Sin(t * 523.25f * SKMath.Tau); // a 'C' tone
-			float band2 = SKMath.Sin(t * 659.25f * SKMath.Tau); // an 'E' tone
-			const float volume = 0.1f;
-			samples[i] = (band1 * 0.6f + band2 * 0.4f) * volume;
+			if (i % 3 != 0) UI.SameLine();
+			if (UI.Radio(envNames[i], envActive == (AudioEnv)i) && envActive != (AudioEnv)i)
+			{
+				envActive = (AudioEnv)i;
+				Audio.SetEnvironment(envActive);
+			}
 		}
-		Sound sampleSound = Sound.FromSamples(samples);
-		sampleSound.Play(Vec3.Zero);
-		/// :End:
 	}
-	public void Shutdown() { }
+
+	string fileName     = "BlipNoise.wav";
+	float  fileDecibels = 80;
+
+	// The slider is a per-voice trim offset from the sound's declared
+	// loudness - the asset keeps its truth, only this playback gets moved.
+	float FileTrim() => MathF.Pow(10, (fileDecibels - sphereSound.Decibels) / 20);
+
+	// Any sound file can go on the sphere - the loader sorts out what it
+	// is, and the label reports the result.
+	void StepSoundFile()
+	{
+		if (UI.Button("Open file..."))
+			Platform.FilePicker(PickerMode.Open, file => {
+				sphereInst.Stop();
+				sphereSound  = Sound.FromFile(file);
+				fileName     = Path.GetFileName(file);
+				fileDecibels = sphereSound.Decibels;
+				if (sphereLoop)
+					sphereInst = sphereSound.Play(spherePose.position, new SoundPlay { flags = SoundFlags.Loop, volume = FileTrim() });
+			}, null, ".wav", ".mp3", ".flac");
+		UI.SameLine();
+		UI.Label(fileName);
+
+		string kind = sphereSound.Channels switch {
+			SoundChannels.Stereo     => "Stereo, plays head-locked",
+			SoundChannels.Ambisonic1 => "Ambisonic, a world-fixed field",
+			_                        => "Mono, spatializes on the sphere",
+		};
+		UI.Label(kind);
+
+		UI.Label($"{fileDecibels:0}dB", V.XY(4 * U.cm, UI.LineHeight));
+		UI.SameLine();
+		if (UI.HSlider("Decibels", ref fileDecibels, 40, 110, 1, 8 * U.cm))
+			sphereInst.Volume = FileTrim();
+	}
+
+	public void Initialize()
+	{
+		sphereMat = Material.Unlit.Copy();
+		sphereMat.Transparency = Transparency.Blend;
+		sphereMat.DepthWrite   = false;
+	}
+
+	public void Shutdown()
+	{
+		Audio.SetEnvironment(AudioEnv.Off);
+		sphereInst    .Stop();
+		wandStreamInst.Stop();
+	}
 
 	public void Step()
 	{
+		StepSoundSphere();
 		StepWand();
 
 		UI.WindowBegin("Sound", ref windowPose);
-		if (UI.Button("BlipNoise.wav"))
-			fileSound.Play(windowPose.position);
+
+		UI.Text("Sound File", Align.TopCenter);
 		UI.PanelBegin();
-			UI.Label("Generated Sound:");
-			UI.Label("Duration"); UI.SameLine();
-			UI.HSlider("Duration", ref genDuration, 0.1f, 2, 0, 8 * U.cm);
-			if (genSound != null && UI.Button("Play"))
-				genSound.Play(windowPose.position);
+		StepSoundFile();
 		UI.PanelEnd();
+
+		UI.Text("Draw a Sound", Align.TopCenter);
+		UI.PanelBegin();
+		UI.Text("Pinch and drag in the box to draw a sound!");
+		UI.Label("Duration"); UI.SameLine();
+		UI.HSlider("Duration", ref genDuration, 0.1f, 2, 0, 8 * U.cm);
+		UI.PushEnabled(genSound != null);
+		if (UI.Button("Play")) genSound.Play(genVolume.center);
+		UI.PopEnabled();
+		UI.PanelEnd();
+
+		UI.Text("Environment", Align.TopCenter);
+		UI.PanelBegin();
+		StepEnvironment();
+		UI.PanelEnd();
+
 		UI.WindowEnd();
 
 		Default.MeshCube.Draw(Default.MaterialUIBox, Matrix.TS(genVolume.center, genVolume.dimensions));
 
 		Hand hand     = Input.Hand(Handed.Right);
-		bool contains = genVolume.Contains(hand[FingerId.Index, JointId.Tip].position);
-		if (contains && !genPrevContains)
+		Vec3 tip      = hand[FingerId.Index, JointId.Tip].position;
+		bool contains = genVolume.Contains(tip);
+		bool drawing  = contains && hand.IsPinched;
+
+		if (contains)
+			Mesh.Sphere.Draw(Material.Unlit, Matrix.TS(tip, 0.01f), Color.White);
+
+		if (drawing && !genPrevDrawing)
 			genPath.Clear();
-		if (contains) {
-			Vec3 pt = hand[FingerId.Index, JointId.Tip].position;
-			if (genPath.Count == 0 || Vec3.DistanceSq(pt, genPath[genPath.Count-1].pt) > 0.0001f) {
-				Vec3 rgb = (pt + (genVolume.dimensions / 2)) / genVolume.dimensions.x;
-				genPath.Add(new LinePoint(pt, new Color(rgb.x, rgb.y, rgb.z), 0.01f));
+		if (drawing) {
+			if (genPath.Count == 0 || Vec3.DistanceSq(tip, genPath[genPath.Count-1].pt) > 0.0001f) {
+				Vec3 rgb = (tip + (genVolume.dimensions / 2)) / genVolume.dimensions.x;
+				genPath.Add(new LinePoint(tip, new Color(rgb.x, rgb.y, rgb.z), 0.01f));
 			}
 		}
 
-		if (Input.Key(Key.Space).IsJustActive())
-			fileSound.Play(hand[FingerId.Index,JointId.Tip].position);
-
-		if (!contains && genPrevContains)
+		if (!drawing && genPrevDrawing && genPath.Count > 1)
 		{
-			double band1=0, band2=0, tp=0;
+			double phase = 0, freq = 0, tp = 0;
 			genSound = Sound.Generate((t) =>
 			{
 				double e = t - tp;
@@ -160,21 +262,36 @@ class DemoSound : ITest
 				int   s2       = (int)Math.Ceiling(sampleAt);
 				Vec3  sample   = (Vec3.Lerp(genPath[s1].pt, genPath[s2].pt, pct)-genVolume.center + genVolume.dimensions / 2) / genVolume.dimensions.x;
 
-				band1 += e * (600 + sample.x * 4000) * 6.28f;
-				band2 += e * (100 + sample.z * 600 ) * 6.28f;
+				// X picks from two octaves of pentatonic and the oscillator
+				// glides to it, theremin style - the slew also smooths the
+				// corners between recorded path points.
+				int    note   = Math.Clamp((int)(sample.x * 10), 0, 9);
+				double target = 220 * pentatonic[note % 5] * (1 << note / 5);
+				if (freq == 0) freq = target;
+				freq  += (target - freq) * Math.Min(1, e * 200);
+				phase += e * freq * 6.28318;
 
-				// A 10ms attack/release window: without it the waveform
-				// starts and ends on a step discontinuity, which is a
-				// sharp audible click at both edges.
+				// Z blends in harmonics: the back of the box is a pure dark
+				// tone, up close to the user is bright.
+				float bright = sample.z;
+				float wave   = (float)(Math.Sin(phase)
+					+ Math.Sin(phase * 2) * 0.45 * bright
+					+ Math.Sin(phase * 3) * 0.22 * bright);
+
+				// A 10ms attack/release window - without it the waveform
+				// starts and ends on a step, an audible click at both edges.
 				float envelope = Math.Min(1, Math.Min(t, genDuration - t) / 0.01f);
 
-				return (float)(Math.Sin(band1)*0.3 + Math.Sin(band2)*0.3) * sample.y * 0.5f * envelope;
+				return wave * sample.y * 0.5f * envelope;
 			}, genDuration);
+			// Normalization makes declared loudness the only volume knob -
+			// the default 80dB is loud-radio, this is conversation level.
+			genSound.Decibels = 68;
 			genSound.Play(genVolume.center);
 		}
 		Lines.Add(genPath.ToArray());
-		genPrevContains = contains;
+		genPrevDrawing = drawing;
 
-		Demo.ShowSummary(title, description, new Bounds(V.XY0(0,-0.14f), V.XYZ(.4f, .6f, 0.3f)));
+		Demo.ShowSummary(title, description, new Bounds(V.XY0(-0.02f, 0), V.XYZ(.84f, .48f, .3f)));
 	}
 }

@@ -32,6 +32,9 @@ class DemoRainThunder : ITest
 	Pose   windowPose = (Demo.contentPose * Matrix.T(0, 0, 0)).Pose;
 	Random rand       = new Random(1);
 
+	static readonly string[] envNames = { "Off", "Room", "Hall", "Cave", "Forest", "Field" };
+	AudioEnv envActive = AudioEnv.Off;
+
 	// Pre-rendered variant pools: each variant is synthesized from its own
 	// drop diameter, and *declares* the loudness that size of drop has.
 	struct DropVariant { public Sound sound; public float dbOffset; public float d_mm; }
@@ -524,6 +527,7 @@ class DemoRainThunder : ITest
 
 	public void Shutdown()
 	{
+		Audio.SetEnvironment(AudioEnv.Off);
 		Renderer.SkyLight = skyOriginal;
 		skyFlashOn        = false;
 		washBrightInst.Stop();
@@ -822,6 +826,19 @@ class DemoRainThunder : ITest
 		UI.Label("Drop dB",new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("ddb",   ref dropDb,   40, 65, 0);
 		UI.Label("Wash dB",new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("wdb",   ref washDb,   50, 80, 0);
 		UI.Label("Bright", new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("brt",   ref bedBright, 0, 1, 0);
+		UI.PanelEnd();
+
+		UI.Text("Environment", Align.TopCenter);
+		UI.PanelBegin();
+		for (int i = 0; i < envNames.Length; i++)
+		{
+			if (i % 3 != 0) UI.SameLine();
+			if (UI.Radio(envNames[i], envActive == (AudioEnv)i) && envActive != (AudioEnv)i)
+			{
+				envActive = (AudioEnv)i;
+				Audio.SetEnvironment(envActive);
+			}
+		}
 		UI.PanelEnd();
 
 		UI.Text("Thunder", Align.TopCenter);

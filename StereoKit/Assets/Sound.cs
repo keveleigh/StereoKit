@@ -203,10 +203,15 @@ namespace StereoKit
 		}
 
 		/// <summary>Loads a sound from file! StereoKit supports .wav, .mp3,
-		/// and .flac files. Mono and stereo channel layouts are preserved -
-		/// mono sounds spatialize, stereo plays head-locked - and surround
-		/// content is downmixed to stereo. Decoding happens asynchronously,
-		/// so the sound may not be playable the same frame.</summary>
+		/// and .flac files. Mono sounds spatialize, stereo plays head-locked,
+		/// and 4 channel files load as first order ambisonics: world-fixed
+		/// sound fields that counter-rotate against the user's head, ideal
+		/// for environmental beds like rain, wind, or crowds. Bare 4 channel
+		/// content is read as ambiX (ACN order, SN3D - the YouTube 360
+		/// convention), FuMa-tagged .amb files are converted on load, and
+		/// other surround layouts downmix to stereo. Check Channels for what
+		/// a file loaded as. Decoding happens asynchronously, so the sound
+		/// may not be playable the same frame.</summary>
 		/// <param name="filename">Name of the audio file! Supports .wav,
 		/// .mp3 and .flac files.</param>
 		/// <returns>A sound object, or null if the file isn't found.</returns>
@@ -228,22 +233,6 @@ namespace StereoKit
 		public static Sound FromMemory(in byte[] data, string id)
 		{
 			IntPtr inst = NativeAPI.sound_create_mem(id, data, (UIntPtr)data.Length);
-			return inst == IntPtr.Zero ? null : new Sound(inst);
-		}
-
-		/// <summary>Loads a first order ambisonic sound from file! The file
-		/// must contain exactly 4 channels in the ambiX convention (ACN
-		/// order W,Y,Z,X, SN3D normalization) - the format YouTube 360 and
-		/// most ambisonic tools produce. Ambisonic sounds are world-fixed
-		/// sound fields that counter-rotate against the user's head, ideal
-		/// for environmental beds like rain, wind, or crowd recordings.
-		/// </summary>
-		/// <param name="filename">A 4 channel ambiX .wav or .flac file.
-		/// </param>
-		/// <returns>A sound object, or null if the file isn't found.</returns>
-		public static Sound FromFileAmbisonic(string filename)
-		{
-			IntPtr inst = NativeAPI.sound_create_ambisonic(filename);
 			return inst == IntPtr.Zero ? null : new Sound(inst);
 		}
 

@@ -2568,7 +2568,6 @@ SK_API void         sound_set_id         (sound_t sound, const char *id);
 SK_API const char*  sound_get_id         (const sound_t sound);
 SK_API sound_t      sound_create         (const char *filename_utf8);
 SK_API sound_t      sound_create_mem     (const char *id, const void *in_arr_data, size_t data_size);
-SK_API sound_t      sound_create_ambisonic(const char *filename_utf8);
 SK_API sound_t      sound_create_stream  (float buffer_duration, sound_channels_ channels sk_default(sound_channels_mono), sound_sample_rate_ sample_rate sk_default(sound_sample_rate_default));
 SK_API sound_t      sound_create_samples (const float *in_arr_samples_at_48000s, uint64_t sample_count, sound_channels_ channels sk_default(sound_channels_mono));
 SK_API sound_channels_ sound_get_channels(sound_t sound);
@@ -2603,12 +2602,67 @@ SK_API uint64_t     sound_inst_get_cursor   (sound_inst_t sound_inst);
 SK_API void         sound_inst_set_shape    (sound_inst_t sound_inst, const vec3 *in_arr_points, int32_t point_count, float radius);
 SK_API float        sound_inst_get_intensity(sound_inst_t sound_inst);
 
+/*Acoustic environment presets for audio_env_preset - starting points in
+  the environment parameter space, from enclosed halls to open outdoor
+  spaces.*/
+typedef enum audio_env_ {
+	/*No environmental acoustics at all, sounds play dry. This is the
+	  default, and costs nothing - the right choice for AR, where synthetic
+	  reverb would fight the real room's acoustics.*/
+	audio_env_off = 0,
+	/*A small furnished room: a short, balanced tail.*/
+	audio_env_room,
+	/*A large hall: a long, bright, spacious tail.*/
+	audio_env_hall,
+	/*A cavern: a very long, dense tail with hard surfaces.*/
+	audio_env_cave,
+	/*A forest: no walls, just a short dark scatter off trunks and
+	  foliage - quiet, but unmistakably outdoors-with-presence.*/
+	audio_env_forest,
+	/*An open field: nearly dry, the faintest hint of ground scatter.
+	  Openness itself is the cue.*/
+	audio_env_field,
+} audio_env_;
+
+/*A perceptual description of the acoustic space sounds play in - an
+  environment rather than a literal room, so it covers halls through
+  forests. Spatial sounds feed a shared reverb whose level stays constant
+  with distance, so the direct-to-reverb balance naturally carries how far
+  away a sound is. A wet of 0 disables the system entirely at zero cost.
+  Start from audio_env_preset and adjust, or build values directly.*/
+typedef struct audio_env_t {
+	/*Reverb level, 0-1. 0 turns environmental acoustics off completely,
+	  and is the default.*/
+	float wet;
+	/*Decay time in seconds - how long the tail takes to fall 60dB at mid
+	  frequencies. Rooms are ~0.4s, cathedrals a few seconds.*/
+	float decay;
+	/*0-1, extra high frequency decay. Soft or leafy spaces are high,
+	  tiled rooms are low.*/
+	float damp;
+	/*Size of the space in meters. Drives the spacing of the echoes that
+	  build the tail. Changing this restarts the tail, where the other
+	  fields all glide smoothly.*/
+	float size;
+	/*0-1, how quickly discrete echoes blur into a dense wash. Scattered
+	  spaces like forests are high, bare rooms lower.*/
+	float scatter;
+	/*0-1, level of the distinct early reflections off the space's
+	  surfaces - the first bounces that glue a sound to the room. The
+	  ground bounce keeps a minimum presence; walls and ceiling scale
+	  fully with this, so outdoor spaces sit near 0.*/
+	float reflect;
+} audio_env_t;
+
 SK_API void         audio_set_volume        (float volume);
 SK_API float        audio_get_volume        (void);
 SK_API void         audio_set_bus_volume    (sound_bus_ bus, float volume);
 SK_API float        audio_get_bus_volume    (sound_bus_ bus);
 SK_API void         audio_set_listener      (const pose_t *opt_pose);
 SK_API float        audio_get_output_decibels(void);
+SK_API audio_env_t  audio_env_preset        (audio_env_ preset);
+SK_API void         audio_set_env           (audio_env_t environment);
+SK_API audio_env_t  audio_get_env           (void);
 
 ///////////////////////////////////////////
 

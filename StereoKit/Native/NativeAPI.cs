@@ -702,7 +702,6 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_set_id(IntPtr sound, [MarshalAs(UnmanagedType.LPUTF8Str)] string id);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_get_id(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create([MarshalAs(UnmanagedType.LPUTF8Str)] string filename_utf8);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_ambisonic([MarshalAs(UnmanagedType.LPUTF8Str)] string filename_utf8);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_stream(float buffer_duration, SoundChannels channels, SoundSampleRate sample_rate);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_samples([In] float[] in_arr_samples_at_48000s, ulong sample_count, SoundChannels channels);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern SoundChannels sound_get_channels(IntPtr sound);
@@ -745,6 +744,9 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_bus_volume(SoundBus bus);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_listener(IntPtr opt_pose);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_output_decibels();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AudioEnvironment audio_env_preset(AudioEnv preset);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_env(AudioEnvironment environment);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AudioEnvironment audio_get_env();
 
 		///////////////////////////////////////////
 

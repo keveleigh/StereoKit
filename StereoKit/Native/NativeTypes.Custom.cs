@@ -197,6 +197,18 @@ namespace StereoKit
 		public DisplayBlend displayType { get => DisplayBlend.None;  set { } }
 	}
 
+	public partial struct AudioEnvironment
+	{
+		/// <summary>Fetches the parameter values behind one of the built-in
+		/// environment presets! These make good starting points for custom
+		/// spaces - grab one, tweak a field or two, and assign it to
+		/// Audio.Environment.</summary>
+		/// <param name="preset">The preset to fetch values for.</param>
+		/// <returns>The preset's parameter values.</returns>
+		public static AudioEnvironment Preset(AudioEnv preset)
+			=> NativeAPI.audio_env_preset(preset);
+	}
+
 	// Hand-written mirror of the C header's vert_t (@noimpl in APIGen) so
 	// the fields can carry VertComponent attributes. The doc comments here
 	// are duplicated from stereokit.h, keep them in sync!
