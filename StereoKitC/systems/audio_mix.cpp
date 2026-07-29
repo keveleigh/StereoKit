@@ -756,11 +756,11 @@ float audio_get_volume() {
 	return atomic_load_f32(&au_master_volume);
 }
 void audio_set_bus_volume(sound_bus_ bus, float volume) {
-	if (bus < 0 || bus >= AU_BUS_COUNT) { log_errf("audio_set_bus_volume: invalid bus %d", bus); return; }
+	if ((uint32_t)bus >= AU_BUS_COUNT) { log_errf("audio_set_bus_volume: invalid bus %d", bus); return; }
 	atomic_store_f32(&au_bus_volumes[bus], fmaxf(0, fminf(1, volume)));
 }
 float audio_get_bus_volume(sound_bus_ bus) {
-	if (bus < 0 || bus >= AU_BUS_COUNT) return 0;
+	if ((uint32_t)bus >= AU_BUS_COUNT) return 0;
 	return atomic_load_f32(&au_bus_volumes[bus]);
 }
 float audio_get_output_decibels() {

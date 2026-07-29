@@ -109,8 +109,9 @@ class DemoSound : ITest
 			wandStreamInst = wandStream.Play(wandTip);
 		}
 
-		Vec3  wandVel   = (wandTip - wandTipPrev) * Time.Stepf;
-		float wandSpeed = wandVel.Magnitude*100;
+		// Tip speed in m/s, a brisk ~3m/s swing reaches full intensity.
+		Vec3  wandVel   = (wandTip - wandTipPrev) / Math.Max(0.001f, Time.Stepf);
+		float wandSpeed = wandVel.Magnitude / 3;
 
 		int count = Math.Max(0, (int)(0.1f*48000) - (wandStream.TotalSamples - wandStream.CursorSamples));
 		if (wandSamples.Length < count)
@@ -118,8 +119,12 @@ class DemoSound : ITest
 		for (int i = 0; i < count; i++)
 		{
 			wandIntensity = Math.Min(1, SKMath.Lerp(wandIntensity, wandSpeed, 0.001f));
-			wandTime += (1 / 48000.0) * (30000 * wandIntensity + 2000);
-			wandSamples[i] = (float)Math.Sin(wandTime) * wandIntensity;
+			// The whistle glides A3->A5 with swing speed, a mid range where
+			// a sine stays soft on the ear.
+			wandTime += (1 / 48000.0) * (220 + 660 * wandIntensity) * 6.28318;
+			// Streams skip loudness normalization, so bake in the sine's √2
+			// crest factor - full intensity then sits at the declared dB.
+			wandSamples[i] = (float)Math.Sin(wandTime) * wandIntensity * 1.4142f;
 		}
 
 		wandStreamInst.Position = wandTip;
