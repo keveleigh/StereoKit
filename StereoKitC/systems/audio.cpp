@@ -25,6 +25,7 @@ bool              au_recording      = false;
 bool              au_paused         = false;
 pose_t            au_listener_override     = {};
 bool              au_listener_has_override = false;
+double            au_main_clock            = 0;
 
 ///////////////////////////////////////////
 
@@ -286,9 +287,11 @@ void audio_set_listener(const pose_t *opt_pose) {
 void audio_step() {
 	profiler_zone();
 
+	au_main_clock += time_stepf_unscaled();
 	pose_t listener = au_listener_has_override ? au_listener_override : input_head();
 	audio_listener_publish(listener);
 	audio_mix_drain_returns();
+	sound_play_pending_step();
 	audio_voice_prefetch();
 	audio_voice_shapes_step(listener.position, time_stepf_unscaled());
 	audio_voice_rank();
@@ -315,7 +318,8 @@ void audio_shutdown() {
 		ma_context_uninit(&au_context);
 
 	sound_release(au_mic_sound);
-	au_mic_sound = nullptr;
+	au_mic_sound  = nullptr;
+	au_main_clock = 0;
 }
 
 ///////////////////////////////////////////

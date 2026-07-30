@@ -534,7 +534,8 @@ namespace StereoKit
 	{
 		/// <summary>A 0-1 volume trim on top of the Sound's Decibels
 		/// loudness. 0 is treated as the default full trim of 1, use a tiny
-		/// value for real silence.</summary>
+		/// value for real silence. Values above 1 amplify, negatives clamp
+		/// to 0.</summary>
 		public float volume;
 		/// <summary>Playback rate multiplier, clamped to 0.25-4. 1 is
 		/// normal speed, 2 is twice as fast and an octave up. 0 is treated

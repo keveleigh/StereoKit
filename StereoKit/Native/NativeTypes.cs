@@ -83,14 +83,15 @@ namespace StereoKit
 		/// and is the default.</summary>
 		public float wet;
 		/// <summary>Decay time in seconds - how long the tail takes to fall 60dB at mid
-		/// frequencies. Rooms are ~0.4s, cathedrals a few seconds.</summary>
+		/// frequencies. Rooms are ~0.4s, cathedrals a few seconds. Clamped to
+		/// 0.05-10.</summary>
 		public float decay;
 		/// <summary>0-1, extra high frequency decay. Soft or leafy spaces are high,
 		/// tiled rooms are low.</summary>
 		public float damp;
-		/// <summary>Size of the space in meters. Drives the spacing of the echoes that
-		/// build the tail. Changing this restarts the tail, where the other
-		/// fields all glide smoothly.</summary>
+		/// <summary>Size of the space in meters, clamped to 2-40. Drives the spacing of
+		/// the echoes that build the tail. Changing this restarts the tail,
+		/// where the other fields all glide smoothly.</summary>
 		public float size;
 		/// <summary>0-1, how quickly discrete echoes blur into a dense wash. Scattered
 		/// spaces like forests are high, bare rooms lower.</summary>

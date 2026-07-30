@@ -2502,7 +2502,8 @@ typedef enum sound_channels_ {
   speed.*/
 typedef struct sound_play_t {
 	/*A 0-1 volume trim on top of the sound's decibel loudness. 0 is treated
-	  as the default full trim of 1. For real silence, use a tiny value.*/
+	  as the default full trim of 1. For real silence, use a tiny value.
+	  Values above 1 amplify, negatives clamp to 0.*/
 	float        volume;
 	/*Playback rate multiplier, clamped to 0.25-4. 1 is normal speed, 2 is
 	  twice as fast and an octave up. 0 is treated as 1.*/
@@ -2571,6 +2572,7 @@ SK_API sound_t      sound_create_mem     (const char *id, const void *in_arr_dat
 SK_API sound_t      sound_create_stream  (float buffer_duration, sound_channels_ channels sk_default(sound_channels_mono), sound_sample_rate_ sample_rate sk_default(sound_sample_rate_default));
 SK_API sound_t      sound_create_samples (const float *in_arr_samples_at_48000s, uint64_t sample_count, sound_channels_ channels sk_default(sound_channels_mono));
 SK_API sound_channels_ sound_get_channels(sound_t sound);
+SK_API asset_state_ sound_asset_state    (const sound_t sound);
 SK_API sound_t      sound_generate       (void (*audio_generator)(float *out_arr_samples, uint64_t frame_start, uint64_t frame_count), float duration, sound_channels_ channels sk_default(sound_channels_mono));
 SK_API void         sound_write_samples  (sound_t sound, const float *in_arr_samples,  uint64_t sample_count);
 SK_API uint64_t     sound_read_samples   (sound_t sound, float       *out_arr_samples, uint64_t sample_count);
@@ -2635,14 +2637,15 @@ typedef struct audio_env_t {
 	  and is the default.*/
 	float wet;
 	/*Decay time in seconds - how long the tail takes to fall 60dB at mid
-	  frequencies. Rooms are ~0.4s, cathedrals a few seconds.*/
+	  frequencies. Rooms are ~0.4s, cathedrals a few seconds. Clamped to
+	  0.05-10.*/
 	float decay;
 	/*0-1, extra high frequency decay. Soft or leafy spaces are high,
 	  tiled rooms are low.*/
 	float damp;
-	/*Size of the space in meters. Drives the spacing of the echoes that
-	  build the tail. Changing this restarts the tail, where the other
-	  fields all glide smoothly.*/
+	/*Size of the space in meters, clamped to 2-40. Drives the spacing of
+	  the echoes that build the tail. Changing this restarts the tail,
+	  where the other fields all glide smoothly.*/
 	float size;
 	/*0-1, how quickly discrete echoes blur into a dense wash. Scattered
 	  spaces like forests are high, bare rooms lower.*/

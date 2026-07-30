@@ -113,7 +113,8 @@ class DemoSound : ITest
 		Vec3  wandVel   = (wandTip - wandTipPrev) / Math.Max(0.001f, Time.Stepf);
 		float wandSpeed = wandVel.Magnitude / 3;
 
-		int count = Math.Max(0, (int)(0.1f*48000) - (wandStream.TotalSamples - wandStream.CursorSamples));
+		// Keep ~100ms queued ahead of the voice's playback position.
+		int count = Math.Max(0, (int)(0.1f*48000) - (wandStream.TotalSamples - (int)wandStreamInst.Cursor));
 		if (wandSamples.Length < count)
 			wandSamples = new float[count];
 		for (int i = 0; i < count; i++)
@@ -174,14 +175,19 @@ class DemoSound : ITest
 				fileDecibels = sphereSound.Decibels;
 				if (sphereLoop)
 					sphereInst = sphereSound.Play(spherePose.position, new SoundPlay { flags = SoundFlags.Loop, volume = FileTrim() });
-			}, null, ".wav", ".mp3", ".flac");
+			}, null, ".wav", ".mp3");
 		UI.SameLine();
 		UI.Label(fileName);
 
-		string kind = sphereSound.Channels switch {
-			SoundChannels.Stereo     => "Stereo, plays head-locked",
-			SoundChannels.Ambisonic1 => "Ambisonic, a world-fixed field",
-			_                        => "Mono, spatializes on the sphere",
+		// Channels isn't meaningful until the async decode finishes, so the
+		// label tracks the load state immediate-mode.
+		string kind = sphereSound.AssetState switch {
+			AssetState.Loaded => sphereSound.Channels switch {
+				SoundChannels.Stereo     => "Stereo, plays head-locked",
+				SoundChannels.Ambisonic1 => "Ambisonic, a world-fixed field",
+				_                        => "Mono, spatializes on the sphere" },
+			AssetState.Loading => "Loading...",
+			_                  => "Failed to load!",
 		};
 		UI.Label(kind);
 
@@ -200,7 +206,6 @@ class DemoSound : ITest
 
 	public void Shutdown()
 	{
-		Audio.SetEnvironment(AudioEnv.Off);
 		sphereInst    .Stop();
 		wandStreamInst.Stop();
 	}

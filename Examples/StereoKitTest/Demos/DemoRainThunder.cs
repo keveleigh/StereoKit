@@ -4,6 +4,8 @@
 
 using StereoKit;
 using System;
+using System.Collections.Concurrent;
+using System.Threading.Tasks;
 
 /// <summary>The audio system's acceptance scene: a real-time rainstorm
 /// built entirely from the revamp's features. Individual drop transients
@@ -32,9 +34,6 @@ class DemoRainThunder : ITest
 	Pose   windowPose = (Demo.contentPose * Matrix.T(0, 0, 0)).Pose;
 	Random rand       = new Random(1);
 
-	static readonly string[] envNames = { "Off", "Room", "Hall", "Cave", "Forest", "Field" };
-	AudioEnv envActive = AudioEnv.Off;
-
 	// Pre-rendered variant pools: each variant is synthesized from its own
 	// drop diameter, and *declares* the loudness that size of drop has.
 	struct DropVariant { public Sound sound; public float dbOffset; public float d_mm; }
@@ -54,7 +53,7 @@ class DemoRainThunder : ITest
 	SoundInst washFarInst;
 
 	// Rain dials
-	float rainIntensity = 1.0f;
+	float rainIntensity = 0.5f;
 	float gustiness     = 0.5f;
 	float dropDb        = 55;
 	float dropSpread    = 6;     // Radius of the drop disk, meters
@@ -230,21 +229,48 @@ class DemoRainThunder : ITest
 		return len;
 	}
 
-	// A pre-rendered foreground variant. v_ms overrides terminal speed for
-	// drops that didn't fall far - splash droplets.
-	DropVariant MakeDrop(int seed, float d_mm, bool water, float v_ms = 0)
+	// Pre-rendering all this audio synchronously stalls startup by over a
+	// second. Buffers fill on background threads as pure math, and Step
+	// turns finished pieces into Sounds on the main thread. Rain starts
+	// with the first variants, and gains variety as the pools fill in.
+	ConcurrentQueue<Action> genReady = new ConcurrentQueue<Action>();
+	void GenAsync(int sampleCount, Action<float[]> fill, Action<float[]> finish)
+	{
+		Task.Run(() => {
+			float[] buf = new float[sampleCount];
+			fill(buf);
+			genReady.Enqueue(() => finish(buf));
+		});
+	}
+
+	// A pre-rendered foreground variant, filled into its pool slot when
+	// generation lands. v_ms overrides terminal speed for drops that
+	// didn't fall far - splash droplets.
+	void MakeDrop(DropVariant[] pool, int index, int seed, float d_mm, bool water, float v_ms = 0, float dbBonus = 0)
 	{
 		if (v_ms == 0) v_ms = 9.65f - 10.3f * MathF.Exp(-0.6f * d_mm);
 		float fall = v_ms;
-
-		DropVariant v;
-		v.sound = Sound.Generate((samples, start) =>
-			RenderTap(new Random(seed), d_mm, water, fall, 1, samples),
-			TapTau(d_mm, water) * 6);
 		// Loudness follows impact energy: ~d^1.5*v in amplitude terms.
-		v.dbOffset = 20 * MathF.Log10(MathF.Pow(d_mm, 1.5f) * v_ms) - 26;
-		v.d_mm     = d_mm;
-		return v;
+		float dbOffset = 20 * MathF.Log10(MathF.Pow(d_mm, 1.5f) * v_ms) - 26 + dbBonus;
+
+		GenAsync((int)(TapTau(d_mm, water) * 6 * 48000),
+			samples => RenderTap(new Random(seed), d_mm, water, fall, 1, samples),
+			buf => pool[index] = new DropVariant {
+				sound    = Sound.FromSamples(buf),
+				dbOffset = dbOffset,
+				d_mm     = d_mm });
+	}
+
+	// The pools fill in from background generation, so a pick lands on the
+	// nearest finished variant - or nothing at all, in the first frames.
+	static DropVariant PickReady(DropVariant[] pool, int pick)
+	{
+		for (int o = 0; o < pool.Length; o++)
+		{
+			if (pick - o >= 0          && pool[pick - o].sound != null) return pool[pick - o];
+			if (pick + o < pool.Length && pool[pick + o].sound != null) return pool[pick + o];
+		}
+		return default;
 	}
 
 	// The near bed's content: far-field taps from the same ground+puddle
@@ -345,12 +371,12 @@ class DemoRainThunder : ITest
 		for (int i = 0; i < drops.Length; i++)
 		{
 			float t01 = i / (drops.Length - 1.0f);
-			drops[i] = MakeDrop(100 + i, 0.6f + t01 * t01 * 4.4f, water: false);
+			MakeDrop(drops, i, 100 + i, 0.6f + t01 * t01 * 4.4f, water: false);
 		}
 		for (int i = 0; i < puddles.Length; i++)
 		{
 			float t01 = i / (puddles.Length - 1.0f);
-			puddles[i] = MakeDrop(200 + i, 0.6f + t01 * t01 * 4.4f, water: true);
+			MakeDrop(puddles, i, 200 + i, 0.6f + t01 * t01 * 4.4f, water: true);
 		}
 
 		// -- Splash crowns --
@@ -363,8 +389,7 @@ class DemoRainThunder : ITest
 		for (int i = 0; i < splashes.Length; i++)
 		{
 			float d_mm = 0.4f + 0.5f * i / (splashes.Length - 1.0f);
-			splashes[i] = MakeDrop(300 + i, d_mm, water: true, v_ms: 4.6f);
-			splashes[i].dbOffset += 12;
+			MakeDrop(splashes, i, 300 + i, d_mm, water: true, v_ms: 4.6f, dbBonus: 12);
 		}
 
 		// -- Bubble fizz --
@@ -377,18 +402,18 @@ class DemoRainThunder : ITest
 		// nearby puddles fizz, exactly as they should.
 		for (int i = 0; i < fizzes.Length; i++)
 		{
+			int   fi   = i; // The loop variable is shared across captures
 			float r_mm = 0.20f + i * 0.05f;       // Bubble radius
 			float freq = 3.26f / (r_mm * 0.001f); // True Minnaert, no cheat
 			float q    = 12 + freq / 1500.0f;
 
-			fizzes[i].sound = Sound.Generate((samples, start) => {
+			GenAsync((int)(0.015f * 48000), samples => {
 				float decay = 6.2831853f * freq / (2 * q);
 				for (int s = 0; s < samples.Length; s++) {
 					float time = s / 48000.0f;
 					samples[s] = MathF.Sin(time * freq * 6.2831853f) * MathF.Exp(time * -decay);
 				}
-			}, 0.015f);
-			fizzes[i].dbOffset = -4;
+			}, buf => fizzes[fi] = new DropVariant { sound = Sound.FromSamples(buf), dbOffset = -4 });
 		}
 
 		// -- Bubble plinks --
@@ -398,19 +423,20 @@ class DemoRainThunder : ITest
 		// bubble rises.
 		for (int i = 0; i < plinks.Length; i++)
 		{
+			int   pi   = i; // The loop variable is shared across captures
 			float r_mm = 0.35f + i * 0.24f;              // Bubble radius
 			float freq = 3.26f / (r_mm * 0.001f) * 0.5f; // Minnaert-ish, kept audible
 			float q    = 12 + freq / 1200.0f;
 
-			plinks[i].sound = Sound.Generate((samples, start) => {
+			GenAsync((int)(0.09f * 48000), samples => {
 				float decay = 6.2831853f * freq / (2 * q);
 				for (int s = 0; s < samples.Length; s++) {
 					float time = s / 48000.0f;
 					float f    = freq * (1 + time * 0.3f);
 					samples[s] = MathF.Sin(time * f * 6.2831853f) * MathF.Exp(time * -decay);
 				}
-			}, 0.09f);
-			plinks[i].dbOffset = 2; // The audible sparkle rides above its tap
+			// The audible sparkle rides above its tap
+			}, buf => plinks[pi] = new DropVariant { sound = Sound.FromSamples(buf), dbOffset = 2 });
 		}
 
 		// -- Visible rain --
@@ -430,7 +456,26 @@ class DemoRainThunder : ITest
 		splashMat[MatParamName.DiffuseTex] = Tex.GenParticle(64, 64, 1);
 
 		// -- The far wash --
-		washFar = Sound.Generate((samples, start) => FarWashFill(samples), 4);
+		// A sphere the listener stands inside: a shaped emitter inside its
+		// own volume goes fully diffuse, surrounding the listener the same
+		// way the drop field does. Its content is low frequency, where a
+		// real diffuse field *is* interaurally coherent - the one wash
+		// layer a mono loop renders honestly.
+		GenAsync(4 * 48000, samples => FarWashFill(samples), buf => {
+			washFar = Sound.FromSamples(buf);
+			/// :CodeSample: SoundPlay SoundPlay.shape SoundInst.SetShape
+			/// ### A shaped rain emitter
+			/// Shapes turn a looping sound into an extended source: the
+			/// emitter follows the listener along the shape, widens as it
+			/// fills more of the view, and goes fully diffuse inside it - a
+			/// rain bed the listener stands inside surrounds them completely.
+			washFarInst = washFar.Play(Vec3.Zero, new SoundPlay {
+				flags       = SoundFlags.Loop,
+				shape       = new Vec3[] { new Vec3(0, 0, 0) },
+				shapeRadius = 12,
+			});
+			/// :End:
+		});
 
 		// -- Thunder --
 		// The boom: a channel radiates thousands of little N-waves. Up
@@ -438,7 +483,7 @@ class DemoRainThunder : ITest
 		// the air has eaten the highs and what arrives is the pulse
 		// *bodies* - so the train goes through a steep lowpass and lands
 		// as a deep front-loaded boom instead of a "blap".
-		boomSound = Sound.Generate((samples, start) => {
+		GenAsync((int)(1.2f * 48000), samples => {
 			var r = new Random(46);
 			int n = samples.Length;
 			for (int e = 0; e < 700; e++) {
@@ -457,12 +502,14 @@ class DemoRainThunder : ITest
 				lp4 += 0.06f  * (lp3 - lp4);
 				samples[i] = lp4 * 8;
 			}
-		}, 1.2f);
-		boomSound.Decibels = 125;
+		}, buf => {
+			boomSound = Sound.FromSamples(buf);
+			boomSound.Decibels = 125;
+		});
 
 		// The rumble: deep 4-pole noise with a slow, uneven "roll" - the
 		// turbulence-scattered swelling of far thunder, not a static tone.
-		rumbleSound = Sound.Generate((samples, start) => {
+		GenAsync((int)(4.5f * 48000), samples => {
 			var   r = new Random(47);
 			float lp1 = 0, lp2 = 0, lp3 = 0, lp4 = 0;
 			float roll = 0.6f, rollTarget = 0.6f;
@@ -483,8 +530,10 @@ class DemoRainThunder : ITest
 				lp4 += 0.045f * (lp3   - lp4);
 				samples[i] = lp4 * env * roll * 55;
 			}
-		}, 4.5f);
-		rumbleSound.Decibels = 115;
+		}, buf => {
+			rumbleSound = Sound.FromSamples(buf);
+			rumbleSound.Decibels = 115;
+		});
 
 		// The near bed is the Campbell wash made literal: all the drops too
 		// far to individuate, summed from the same impact family as the
@@ -493,36 +542,14 @@ class DemoRainThunder : ITest
 		// head - where a real diffuse field is decorrelated at the ears.
 		// Encoding each tap from its own direction makes the bed a *true*
 		// diffuse field, and the decode's ear paths do the rest.
-		/// :CodeSample: Sound.Generate SoundChannels
-		/// ### A procedural ambisonic rain bed
-		/// Generated sounds can be first order ambisonic: the buffer packs
-		/// W,Y,Z,X per frame in the ambiX convention, so summing each event
-		/// in with gains from its own direction builds a head-tracked
-		/// diffuse field - here, a rain bed of thousands of distant drop
-		/// taps that wraps the listener the way real rain does.
-		washBright = Sound.Generate((samples, start) => BedFill(samples, 48, 1.5f), 4, SoundChannels.Ambisonic1);
-		washDark   = Sound.Generate((samples, start) => BedFill(samples, 49, 0.6f), 4, SoundChannels.Ambisonic1);
-		washBrightInst = washBright.Play(Vec3.Zero, new SoundPlay { flags = SoundFlags.Loop });
-		washDarkInst   = washDark  .Play(Vec3.Zero, new SoundPlay { flags = SoundFlags.Loop });
-		/// :End:
-
-		// The far wash is a sphere the listener stands inside: a shaped
-		// emitter inside its own volume goes fully diffuse, surrounding
-		// the listener the same way the drop field does. Its content is
-		// low frequency, where a real diffuse field *is* interaurally
-		// coherent - the one wash layer a mono loop renders honestly.
-		/// :CodeSample: SoundPlay SoundPlay.shape SoundInst.SetShape
-		/// ### A shaped rain emitter
-		/// Shapes turn a looping sound into an extended source: the
-		/// emitter follows the listener along the shape, widens as it
-		/// fills more of the view, and goes fully diffuse inside it - a
-		/// rain bed the listener stands inside surrounds them completely.
-		washFarInst = washFar.Play(Vec3.Zero, new SoundPlay {
-			flags       = SoundFlags.Loop,
-			shape       = new Vec3[] { new Vec3(0, 0, 0) },
-			shapeRadius = 12,
+		GenAsync(4 * 48000 * 4, samples => BedFill(samples, 48, 1.5f), buf => {
+			washBright     = Sound.FromSamples(buf, SoundChannels.Ambisonic1);
+			washBrightInst = washBright.Play(Vec3.Zero, new SoundPlay { flags = SoundFlags.Loop });
 		});
-		/// :End:
+		GenAsync(4 * 48000 * 4, samples => BedFill(samples, 49, 0.6f), buf => {
+			washDark     = Sound.FromSamples(buf, SoundChannels.Ambisonic1);
+			washDarkInst = washDark.Play(Vec3.Zero, new SoundPlay { flags = SoundFlags.Loop });
+		});
 	}
 
 	public void Shutdown()
@@ -545,7 +572,8 @@ class DemoRainThunder : ITest
 		DropVariant[] pool = water ? puddles : drops;
 		int   pick  = (int)(MathF.Pow((float)rand.NextDouble(), shape) * pool.Length);
 		pick = Math.Min(pick, pool.Length - 1);
-		DropVariant v = pool[pick];
+		DropVariant v = PickReady(pool, pick);
+		if (v.sound == null) return;
 
 		// Thunder's foreground split: a drop is worth a voice only inside
 		// its own audibility radius, so each size spawns uniformly over
@@ -580,7 +608,8 @@ class DemoRainThunder : ITest
 			int children = rand.NextDouble() < 0.4 ? 2 : 1;
 			for (int c = 0; c < children; c++)
 			{
-				DropVariant s   = splashes[rand.Next(splashes.Length)];
+				DropVariant s   = PickReady(splashes, rand.Next(splashes.Length));
+				if (s.sound == null) break;
 				Vec3        sAt = at + new Vec3(Gauss() * 0.05f, 0, Gauss() * 0.05f);
 				recent[recentAt++ % recent.Length] = s.sound.Play(sAt, new SoundPlay {
 					delay  = jitter + 0.004f + 0.026f * (float)rand.NextDouble(),
@@ -597,7 +626,8 @@ class DemoRainThunder : ITest
 		// one - while the fizz thins with distance on its own.
 		if (water && v.d_mm <= 1.4f && (float)rand.NextDouble() < plinkAmount * 1.75f)
 		{
-			DropVariant f = fizzes[rand.Next(fizzes.Length)];
+			DropVariant f = PickReady(fizzes, rand.Next(fizzes.Length));
+			if (f.sound == null) return;
 			recent[recentAt++ % recent.Length] = f.sound.Play(at, new SoundPlay {
 				delay  = jitter + 0.003f + 0.003f * (float)rand.NextDouble(),
 				pitch  = 0.9f + (float)rand.NextDouble() * 0.25f,
@@ -606,7 +636,8 @@ class DemoRainThunder : ITest
 		}
 		else if (water && v.d_mm > 1.4f && rad < dropSpread * 0.75f && (float)rand.NextDouble() < plinkAmount)
 		{
-			DropVariant p = plinks[rand.Next(plinks.Length)];
+			DropVariant p = PickReady(plinks, rand.Next(plinks.Length));
+			if (p.sound == null) return;
 			recent[recentAt++ % recent.Length] = p.sound.Play(at, new SoundPlay {
 				delay  = jitter + 0.004f + 0.004f * (float)rand.NextDouble(),
 				pitch  = 0.9f + (float)rand.NextDouble() * 0.3f,
@@ -617,33 +648,32 @@ class DemoRainThunder : ITest
 
 	void Thunder()
 	{
-		// A jagged bolt across the sky. The boom fires from its nearest
-		// point with true propagation delay, then rumble instances arrive
-		// progressively later from farther along the bolt - each duller
-		// (distance is a low-pass filter) and wider than the last.
-		float dist = 80 + thunderDist * 1120;
-		float dir  = (float)(rand.NextDouble() * Math.PI * 2);
-		Vec3  near = new Vec3(MathF.Cos(dir), 0, MathF.Sin(dir)) * dist + Vec3.Up * 90;
-		Vec3  far  = near + new Vec3(MathF.Sin(dir), 0.5f, -MathF.Cos(dir)) * (100 + (float)rand.NextDouble() * 300);
-
-		// Energy sets the N-wave length, and so the pitch: bigger strikes
-		// boom deeper.
-		float pitch = 1.35f - thunderEnergy * 0.7f;
-
-		// The flash: light outruns sound, so the sky lights up now and the
-		// boom arrives dist/343 seconds later on its own. The first stroke
-		// fires immediately, the rest follow down the same channel.
-		flashDir    = near.Normalized;
-		strokesLeft = 1 + rand.Next(4);
-		strokeTimer = 0;
-		strokePeak  = 1;
+		// A strike before the thunder sounds finish generating still gets
+		// its flash - light doesn't wait on the audio pipeline either.
+		if (boomSound == null || rumbleSound == null)
+		{
+			float ang = (float)(rand.NextDouble() * Math.PI * 2);
+			Flash(new Vec3(MathF.Cos(ang), 0.25f, MathF.Sin(ang)));
+			return;
+		}
 
 		/// :CodeSample: Sound.Play SoundPlay SoundFlags SoundInst.Spread
 		/// ### Thunder along a lightning bolt
 		/// Sounds declare real-world loudness in decibels, and
 		/// SoundFlags.PropagationDelay delays each voice's onset by its
 		/// distance at the speed of sound - so a thunder boom and its
-		/// rumble arrive along the bolt just like the real thing.
+		/// rumble arrive along the bolt just like the real thing. Energy
+		/// sets the pitch here: bigger strikes boom deeper.
+		// A jagged bolt across the sky: the boom fires from its nearest
+		// point, then rumble instances arrive progressively later from
+		// farther along it - each duller (distance is a low-pass filter)
+		// and wider than the last.
+		float dist  = 80 + thunderDist * 1120;
+		float dir   = (float)(rand.NextDouble() * Math.PI * 2);
+		Vec3  near  = new Vec3(MathF.Cos(dir), 0, MathF.Sin(dir)) * dist + Vec3.Up * 90;
+		Vec3  far   = near + new Vec3(MathF.Sin(dir), 0.5f, -MathF.Cos(dir)) * (100 + (float)rand.NextDouble() * 300);
+		float pitch = 1.35f - thunderEnergy * 0.7f;
+
 		boomInst = boomSound.Play(near, new SoundPlay {
 			flags = SoundFlags.PropagationDelay,
 			pitch = pitch,
@@ -664,6 +694,19 @@ class DemoRainThunder : ITest
 		}
 		/// :End:
 		rumbleTime = 0;
+
+		// The flash: light outruns sound, so the sky lights up now and the
+		// boom arrives dist/343 seconds later on its own. The first stroke
+		// fires immediately, the rest follow down the same channel.
+		Flash(near);
+	}
+
+	void Flash(Vec3 towards)
+	{
+		flashDir    = towards.Normalized;
+		strokesLeft = 1 + rand.Next(4);
+		strokeTimer = 0;
+		strokePeak  = 1;
 	}
 
 	// Debug spheres at every live voice: drops small and white, plinks
@@ -747,6 +790,11 @@ class DemoRainThunder : ITest
 
 	public void Step()
 	{
+		// Turn finished background buffers into Sounds, a couple per frame
+		// so a big piece landing never hitches a frame.
+		for (int i = 0; i < 2 && genReady.TryDequeue(out Action finish); i++)
+			finish();
+
 		StepLightning();
 
 		// Gusts: a slow random walk that swells everything coherently -
@@ -760,12 +808,12 @@ class DemoRainThunder : ITest
 		float effIntensity = rainIntensity * (1 - gustiness * 0.6f + gustiness * 1.2f * gust);
 
 		// The dB dial shifts the whole population together, each variant
-		// keeping its size-derived offset.
-		for (int i = 0; i < drops.Length;    i++) drops[i].sound.Decibels    = dropDb + drops[i].dbOffset;
-		for (int i = 0; i < puddles.Length;  i++) puddles[i].sound.Decibels  = dropDb + puddles[i].dbOffset;
-		for (int i = 0; i < plinks.Length;   i++) plinks[i].sound.Decibels   = dropDb + plinks[i].dbOffset;
-		for (int i = 0; i < splashes.Length; i++) splashes[i].sound.Decibels = dropDb + splashes[i].dbOffset;
-		for (int i = 0; i < fizzes.Length;   i++) fizzes[i].sound.Decibels   = dropDb + fizzes[i].dbOffset;
+		// keeping its size-derived offset. Nulls are still generating.
+		for (int i = 0; i < drops.Length;    i++) if (drops[i].sound    != null) drops[i].sound.Decibels    = dropDb + drops[i].dbOffset;
+		for (int i = 0; i < puddles.Length;  i++) if (puddles[i].sound  != null) puddles[i].sound.Decibels  = dropDb + puddles[i].dbOffset;
+		for (int i = 0; i < plinks.Length;   i++) if (plinks[i].sound   != null) plinks[i].sound.Decibels   = dropDb + plinks[i].dbOffset;
+		for (int i = 0; i < splashes.Length; i++) if (splashes[i].sound != null) splashes[i].sound.Decibels = dropDb + splashes[i].dbOffset;
+		for (int i = 0; i < fizzes.Length;   i++) if (fizzes[i].sound   != null) fizzes[i].sound.Decibels   = dropDb + fizzes[i].dbOffset;
 
 		// Poisson drop spawning: exponential gaps, so arrivals cluster
 		// and lull instead of ticking like a metronome. Foreground density
@@ -791,9 +839,9 @@ class DemoRainThunder : ITest
 		float eff01    = Math.Min(1, effIntensity);
 		float brightAt = Math.Clamp((1 - 0.65f * eff01) * bedBright * 2, 0, 1);
 		float swell    = MathF.Pow(eff01, 0.8f);
-		washBright.Decibels = washDb;
-		washDark  .Decibels = washDb;
-		washFar   .Decibels = washDb - 3;
+		if (washBright != null) washBright.Decibels = washDb;
+		if (washDark   != null) washDark  .Decibels = washDb;
+		if (washFar    != null) washFar   .Decibels = washDb - 3;
 		washBrightInst.Volume = MathF.Sqrt(brightAt)     * swell;
 		washDarkInst  .Volume = MathF.Sqrt(1 - brightAt) * swell;
 		washFarInst   .Volume = swell * (0.85f + 0.15f * eff01);
@@ -828,24 +876,13 @@ class DemoRainThunder : ITest
 		UI.Label("Bright", new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("brt",   ref bedBright, 0, 1, 0);
 		UI.PanelEnd();
 
-		UI.Text("Environment", Align.TopCenter);
-		UI.PanelBegin();
-		for (int i = 0; i < envNames.Length; i++)
-		{
-			if (i % 3 != 0) UI.SameLine();
-			if (UI.Radio(envNames[i], envActive == (AudioEnv)i) && envActive != (AudioEnv)i)
-			{
-				envActive = (AudioEnv)i;
-				Audio.SetEnvironment(envActive);
-			}
-		}
-		UI.PanelEnd();
-
 		UI.Text("Thunder", Align.TopCenter);
 		UI.PanelBegin();
 		UI.Label("Distance", new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("tdist", ref thunderDist,   0, 1, 0);
 		UI.Label("Energy",   new Vec2(0.07f, 0)); UI.SameLine(); UI.HSlider("tengy", ref thunderEnergy, 0, 1, 0);
+		UI.PushEnabled(boomSound != null && rumbleSound != null);
 		if (UI.Button("Thunder!")) Thunder();
+		UI.PopEnabled();
 		UI.SameLine();
 		UI.Toggle("Auto", ref autoThunder);
 		UI.SameLine();

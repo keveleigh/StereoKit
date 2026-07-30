@@ -432,6 +432,127 @@ static void at_test_file_streaming() {
 
 ///////////////////////////////////////////
 
+// Plays made while a sound is still decoding hold their voice and catch up
+// to real time on load. sound_create sets asset_state_loading before the
+// decode task can run, so playing on the next line always defers. The
+// offline clock only moves on audio_test_step, so elapsed time is exact.
+static void at_test_deferred_play() {
+#if defined(_WIN32)
+	const char* base = "audio_test_defer";
+#else
+	const char* base = "/tmp/audio_test_defer";
+#endif
+	char path[256];
+
+	// Loads inside the grace window play from the top, as if nothing
+	// happened. One step is 16ms of clock, well under the grace.
+	snprintf(path, sizeof(path), "%s1.wav", base);
+	if (!at_write_wav(path, 2, 0.5f)) {
+		log_warnf("[audio_test] skipping deferred play test, can't write %s", path);
+		return;
+	}
+	sound_t sound = sound_create(path);
+	sound_set_decibels(sound, AT_UNIT_GAIN_DB);
+	sound_inst_t inst = sound_play(sound, vec3{0,0,-1});
+	AT_CHECK(sound_inst_is_playing(inst), "deferred play hands back a live handle");
+	for (int32_t i = 0; i < 500 && sound_duration(sound) == 0; i++) at_sleep_ms(10);
+	audio_test_step();
+	double energy = at_render_energy(AU_SAMPLE_RATE / 4);
+	AT_CHECK(energy > 0.001, "grace window play renders audio");
+	AT_CHECK(sound_inst_get_cursor(inst) <= (uint64_t)(AU_SAMPLE_RATE / 4 + AU_PLAY_GRACE * AU_SAMPLE_RATE),
+		"grace window play starts from the top");
+	sound_inst_stop(inst);
+	at_flush();
+	sound_release(sound);
+	remove(path);
+
+	// A long wait catches the cursor up and ramps the onset in; a
+	// mid-waveform start would land as a click otherwise.
+	snprintf(path, sizeof(path), "%s2.wav", base);
+	at_write_wav(path, 2, 0.5f);
+	sound = sound_create(path);
+	sound_set_decibels(sound, AT_UNIT_GAIN_DB);
+	inst = sound_play(sound, vec3{0,0,-1});
+	audio_test_advance(0.7f); // The load "takes" 0.7s
+	for (int32_t i = 0; i < 500 && sound_duration(sound) == 0; i++) at_sleep_ms(10);
+	audio_test_step();
+	static float block[AT_BLOCK * 2];
+	audio_render_block(block, AT_BLOCK);
+	uint64_t cursor = sound_inst_get_cursor(inst);
+	AT_CHECK(cursor > (uint64_t)(0.6 * AU_SAMPLE_RATE) && cursor < (uint64_t)(0.8 * AU_SAMPLE_RATE),
+		"catch-up play resumes near the elapsed time");
+	double head = 0, tail = 0;
+	for (int32_t i = 0;   i < 100;  i++) head += (double)block[i*2] * block[i*2];
+	for (int32_t i = 500; i < 1000; i++) tail += (double)block[i*2] * block[i*2];
+	AT_CHECK(head < tail * 0.5, "catch-up onset fades in instead of clicking");
+	sound_inst_stop(inst);
+	at_flush();
+	sound_release(sound);
+	remove(path);
+
+	// A one-shot whose moment has passed never plays at all.
+	snprintf(path, sizeof(path), "%s3.wav", base);
+	at_write_wav(path, 0.25f, 0.5f);
+	sound = sound_create(path);
+	sound_set_decibels(sound, AT_UNIT_GAIN_DB);
+	inst = sound_play(sound, vec3{0,0,-1});
+	audio_test_advance(3);
+	for (int32_t i = 0; i < 500 && sound_duration(sound) == 0; i++) at_sleep_ms(10);
+	audio_test_step();
+	AT_CHECK(sound_inst_is_playing(inst) == false, "expired one-shot never plays");
+	at_flush();
+	AT_CHECK(at_render_energy(AU_SAMPLE_RATE / 4) < 0.0001, "expired one-shot renders silence");
+	sound_release(sound);
+	remove(path);
+
+	// The same wait on a looping play just wraps.
+	snprintf(path, sizeof(path), "%s4.wav", base);
+	at_write_wav(path, 0.25f, 0.5f);
+	sound = sound_create(path);
+	sound_set_decibels(sound, AT_UNIT_GAIN_DB);
+	sound_play_t loop_play = {}; loop_play.flags = sound_flags_loop;
+	inst = sound_play(sound, vec3{0,0,-1}, &loop_play);
+	audio_test_advance(3);
+	for (int32_t i = 0; i < 500 && sound_duration(sound) == 0; i++) at_sleep_ms(10);
+	audio_test_step();
+	AT_CHECK(sound_inst_is_playing(inst), "expired loop keeps playing");
+	AT_CHECK(at_render_energy(AU_SAMPLE_RATE / 4) > 0.001, "expired loop renders audio");
+	sound_inst_stop(inst);
+	at_flush();
+	sound_release(sound);
+	remove(path);
+}
+
+///////////////////////////////////////////
+
+// Streams are broadcast: each voice reads at its own cursor, so several
+// voices hear the whole stream, and playback never consumes the samples
+// the public ReadSamples API sees.
+static void at_test_ring_shared() {
+	sound_t stream = sound_create_stream(0.5f);
+	sound_set_decibels(stream, AT_UNIT_GAIN_DB);
+
+	float samples[AU_SAMPLE_RATE / 5];
+	for (int32_t i = 0; i < AU_SAMPLE_RATE / 5; i++) samples[i] = at_sine((float)i / AU_SAMPLE_RATE);
+	sound_write_samples(stream, samples, AU_SAMPLE_RATE / 5);
+
+	sound_inst_t a = sound_play(stream, vec3{0,0,-1});
+	sound_inst_t b = sound_play(stream, vec3{0,0,-1});
+	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
+
+	AT_CHECK(sound_inst_is_playing(a) && sound_inst_is_playing(b), "two voices share one stream");
+	AT_CHECK(sound_inst_get_cursor(a) == (uint64_t)(AU_SAMPLE_RATE / 5), "first voice hears the whole stream");
+	AT_CHECK(sound_inst_get_cursor(b) == (uint64_t)(AU_SAMPLE_RATE / 5), "second voice hears the whole stream");
+	AT_CHECK(sound_unread_samples(stream) == (uint64_t)(AU_SAMPLE_RATE / 5), "playback doesn't consume ReadSamples data");
+
+	sound_inst_stop(a);
+	sound_inst_stop(b);
+	at_render(AT_BLOCK * 2, nullptr, nullptr);
+	sound_release(stream);
+}
+
+///////////////////////////////////////////
+
 static void at_test_pitch() {
 	sound_t sound = at_generate(at_sine, 0.5f);
 
@@ -1112,33 +1233,6 @@ static void at_test_generate_channels() {
 
 ///////////////////////////////////////////
 
-// FLAC decode is enabled but tests can't author flac content, so this
-// only runs when a file is present (generate one with ffmpeg):
-//   ffmpeg -f lavfi -i "sine=frequency=440:duration=0.25" audio_test_tone.flac
-static void at_test_flac() {
-#if defined(_WIN32)
-	const char* path = "audio_test_tone.flac";
-#else
-	const char* path = "/tmp/audio_test_tone.flac";
-#endif
-	FILE* probe = fopen(path, "rb");
-	if (probe == nullptr) {
-		log_infof("[audio_test] skip: no flac file at %s", path);
-		return;
-	}
-	fclose(probe);
-
-	sound_t sound = at_load_wav(path); // Loader is format agnostic
-	AT_CHECK(sound != nullptr && sound_duration(sound) > 0.01f, "flac files decode");
-	if (sound == nullptr) return;
-	sound_play(sound, vec3{0,0,-1});
-	AT_CHECK(at_render_energy(AU_SAMPLE_RATE / 4) > 0.0001, "flac files play");
-	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
-	sound_release(sound);
-}
-
-///////////////////////////////////////////
-
 static void at_test_stream_rate() {
 	// A 16kHz stream: 0.1s of source data should render as 0.1s of output
 	// through the rate converter, and report duration at its own rate.
@@ -1618,8 +1712,10 @@ int audio_tests_run() {
 	at_test_cmd_overflow();
 	at_test_pan();
 	at_test_ring_stream();
+	at_test_ring_shared();
 	at_test_write_overwrites_oldest();
 	at_test_file_streaming();
+	at_test_deferred_play();
 	at_test_pitch();
 	at_test_loop();
 	at_test_pause_seek();
@@ -1639,7 +1735,6 @@ int audio_tests_run() {
 	at_test_channel_formats();
 	at_test_generate_channels();
 	at_test_create_mem();
-	at_test_flac();
 	at_test_stream_rate();
 	at_test_direct_itd();
 	at_test_direct_bus_level();

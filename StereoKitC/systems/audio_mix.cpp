@@ -1073,6 +1073,7 @@ static void voice_activate(au_voice_t* voice) {
 	voice->pending_ring_data= nullptr;
 	voice->delay_left       = voice->pending_delay;
 	voice->bus              = voice->pending_bus;
+	voice->fade_gain        = voice->pending_fade ? 0.0f : 1.0f;
 	voice->resample_frac    = 0;
 	memset(voice->resample_last, 0, sizeof(voice->resample_last));
 	memset(voice->lpf_state,     0, sizeof(voice->lpf_state));
@@ -1155,9 +1156,11 @@ static ma_uint64 voice_read_source(au_voice_t* voice, float* dest, ma_uint64 fra
 		return read;
 	}
 	case sound_data_ring: {
-		// The public stream API counts samples, convert to frames.
-		ma_uint64 read = sound_read_samples(sound, dest, frames * ch) / ch;
-		atomic_store_u64(&voice->cursor, voice->cursor + read);
+		// Broadcast read at this voice's own absolute cursor: lock-free,
+		// nothing consumed, every voice hears the whole stream.
+		uint64_t  cursor = voice->cursor;
+		ma_uint64 read   = sound_ring_read_at(sound, &cursor, dest, frames);
+		atomic_store_u64(&voice->cursor, cursor);
 		// Live streams idle at the end of their data instead of finishing.
 		memset(dest + read*ch, 0, (size_t)((frames - read) * ch) * sizeof(float));
 		return frames;
@@ -1172,6 +1175,21 @@ static ma_uint64 voice_read_source(au_voice_t* voice, float* dest, ma_uint64 fra
 // interpolation shaves the top octave and folds images down as aliasing.
 static inline float au_catmull(float p0, float p1, float p2, float p3, float t) {
 	return p1 + 0.5f*t*(p2 - p0 + t*(2*p0 - 5*p1 + 4*p2 - p3 + t*(3*(p1 - p2) + p3 - p0)));
+}
+
+// Mid-waveform starts (deferred play catch-up, seeks) are a step function
+// otherwise, an audible click. Applied to the raw source read, so every
+// render path inherits the ramp.
+static inline void voice_fade_apply(au_voice_t* voice, float* dest, ma_uint64 frames, int32_t ch) {
+	float g = voice->fade_gain;
+	if (g >= 1.0f) return;
+
+	const float step = 1.0f / AU_FADE_FRAMES;
+	for (ma_uint64 i = 0; i < frames && g < 1.0f; i++) {
+		for (int32_t c = 0; c < ch; c++) dest[i*ch + c] *= g;
+		g += step;
+	}
+	voice->fade_gain = fminf(1.0f, g);
 }
 
 // Audio thread. voice_read_source plus Catmull-Rom resampling for both pitch
@@ -1190,6 +1208,7 @@ static ma_uint64 voice_read(au_voice_t* voice, float* dest, ma_uint64 frames, fl
 					: voice->resample_last[k + (int32_t)read][c];
 		}
 		voice->resample_frac = 0;
+		voice_fade_apply(voice, dest, read, ch);
 		return read;
 	}
 
@@ -1263,6 +1282,7 @@ static ma_uint64 voice_read(au_voice_t* voice, float* dest, ma_uint64 frames, fl
 		for (int32_t k = 0; k < 3; k++)
 			for (int32_t c = 0; c < ch; c++)
 				voice->resample_last[k][c] = au_resample_temp[(adv_i + k)*ch + c];
+	voice_fade_apply(voice, dest, out, ch);
 	return out;
 }
 
@@ -1824,6 +1844,7 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		if (seek != AU_SEEK_NONE && voice->sound->data_type == sound_data_pcm) {
 			atomic_store_u64(&voice->cursor, mini(seek, voice->sound->pcm_count));
 			voice->resample_frac = 0;
+			voice->fade_gain     = 0; // A seek is a mid-waveform step, ramp in
 			memset(voice->lpf_state, 0, sizeof(voice->lpf_state));
 		}
 
@@ -1925,12 +1946,19 @@ void audio_test_offline(bool32_t enable) {
 	au_offline = enable;
 }
 
+void audio_test_advance(float seconds) {
+	au_main_clock += seconds;
+}
+
 // The main-thread half of a frame for offline tests. The listener stays at
-// identity unless steered via audio_set_listener; fixed dt for determinism.
+// identity unless steered via audio_set_listener; fixed dt for determinism,
+// which also makes deferred-play catch-up timing exact in tests.
 void audio_test_step() {
+	au_main_clock += 0.016;
 	pose_t pose = au_listener_has_override ? au_listener_override : pose_identity;
 	audio_listener_publish(pose);
 	audio_mix_drain_returns();
+	sound_play_pending_step();
 	audio_voice_prefetch();
 	audio_voice_shapes_step(pose.position, 0.016f);
 	audio_voice_rank();
@@ -2085,6 +2113,9 @@ void audio_mix_shutdown() {
 		// play's resources after a steal's submit was refused.
 		if (voice->sound != nullptr)
 			voice_free_resources(voice->sound, voice->stream_decoder, voice->stream_ring, voice->stream_ring_data);
+		// Plays still waiting on their sound's decode hold only a ref.
+		if (voice->pending_sound != nullptr)
+			sound_release(voice->pending_sound);
 		memset(voice, 0, sizeof(au_voice_t));
 	}
 	au_cmd_head = au_cmd_tail = 0;

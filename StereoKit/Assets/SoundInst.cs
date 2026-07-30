@@ -22,8 +22,9 @@ namespace StereoKit
 			set => NativeAPI.sound_inst_set_pos(this, value);
 		}
 
-		/// <summary>The volume multiplier of this Sound instance! A number
-		/// between 0 and 1, where 0 is silent, and 1 is full volume.</summary>
+		/// <summary>The volume multiplier of this Sound instance! Typically
+		/// 0-1, where 0 is silent, and 1 is full volume. Values above 1
+		/// amplify, and negatives clamp to 0.</summary>
 		public float Volume {
 			get => NativeAPI.sound_inst_get_volume(this);
 			set => NativeAPI.sound_inst_set_volume(this, value);
@@ -52,14 +53,17 @@ namespace StereoKit
 			set => NativeAPI.sound_inst_set_paused(this, value);
 		}
 
-		/// <summary>This voice's playback position in source samples. Only
-		/// fully in-memory sounds can Seek, streams read forward only.
-		/// </summary>
+		/// <summary>This voice's playback position in source samples. For
+		/// stream sounds this is an absolute position in the stream, so
+		/// Sound.TotalSamples - Cursor is how much audio is queued ahead
+		/// of this voice. Only fully in-memory sounds can Seek, streams
+		/// read forward only.</summary>
 		public ulong Cursor => NativeAPI.sound_inst_get_cursor(this);
 
 		/// <summary>Jump this voice's playback to a sample position. Only
-		/// works for fully in-memory sounds, streams read forward only.
-		/// </summary>
+		/// works for fully in-memory sounds! Files up to ~10 seconds decode
+		/// fully into memory on load, while longer files stream, and stream
+		/// playback reads forward only.</summary>
 		/// <param name="sample">Sample index to jump to, clamped to the
 		/// sound's length.</param>
 		public void Seek(ulong sample) => NativeAPI.sound_inst_seek(this, sample);

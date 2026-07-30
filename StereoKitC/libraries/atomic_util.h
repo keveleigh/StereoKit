@@ -15,11 +15,17 @@
 	#define atomic_load_i32_acq(ref)       ReadAcquire  ((volatile LONG*)(ref))
 	#define atomic_store_i32_rel(ref, val) WriteRelease ((volatile LONG*)(ref), (LONG)(val))
 	#define atomic_exchange_i32(ref, val)  InterlockedExchange((volatile LONG*)(ref), (LONG)(val))
-	// True when the value was `expect`, and was swapped to `val`
-	#define atomic_cas_i32(ref, expect, val) (InterlockedCompareExchange((volatile LONG*)(ref), (LONG)(val), (LONG)(expect)) == (LONG)(expect))
+	// True when the value was `expect`, and was swapped to `val`. A function
+	// so `expect` evaluates once, matching the gcc/clang side.
+	inline bool atomic_cas_i32_fn(volatile LONG* ref, LONG expect, LONG val) {
+		return InterlockedCompareExchange(ref, val, expect) == expect;
+	}
+	#define atomic_cas_i32(ref, expect, val) atomic_cas_i32_fn((volatile LONG*)(ref), (LONG)(expect), (LONG)(val))
 
 	#define atomic_load_u64(ref)           (uint64_t)ReadNoFence64 ((volatile LONG64*)(ref))
 	#define atomic_store_u64(ref, val)     WriteNoFence64((volatile LONG64*)(ref), (LONG64)(val))
+	#define atomic_load_u64_acq(ref)       (uint64_t)ReadAcquire64((volatile LONG64*)(ref))
+	#define atomic_store_u64_rel(ref, val) WriteRelease64((volatile LONG64*)(ref), (LONG64)(val))
 	#define atomic_exchange_u64(ref, val)  (uint64_t)InterlockedExchange64((volatile LONG64*)(ref), (LONG64)(val))
 
 #else
@@ -41,6 +47,8 @@
 
 	#define atomic_load_u64(ref)           __atomic_load_n ((ref), __ATOMIC_RELAXED)
 	#define atomic_store_u64(ref, val)     __atomic_store_n((ref), (val), __ATOMIC_RELAXED)
+	#define atomic_load_u64_acq(ref)       __atomic_load_n ((ref), __ATOMIC_ACQUIRE)
+	#define atomic_store_u64_rel(ref, val) __atomic_store_n((ref), (val), __ATOMIC_RELEASE)
 	#define atomic_exchange_u64(ref, val)  __atomic_exchange_n((ref), (val), __ATOMIC_ACQ_REL)
 
 #endif

@@ -317,10 +317,11 @@ sound_t sound_create_stream(float buffer_duration, sound_channels_ channels, sou
 	result->norm_gain     = 1;
 	result->sample_rate   = rate;
 	result->ring_lock     = ft_mutex_create();
-	result->ring_capacity = (uint64_t)((double)buffer_duration * rate); // Frames
+	result->ring_capacity = maxi((int64_t)1, (int64_t)((double)buffer_duration * rate)); // Frames
 	result->ring_data     = sk_malloc_t(float, (size_t)(result->ring_capacity * ch));
 	memset(result->ring_data, 0, (size_t)(result->ring_capacity * ch * sizeof(float)));
-	ma_pcm_rb_init(AU_SAMPLE_FORMAT, (ma_uint32)ch, (ma_uint32)result->ring_capacity, result->ring_data, nullptr, &result->ring);
+	if (buffer_duration <= 0)
+		log_warnf("sound_create_stream: a %.2fs buffer can't hold audio!", buffer_duration);
 
 	result->header.state = asset_state_loaded;
 	return result;
@@ -374,38 +375,28 @@ void sound_write_samples(sound_t sound, const float *samples, uint64_t sample_co
 	// Counts are interleaved samples, the ring works in frames.
 	int32_t  ch     = sound_channel_count(sound->channels);
 	uint64_t frames = sample_count / ch;
+	uint64_t cap    = sound->ring_capacity;
 
 	// Writes larger than the whole ring only keep the freshest frames that fit.
-	if (frames > sound->ring_capacity) {
-		samples += (frames - sound->ring_capacity) * ch;
-		frames   = sound->ring_capacity;
+	if (frames > cap) {
+		samples += (frames - cap) * ch;
+		frames   = cap;
 	}
 
-	ma_uint32 written  = 0;
 	ft_mutex_lock(sound->ring_lock);
+	uint64_t write_at = sound->ring_write_at;
+	uint64_t at       = write_at % cap;
+	uint64_t first    = mini(frames, cap - at);
+	memcpy(sound->ring_data + at * ch, samples, (size_t)(first * ch) * sizeof(float));
+	if (first < frames)
+		memcpy(sound->ring_data, samples + first * ch, (size_t)((frames - first) * ch) * sizeof(float));
 
+	// The release publishes the data to the audio thread's lock-free reads.
 	// A full ring overwrites the oldest frames, new data always lands.
-	ma_uint32 available = ma_pcm_rb_available_write(&sound->ring);
-	if (available < frames)
-		ma_pcm_rb_seek_read(&sound->ring, (ma_uint32)frames - available);
-
-	ma_uint32 writable = 0;
-	void*     write_to = nullptr;
-	while (written < frames) {
-		writable = (ma_uint32)frames - written;
-
-		ma_result res = ma_pcm_rb_acquire_write(&sound->ring, &writable, &write_to);
-		if (res != MA_SUCCESS) { break; }
-		memcpy(write_to, samples + (uint64_t)written*ch, (size_t)(writable * ch * sizeof(float)));
-
-		res = ma_pcm_rb_commit_write(&sound->ring, writable);
-		if (res != MA_SUCCESS) { break; }
-
-		written += writable;
-	}
+	atomic_store_u64_rel(&sound->ring_write_at, write_at + frames);
+	if (write_at + frames - sound->ring_read_at > cap)
+		sound->ring_read_at = write_at + frames - cap;
 	ft_mutex_unlock(sound->ring_lock);
-
-	sound->ring_written = mini(sound->ring_written + written, sound->ring_capacity);
 }
 
 ///////////////////////////////////////////
@@ -413,38 +404,57 @@ void sound_write_samples(sound_t sound, const float *samples, uint64_t sample_co
 uint64_t sound_read_samples(sound_t sound, float *out_samples, uint64_t sample_count) {
 	if (sound->data_type != sound_data_ring) { log_err("Sound read/write is only supported for streaming type sounds!"); return 0; }
 
-	int32_t   ch        = sound_channel_count(sound->channels);
-	ma_uint32 available = ma_pcm_rb_available_read(&sound->ring);
-	uint64_t  frames    = mini((uint32_t)(sample_count / ch), available);
+	int32_t ch = sound_channel_count(sound->channels);
 
-	ma_uint32 read  = 0;
+	// This is the consuming read for capture-style use (mic pipelines);
+	// playback voices broadcast-read from their own cursors instead and
+	// never touch this cursor.
 	ft_mutex_lock(sound->ring_lock);
-	ma_uint32 readable  = 0;
-	void*     read_from = nullptr;
-	while (read < frames) {
-		readable = (ma_uint32)frames - read;
-
-		ma_result res = ma_pcm_rb_acquire_read(&sound->ring, &readable, &read_from);
-		if (res != MA_SUCCESS) { break; }
-
-		memcpy(out_samples + (uint64_t)read*ch, read_from, (size_t)(readable * ch * sizeof(float)));
-
-		res = ma_pcm_rb_commit_read(&sound->ring, readable);
-		if (res != MA_SUCCESS && res != MA_AT_END) { break; }
-
-		read += readable;
-	}
+	uint64_t cap    = sound->ring_capacity;
+	uint64_t frames = mini(sample_count / ch, sound->ring_write_at - sound->ring_read_at);
+	uint64_t at     = sound->ring_read_at % cap;
+	uint64_t first  = mini(frames, cap - at);
+	memcpy(out_samples, sound->ring_data + at * ch, (size_t)(first * ch) * sizeof(float));
+	if (first < frames)
+		memcpy(out_samples + first * ch, sound->ring_data, (size_t)((frames - first) * ch) * sizeof(float));
+	sound->ring_read_at += frames;
 	ft_mutex_unlock(sound->ring_lock);
 
-	return (uint64_t)read * ch;
+	return frames * ch;
+}
+
+///////////////////////////////////////////
+
+// Audio thread. Lock-free: acquire the write head, copy, and never touch
+// the consume cursor. A cursor lagging near a full ring snaps forward past
+// the writer's margin rather than reading frames mid-overwrite.
+uint64_t sound_ring_read_at(sound_t sound, uint64_t* cursor, float* dest, uint64_t frames) {
+	int32_t  ch       = sound_channel_count(sound->channels);
+	uint64_t cap      = sound->ring_capacity;
+	uint64_t write_at = atomic_load_u64_acq(&sound->ring_write_at);
+	uint64_t margin   = mini(cap / 4, (uint64_t)4800);
+	uint64_t oldest   = write_at > cap - margin ? write_at - (cap - margin) : 0;
+	if (*cursor < oldest) *cursor = oldest;
+
+	uint64_t read  = mini(frames, write_at - *cursor);
+	uint64_t at    = *cursor % cap;
+	uint64_t first = mini(read, cap - at);
+	memcpy(dest, sound->ring_data + at * ch, (size_t)(first * ch) * sizeof(float));
+	if (first < read)
+		memcpy(dest + first * ch, sound->ring_data, (size_t)((read - first) * ch) * sizeof(float));
+	*cursor += read;
+	return read;
 }
 
 ///////////////////////////////////////////
 
 uint64_t sound_unread_samples(sound_t sound) {
-	return sound->data_type == sound_data_ring
-		? (uint64_t)ma_pcm_rb_available_read(&sound->ring) * sound_channel_count(sound->channels)
-		: 0;
+	if (sound->data_type != sound_data_ring) return 0;
+
+	ft_mutex_lock(sound->ring_lock);
+	uint64_t frames = sound->ring_write_at - sound->ring_read_at;
+	ft_mutex_unlock(sound->ring_lock);
+	return frames * sound_channel_count(sound->channels);
 }
 
 ///////////////////////////////////////////
@@ -483,20 +493,111 @@ float decibels_to_signal(float decibel) {
 
 ///////////////////////////////////////////
 
+// Frees a reserved voice that never made it to a submit, releasing the
+// pending ref. A previously stolen slot keeps its displaced resources in
+// the audio-owned fields, recovered on the next activation/shutdown.
+static void sound_voice_abandon(au_voice_t* voice) {
+	sound_t sound = voice->pending_sound;
+	voice->wait_load     = false;
+	voice->pending_sound = nullptr;
+	sound_release(sound);
+	atomic_store_i32_rel(&voice->state, au_voice_free);
+}
+
+// Creates a file-streaming voice's decoder and prefetch ring, seeked to
+// `cursor` and prefilled so onset doesn't begin with underrun silence.
+// The fill mirrors audio_voice_prefetch: FuMa converts, and loops rewind.
+static bool sound_voice_stream_attach(au_voice_t* voice, sound_t sound, uint64_t cursor, bool loop) {
+	int32_t           ch      = sound_channel_count(sound->channels);
+	ma_decoder*       decoder = sk_malloc_t(ma_decoder, 1);
+	ma_decoder_config config  = ma_decoder_config_init(AU_SAMPLE_FORMAT, (ma_uint32)ch, AU_SAMPLE_RATE);
+	if (ma_decoder_init_memory(sound->file_data, sound->file_size, &config, decoder) != MA_SUCCESS) {
+		log_errf("Failed to make a play decoder for '%s'.", sound->header.id_text);
+		sk_free(decoder);
+		return false;
+	}
+	if (cursor > 0) ma_decoder_seek_to_pcm_frame(decoder, cursor);
+	ma_pcm_rb* rb  = sk_malloc_t(ma_pcm_rb, 1);
+	float*     buf = sk_malloc_t(float, AU_STREAM_PREFETCH * ch);
+	ma_pcm_rb_init(AU_SAMPLE_FORMAT, (ma_uint32)ch, AU_STREAM_PREFETCH, buf, nullptr, rb);
+
+	while (ma_pcm_rb_available_write(rb) > 0) {
+		ma_uint32 request = ma_pcm_rb_available_write(rb);
+		void*     into    = nullptr;
+		if (ma_pcm_rb_acquire_write(rb, &request, &into) != MA_SUCCESS || request == 0) break;
+		ma_uint64 decoded = 0;
+		ma_result res     = ma_decoder_read_pcm_frames(decoder, into, request, &decoded);
+		if (sound->fuma)
+			sound_fuma_to_ambix((float*)into, decoded);
+		ma_pcm_rb_commit_write(rb, (ma_uint32)decoded);
+		if (res != MA_SUCCESS || decoded < request) {
+			if (loop && ma_decoder_seek_to_pcm_frame(decoder, 0) == MA_SUCCESS)
+				continue;
+			atomic_store_i32(&voice->stream_eof, 1);
+			break;
+		}
+	}
+
+	voice->pending_decoder   = decoder;
+	voice->pending_ring      = rb;
+	voice->pending_ring_data = buf;
+	return true;
+}
+
+// Attaches the voice's per-play resources at `cursor` and submits the play
+// command. The sound must be loaded. On failure the voice frees itself.
+static bool sound_voice_submit_ready(au_voice_t* voice, int16_t slot, uint64_t cursor) {
+	sound_t sound = voice->pending_sound;
+	bool    loop  = (atomic_load_i32(&voice->params.flags) & sound_flags_loop) != 0;
+
+	voice->pending_cursor = cursor;
+	if (sound->data_type == sound_data_ring) {
+		// Broadcast streams start at the current read front, in absolute
+		// stream frames: buffered data plays, and voices never consume.
+		ft_mutex_lock(sound->ring_lock);
+		voice->pending_cursor = sound->ring_read_at;
+		ft_mutex_unlock(sound->ring_lock);
+	}
+	if (sound->data_type == sound_data_stream_file &&
+	    !sound_voice_stream_attach(voice, sound, cursor, loop)) {
+		sound_voice_abandon(voice);
+		return false;
+	}
+
+	if (!audio_voice_submit(slot)) {
+		log_err("Audio command ring overflow, refusing to play sound!");
+		if (voice->pending_decoder != nullptr) {
+			ma_decoder_uninit(voice->pending_decoder);
+			sk_free(voice->pending_decoder);
+			ma_pcm_rb_uninit(voice->pending_ring);
+			sk_free(voice->pending_ring);
+			sk_free(voice->pending_ring_data);
+			voice->pending_decoder   = nullptr;
+			voice->pending_ring      = nullptr;
+			voice->pending_ring_data = nullptr;
+		}
+		sound_voice_abandon(voice);
+		return false;
+	}
+	return true;
+}
+
 static sound_inst_t sound_play_settings(sound_t sound, vec3 at, float volume_trim, const sound_play_t* settings) {
 	sound_inst_t result;
 	result._id   = 0;
 	result._slot = -1;
 
-	if (atomic_load_i32_acq((int32_t*)&sound->header.state) < asset_state_loaded) {
-		log_diagf("sound_play: '%s' isn't loaded yet, or failed to load.", sound->header.id_text ? sound->header.id_text : "(unnamed)");
+	asset_state_ state = (asset_state_)atomic_load_i32_acq((int32_t*)&sound->header.state);
+	if (state < asset_state_none) {
+		log_diagf("sound_play: '%s' failed to load.", sound->header.id_text ? sound->header.id_text : "(unnamed)");
 		return result;
 	}
 
 	// Multi-channel sounds don't spatialize, but the API always takes a
 	// position - a zero position is the idiomatic "none", only a real one
 	// suggests the caller expected placement to work.
-	if (sound->channels != sound_channels_mono && (at.x != 0 || at.y != 0 || at.z != 0))
+	if (state >= asset_state_loaded &&
+	    sound->channels != sound_channels_mono && (at.x != 0 || at.y != 0 || at.z != 0))
 		log_diagf("sound_play: '%s' is multi-channel, its position is ignored.", sound->header.id_text ? sound->header.id_text : "(unnamed)");
 
 	// A full pool refusing the least audible sound is normal operation,
@@ -529,43 +630,11 @@ static sound_inst_t sound_play_settings(sound_t sound, vec3 at, float volume_tri
 	voice->pending_cursor    = 0;
 	voice->pending_delay     = delay_frames;
 	voice->pending_bus       = settings->bus;
+	voice->pending_fade      = 0;
 	voice->pending_decoder   = nullptr;
 	voice->pending_ring      = nullptr;
 	voice->pending_ring_data = nullptr;
 	atomic_store_i32(&voice->stream_eof, 0);
-
-	// Streaming sounds get a per-voice decoder and prefetch ring, prefilled
-	// here so onset doesn't begin with underrun silence.
-	if (sound->data_type == sound_data_stream_file) {
-		int32_t           ch      = sound_channel_count(sound->channels);
-		ma_decoder*       decoder = sk_malloc_t(ma_decoder, 1);
-		ma_decoder_config config  = ma_decoder_config_init(AU_SAMPLE_FORMAT, (ma_uint32)ch, AU_SAMPLE_RATE);
-		if (ma_decoder_init_memory(sound->file_data, sound->file_size, &config, decoder) != MA_SUCCESS) {
-			log_errf("Failed to make a play decoder for '%s'.", sound->header.id_text);
-			sk_free(decoder);
-			sound_release(sound);
-			voice->pending_sound = nullptr;
-			atomic_store_i32_rel(&voice->state, au_voice_free);
-			return result;
-		}
-		ma_pcm_rb* rb  = sk_malloc_t(ma_pcm_rb, 1);
-		float*     buf = sk_malloc_t(float, AU_STREAM_PREFETCH * ch);
-		ma_pcm_rb_init(AU_SAMPLE_FORMAT, (ma_uint32)ch, AU_STREAM_PREFETCH, buf, nullptr, rb);
-
-		ma_uint32 request = ma_pcm_rb_available_write(rb);
-		void*     into    = nullptr;
-		if (ma_pcm_rb_acquire_write(rb, &request, &into) == MA_SUCCESS && request > 0) {
-			ma_uint64 decoded = 0;
-			ma_result res     = ma_decoder_read_pcm_frames(decoder, into, request, &decoded);
-			ma_pcm_rb_commit_write(rb, (ma_uint32)decoded);
-			if (res != MA_SUCCESS || decoded < request)
-				atomic_store_i32(&voice->stream_eof, 1);
-		}
-
-		voice->pending_decoder   = decoder;
-		voice->pending_ring      = rb;
-		voice->pending_ring_data = buf;
-	}
 
 	// Shaped voices already wrote their evaluated position and spread.
 	if (voice->shape_count == 0) {
@@ -582,24 +651,17 @@ static sound_inst_t sound_play_settings(sound_t sound, vec3 at, float volume_tri
 	atomic_store_i32(&voice->params.stop_request, 0);
 	atomic_store_u64(&voice->params.seek_request, AU_SEEK_NONE);
 
-	if (!audio_voice_submit(slot)) {
-		log_err("Audio command ring overflow, refusing to play sound!");
-		if (voice->pending_decoder != nullptr) {
-			ma_decoder_uninit(voice->pending_decoder);
-			sk_free(voice->pending_decoder);
-			ma_pcm_rb_uninit(voice->pending_ring);
-			sk_free(voice->pending_ring);
-			sk_free(voice->pending_ring_data);
-		}
-		voice->pending_sound     = nullptr;
-		voice->pending_decoder   = nullptr;
-		voice->pending_ring      = nullptr;
-		voice->pending_ring_data = nullptr;
-		sound_release(sound);
-		// A stolen slot keeps its displaced resources in the audio-owned
-		// fields, they're recovered on the slot's next activation/shutdown.
-		atomic_store_i32_rel(&voice->state, au_voice_free);
-		return result;
+	// A sound still decoding holds its reserved slot and submits from
+	// sound_play_pending_step once it lands. Playback catches up to real
+	// time, as if it had started on schedule. The handle is live right
+	// away, and anything set through it applies at activation.
+	if (state < asset_state_loaded) {
+		voice->wait_load    = true;
+		voice->wait_started = au_main_clock;
+	} else {
+		voice->wait_load = false;
+		if (!sound_voice_submit_ready(voice, slot, 0))
+			return result;
 	}
 
 	result._id   = voice->id;
@@ -609,12 +671,71 @@ static sound_inst_t sound_play_settings(sound_t sound, vec3 at, float volume_tri
 
 ///////////////////////////////////////////
 
+// Main thread, once per frame: resolve plays that were waiting on their
+// sound's async decode. The elapsed wait burns the onset delay first, then
+// becomes the start cursor: loops wrap, expired one-shots never play, and
+// loads inside the grace window start from the top like nothing happened.
+void sound_play_pending_step() {
+	for (int16_t i = 0; i < AU_VOICE_COUNT; i++) {
+		au_voice_t* voice = &au_voices[i];
+		if (!voice->wait_load || atomic_load_i32(&voice->state) != au_voice_reserved)
+			continue;
+
+		sound_t      sound = voice->pending_sound;
+		asset_state_ state = (asset_state_)atomic_load_i32_acq((int32_t*)&sound->header.state);
+		if (state < asset_state_none) {
+			// The loader already logged the failure, the handle just dies.
+			sound_voice_abandon(voice);
+			continue;
+		}
+		if (state < asset_state_loaded)
+			continue;
+		if (atomic_load_i32(&voice->params.stop_request) != 0) {
+			sound_voice_abandon(voice);
+			continue;
+		}
+
+		voice->wait_load = false;
+		uint64_t elapsed = (uint64_t)((au_main_clock - voice->wait_started) * AU_SAMPLE_RATE);
+		uint64_t cursor  = 0;
+		if (elapsed <= voice->pending_delay) {
+			voice->pending_delay -= elapsed;
+		} else {
+			uint64_t over = elapsed - voice->pending_delay;
+			voice->pending_delay = 0;
+			if (over > (uint64_t)(AU_PLAY_GRACE * AU_SAMPLE_RATE)) {
+				float pitch = atomic_load_f32(&voice->params.pitch);
+				pitch  = pitch <= 0 ? 1 : fminf(AU_PITCH_MAX, fmaxf(AU_PITCH_MIN, pitch));
+				cursor = (uint64_t)((double)over * pitch);
+
+				uint64_t total = sound->data_type == sound_data_pcm ? sound->pcm_count : sound->file_frames;
+				bool     loop  = (atomic_load_i32(&voice->params.flags) & sound_flags_loop) != 0;
+				if (loop) {
+					if (total > 0) cursor %= total;
+				} else if (total > 0 && cursor >= total) {
+					// It would already be over, it never plays at all.
+					sound_voice_abandon(voice);
+					continue;
+				}
+				// Unknown-length streams can't expire or reliably seek.
+				if (total == 0) cursor = 0;
+				// A mid-waveform start is a step, ramp the onset in.
+				voice->pending_fade = cursor > 0 ? 1 : 0;
+			}
+		}
+		sound_voice_submit_ready(voice, i, cursor);
+	}
+}
+
+///////////////////////////////////////////
+
 sound_inst_t sound_play(sound_t sound, vec3 at, const sound_play_t *opt_settings) {
 	static const sound_play_t defaults = {};
 	if (opt_settings == nullptr) opt_settings = &defaults;
 
-	// A zeroed volume means "default", which is full trim.
-	float trim = opt_settings->volume == 0 ? 1 : opt_settings->volume;
+	// A zeroed volume means "default", which is full trim. Negatives would
+	// flip phase and confuse the audibility ranking, so they clamp silent.
+	float trim = opt_settings->volume == 0 ? 1 : fmaxf(0, opt_settings->volume);
 	return sound_play_settings(sound, at, trim, opt_settings);
 }
 
@@ -624,7 +745,9 @@ static uint64_t sound_total_frames(sound_t sound) {
 	switch (sound_data_type(sound)) {
 	case sound_data_pcm:         return sound->pcm_count;
 	case sound_data_stream_file: return sound->file_frames;
-	case sound_data_ring:        return sound->ring_written;
+	// Everything the stream has ever seen. Against a voice's absolute
+	// cursor, the difference is how much audio is queued ahead of playback.
+	case sound_data_ring:        return atomic_load_u64(&sound->ring_write_at);
 	default:                     return 0;
 	}
 }
@@ -637,10 +760,14 @@ uint64_t sound_total_samples(sound_t sound) {
 
 uint64_t sound_cursor_samples(sound_t sound) {
 	// With per-voice playback state, an asset level cursor only means
-	// something for live streams: how far reads lag behind writes.
-	return sound_data_type(sound) == sound_data_ring
-		? (sound->ring_written - ma_pcm_rb_available_read(&sound->ring)) * sound_channel_count(sound->channels)
-		: 0;
+	// something for live streams: how far the consuming reads have gotten.
+	// Playing voices track their own positions, see sound_inst_get_cursor.
+	if (sound_data_type(sound) != sound_data_ring) return 0;
+
+	ft_mutex_lock(sound->ring_lock);
+	uint64_t frames = sound->ring_read_at;
+	ft_mutex_unlock(sound->ring_lock);
+	return frames * sound_channel_count(sound->channels);
 }
 
 ///////////////////////////////////////////
@@ -653,6 +780,12 @@ float sound_duration(sound_t sound) {
 
 sound_channels_ sound_get_channels(sound_t sound) {
 	return sound->channels;
+}
+
+///////////////////////////////////////////
+
+asset_state_ sound_asset_state(const sound_t sound) {
+	return (asset_state_)atomic_load_i32_acq((int32_t*)&sound->header.state);
 }
 
 ///////////////////////////////////////////
@@ -676,7 +809,6 @@ void sound_destroy(sound_t sound) {
 	sk_free(sound->pcm);
 	sk_free(sound->file_data);
 	if (sound->data_type == sound_data_ring) {
-		ma_pcm_rb_uninit(&sound->ring);
 		sk_free          (sound->ring_data);
 		ft_mutex_destroy(&sound->ring_lock);
 	}
@@ -755,7 +887,8 @@ void sound_inst_set_volume(sound_inst_t sound_inst, float volume_pct) {
 	au_voice_t* voice = sound_inst_voice(sound_inst);
 	if (voice == nullptr) return;
 
-	atomic_store_f32(&voice->params.volume, volume_pct);
+	// No upper clamp: trims above 1 amplify, which has legitimate uses.
+	atomic_store_f32(&voice->params.volume, fmaxf(0, volume_pct));
 }
 
 ///////////////////////////////////////////
@@ -860,8 +993,14 @@ uint64_t sound_inst_get_cursor(sound_inst_t sound_inst) {
 	au_voice_t* voice = sound_inst_voice(sound_inst);
 	if (voice == nullptr) return 0;
 
-	// Frame cursor back out to the public interleaved-sample position.
-	return atomic_load_u64(&voice->cursor) * sound_inst_channels(voice);
+	// A voice the mixer hasn't activated yet (including plays waiting on
+	// their sound's decode) reports its start position; the audio-owned
+	// cursor is still the previous play's. Frames convert back out to the
+	// public interleaved-sample position.
+	uint64_t frames = atomic_load_i32(&voice->state) == au_voice_reserved
+		? voice->pending_cursor
+		: atomic_load_u64(&voice->cursor);
+	return frames * sound_inst_channels(voice);
 }
 
 ///////////////////////////////////////////

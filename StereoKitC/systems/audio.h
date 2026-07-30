@@ -24,6 +24,12 @@ namespace sk {
 #define AU_SEEK_NONE          UINT64_MAX
 #define AU_BUS_COUNT          4
 #define AU_SHAPE_MAX_POINTS   32
+// Plays made while the sound was still decoding catch up to real time on
+// load; loads faster than the grace start from the top instead.
+#define AU_PLAY_GRACE         0.1f
+// A mid-waveform start or seek is a step function, an audible click, so
+// those onsets ramp in over this many frames (~5ms).
+#define AU_FADE_FRAMES        240
 #define AU_ER_TAPS            6      // Environment reflection images per voice
 // Reflection taps go to the most audible spatial voices only - quiet voices'
 // bounces are masked anyway, and the cap bounds cost under voice swarms.
@@ -66,6 +72,8 @@ struct au_voice_t {
 	vec3              smooth_pos;      // Emit point smoothing state
 	float             smooth_spread;
 	bool              smooth_init;
+	bool              wait_load;       // Reserved, submits once the sound loads
+	double            wait_started;    // au_main_clock at the play call
 
 	// Cross-thread, atomic access only
 	int32_t           state;           // au_voice_state_
@@ -81,6 +89,7 @@ struct au_voice_t {
 	uint64_t          pending_cursor;
 	uint64_t          pending_delay;   // Onset delay in frames
 	sound_bus_        pending_bus;
+	int32_t           pending_fade;    // Mid-waveform start, ramp the onset
 	ma_decoder*       pending_decoder;
 	ma_pcm_rb*        pending_ring;
 	float*            pending_ring_data;
@@ -92,6 +101,7 @@ struct au_voice_t {
 	uint64_t          cursor;          // Frames, in *source* samples
 	uint64_t          delay_left;      // Onset frames remaining
 	sound_bus_        bus;
+	float             fade_gain;       // Onset/seek ramp, 1 = no fade
 	float             resample_frac;   // Pitch resampler phase, 0-1
 	float             resample_last[3][4]; // Last 3 consumed frames, per channel
 	ma_decoder*       stream_decoder;  // sound_data_stream_file voices only
@@ -141,12 +151,19 @@ pose_t audio_listener_get    ();
 extern pose_t au_listener_override;
 extern bool   au_listener_has_override;
 
+// Main-thread wall clock in seconds, stepped by audio_step (and the offline
+// test step, at a fixed rate for determinism). Times deferred play catch-up.
+extern double au_main_clock;
+
 // Offline harness for deterministic tests: enable offline *before* sk_init to
 // skip device creation, then pump blocks with render_block and main-thread
 // work with test_step. Exported so test executables can reach them.
 SK_API void audio_render_block(float* out_stereo, int32_t frame_count);
 SK_API void audio_test_offline(bool32_t enable);
 SK_API void audio_test_step   ();
+// Advances the main-thread clock without a step, so deferred play catch-up
+// tests can simulate a slow asset load.
+SK_API void audio_test_advance(float seconds);
 // A/B hook: force point sources through the FOA bus (the pre-direct-
 // binaural render path), switchable live for listening comparisons.
 SK_API void audio_test_force_bus(bool32_t enable);

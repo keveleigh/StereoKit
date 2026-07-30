@@ -44,21 +44,35 @@ namespace StereoKit
 		/// counter-rotates against the head.</summary>
 		public SoundChannels Channels { get => NativeAPI.sound_get_channels(_inst); }
 
+		/// <summary>Sounds loaded from file decode asynchronously - this
+		/// tells you where that's at! Playing is safe at any point: a Play
+		/// while still Loading is held until the data lands, then catches
+		/// up as if it had started on time. Negative states mean the load
+		/// failed, and any held plays die quietly.</summary>
+		public AssetState AssetState => NativeAPI.sound_asset_state(_inst);
+
 		/// <summary>This will return the total number of audio samples used
 		/// by the sound! StereoKit currently uses 48,000 samples per second
-		/// for all audio.</summary>
+		/// for all audio. For stream sounds this is everything ever
+		/// written. Against a playing SoundInst.Cursor, the difference is
+		/// how much audio is queued ahead of that voice's playback.
+		/// </summary>
 		public int TotalSamples { get => (int)NativeAPI.sound_total_samples(_inst); }
 
 		/// <summary>This is the maximum number of samples in the sound that
 		/// are currently available for reading via ReadSamples! ReadSamples
-		/// will reduce this number by the amount of samples read.
-		/// 
-		/// This is only really valid for Stream sounds, all other sound 
+		/// will reduce this number by the amount of samples read. Playback
+		/// doesn't consume samples - playing voices each keep their own
+		/// cursor, see SoundInst.Cursor.
+		///
+		/// This is only really valid for Stream sounds, all other sound
 		/// types will just return 0.</summary>
 		public int UnreadSamples { get => (int)NativeAPI.sound_unread_samples(_inst); }
 
-		/// <summary>This is the current position of the playback cursor, 
-		/// measured in samples from the start of the audio data.</summary>
+		/// <summary>How far ReadSamples has consumed into a stream sound,
+		/// in samples. Playing voices don't move this - each tracks its own
+		/// position in SoundInst.Cursor. Non-stream sounds return 0.
+		/// </summary>
 		public int CursorSamples { get => (int)NativeAPI.sound_cursor_samples(_inst); }
 
 		internal Sound(IntPtr sound)
@@ -202,18 +216,20 @@ namespace StereoKit
 			return sound == IntPtr.Zero ? null : new Sound(sound);
 		}
 
-		/// <summary>Loads a sound from file! StereoKit supports .wav, .mp3,
-		/// and .flac files. Mono sounds spatialize, stereo plays head-locked,
+		/// <summary>Loads a sound from file! StereoKit supports .wav and
+		/// .mp3 files. Mono sounds spatialize, stereo plays head-locked,
 		/// and 4 channel files load as first order ambisonics: world-fixed
 		/// sound fields that counter-rotate against the user's head, ideal
 		/// for environmental beds like rain, wind, or crowds. Bare 4 channel
 		/// content is read as ambiX (ACN order, SN3D - the YouTube 360
 		/// convention), FuMa-tagged .amb files are converted on load, and
 		/// other surround layouts downmix to stereo. Check Channels for what
-		/// a file loaded as. Decoding happens asynchronously, so the sound
-		/// may not be playable the same frame.</summary>
-		/// <param name="filename">Name of the audio file! Supports .wav,
-		/// .mp3 and .flac files.</param>
+		/// a file loaded as. Decoding happens asynchronously, but playing
+		/// right away is fine - a Play before the decode finishes catches
+		/// up to real time once it lands, as if it had started on schedule.
+		/// </summary>
+		/// <param name="filename">Name of the audio file! Supports .wav and
+		/// .mp3 files.</param>
 		/// <returns>A sound object, or null if the file isn't found.</returns>
 		public static Sound FromFile(string filename)
 		{
