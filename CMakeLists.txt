@@ -305,7 +305,7 @@ if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
     NAME sk_renderer
     GITHUB_REPOSITORY StereoKit/sk_renderer
-    GIT_TAG v2026.7.24
+    GIT_TAG v2026.7.30
   )
 else()
   # For building directly with in-progress sk_renderer changes, point this to your
@@ -836,9 +836,19 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
 else()
   set(SK_ARCH "Unknown")
 endif()
+# The tool folders are lowercase, MSVC's platform names are not
+string(TOLOWER "${SK_ARCH}" SK_ARCH_LOWER)
 
 set(SK_DISTRIBUTE_FOLDER "bin/distribute")
-set(SK_DISTRIBUTE ON CACHE BOOL "Copy StereoKit bin & tool to the StereoKit source folder")
+# These copies feed C# builds and NuGet packing, only meaningful when working
+# in the StereoKit repo itself. Consumers pulling StereoKit in via CMake keep
+# their checkout untouched.
+if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
+  set(SK_DISTRIBUTE_DEFAULT ON)
+else()
+  set(SK_DISTRIBUTE_DEFAULT OFF)
+endif()
+set(SK_DISTRIBUTE ${SK_DISTRIBUTE_DEFAULT} CACHE BOOL "Copy StereoKit bin & tool to the StereoKit source folder")
 
 if(SK_DISTRIBUTE)
   add_custom_command(TARGET StereoKitC POST_BUILD
@@ -847,11 +857,16 @@ if(SK_DISTRIBUTE)
     COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/include"
     COMMAND ${CMAKE_COMMAND} -E copy_if_different "${CMAKE_CURRENT_SOURCE_DIR}/StereoKitC/stereokit.h" "${CMAKE_CURRENT_SOURCE_DIR}/StereoKitC/stereokit_ui.h" "${CMAKE_CURRENT_SOURCE_DIR}/${SK_DISTRIBUTE_FOLDER}/include/" )
 
-  # Copy shader compiler (Android uses pre-built binary, so no skshaderc target exists)
-  if(NOT ANDROID)
+  # Copy the shader compiler out of the build folder. tools/ is what local C#
+  # builds run, bin/tools/ is what the NuGet package packs. Targets that can't
+  # run a compiler of their own (Android, web) build no skshaderc to copy.
+  if(TARGET skshaderc)
+    set(SK_TOOL_PLATFORM "${SK_BIN_OS_LOWER}_${SK_ARCH_LOWER}")
     add_custom_command(TARGET StereoKitC POST_BUILD
-      COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/tools/skshaderc/${SK_BIN_OS_LOWER}_${SK_ARCH}"
-      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:skshaderc>" "${CMAKE_CURRENT_SOURCE_DIR}/tools/skshaderc/${SK_BIN_OS_LOWER}_${SK_ARCH}")
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/tools/skshaderc/${SK_TOOL_PLATFORM}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:skshaderc>" "${CMAKE_CURRENT_SOURCE_DIR}/tools/skshaderc/${SK_TOOL_PLATFORM}"
+      COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/bin/tools/${SK_TOOL_PLATFORM}"
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different "$<TARGET_FILE:skshaderc>" "${CMAKE_CURRENT_SOURCE_DIR}/bin/tools/${SK_TOOL_PLATFORM}")
   endif()
 
   if (SK_SEPARATE_DBG)
