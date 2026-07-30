@@ -1042,6 +1042,15 @@ static void at_test_shapes() {
 	AT_CHECK(vec3_magnitude(pos - inside.position) < 0.05f, "inside the shape the emitter is at the head");
 	AT_CHECK(at_render_energy(AU_SAMPLE_RATE / 4) > 0.001, "a fully diffuse inside-shape voice renders energy");
 
+	// A teleport while inside carries the emitter with the head immediately -
+	// smoothing is listener-relative, so there's no world-space lag to fade
+	// back from (a lagged emitter reads as a dropout in the ambient bed).
+	pose_t teleport = {{-8, 0, -3}, {0,0,0,1}};
+	audio_set_listener(&teleport);
+	audio_test_step();
+	pos = sound_inst_get_pos(inst);
+	AT_CHECK(vec3_magnitude(pos - teleport.position) < 0.05f, "a teleport inside the shape moves the emitter instantly");
+
 	// An explicit position clears the shape and stays put.
 	sound_inst_set_pos(inst, vec3{1, 2, 3});
 	for (int32_t i = 0; i < 5; i++) audio_test_step();

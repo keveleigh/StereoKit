@@ -2025,19 +2025,24 @@ static void voice_shape_eval(au_voice_t* voice, vec3 listener_pos, float dt) {
 		spread = 1;
 	}
 
+	// Smoothing runs on the listener-relative offset, not the world point:
+	// shape-side flips still glide, but a listener jump (teleport) carries
+	// the emitter along instantly instead of dragging it behind the head.
+	vec3 offset = emit - listener_pos;
 	if (!voice->smooth_init) {
 		voice->smooth_init   = true;
-		voice->smooth_pos    = emit;
+		voice->smooth_offset = offset;
 		voice->smooth_spread = spread;
 	} else {
 		float blend = 1.0f - expf(-dt / AU_SMOOTH_TIME);
-		voice->smooth_pos    = vec3_lerp(voice->smooth_pos, emit, blend);
+		voice->smooth_offset = vec3_lerp(voice->smooth_offset, offset, blend);
 		voice->smooth_spread = math_lerp(voice->smooth_spread, spread, blend);
 	}
 
-	atomic_store_f32(&voice->params.pos_x,  voice->smooth_pos.x);
-	atomic_store_f32(&voice->params.pos_y,  voice->smooth_pos.y);
-	atomic_store_f32(&voice->params.pos_z,  voice->smooth_pos.z);
+	vec3 pos = listener_pos + voice->smooth_offset;
+	atomic_store_f32(&voice->params.pos_x,  pos.x);
+	atomic_store_f32(&voice->params.pos_y,  pos.y);
+	atomic_store_f32(&voice->params.pos_z,  pos.z);
 	atomic_store_f32(&voice->params.spread, voice->smooth_spread);
 }
 

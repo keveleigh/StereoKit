@@ -69,7 +69,7 @@ struct au_voice_t {
 	int32_t           shape_count;     // 0 = plain point source
 	float             shape_radius;
 	float             base_spread;     // The play settings' spread floor
-	vec3              smooth_pos;      // Emit point smoothing state
+	vec3              smooth_offset;   // Emit smoothing, listener-relative
 	float             smooth_spread;
 	bool              smooth_init;
 	bool              wait_load;       // Reserved, submits once the sound loads

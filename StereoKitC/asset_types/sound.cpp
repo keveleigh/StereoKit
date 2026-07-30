@@ -615,8 +615,9 @@ static sound_inst_t sound_play_settings(sound_t sound, vec3 at, float volume_tri
 	voice->base_spread   = settings->spread;
 	voice->smooth_init   = false;
 	if (settings->shape_points != nullptr && settings->shape_point_count > 0) {
-		audio_voice_shape_set(voice, settings->shape_points, settings->shape_point_count, settings->shape_radius, audio_listener_get().position);
-		emit_at = voice->smooth_pos;
+		vec3 listener = audio_listener_get().position;
+		audio_voice_shape_set(voice, settings->shape_points, settings->shape_point_count, settings->shape_radius, listener);
+		emit_at = listener + voice->smooth_offset;
 	}
 
 	uint64_t delay_frames = (uint64_t)(fmaxf(0, settings->delay) * AU_SAMPLE_RATE + 0.5f);
