@@ -3,8 +3,8 @@ using System;
 using System.IO;
 
 // Binding-surface checks for the audio revamp's C# API. Timing-dependent
-// behavior lives in the native offline suite (StereoKitCTest -audiotest),
-// these verify the marshaling and immediate main-thread semantics.
+// behavior lives in the native offline suite (SKTests -audiotest), these
+// verify the marshaling and immediate main-thread semantics.
 class TestSoundApi : ITest
 {
 	Sound memSound;

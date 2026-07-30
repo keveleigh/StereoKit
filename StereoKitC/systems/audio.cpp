@@ -128,6 +128,8 @@ bool32_t mic_start(const char *device_name, sound_sample_rate_ sample_rate) {
 		ma_device_info *capture_devices = nullptr;
 		ma_uint32       capture_count   = 0;
 		if (ma_context_get_devices(&au_context, nullptr, nullptr, &capture_devices, &capture_count) != MA_SUCCESS) {
+			sk_free(au_mic_name);
+			au_mic_name = nullptr;
 			return false;
 		}
 		for (ma_uint32 i = 0; i < capture_count; i++) {
@@ -162,6 +164,9 @@ bool32_t mic_start(const char *device_name, sound_sample_rate_ sample_rate) {
 	ma_result result = ma_device_init(&au_context, &config, &au_mic_device);
 	if (result != MA_SUCCESS) {
 		log_warnf("Mic start failed, '%s'", ma_result_description(result));
+		sound_release(au_mic_sound);
+		sk_free(au_mic_name);
+		au_mic_name = nullptr;
 		return false;
 	}
 	ma_device_start(&au_mic_device);

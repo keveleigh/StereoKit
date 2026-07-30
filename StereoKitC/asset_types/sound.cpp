@@ -115,9 +115,13 @@ static float sound_norm_gain(const float* samples, uint64_t frames, int32_t chan
 	int32_t ch_end   = measure_ch < 0 ? channels : measure_ch + 1;
 	int32_t ch_count = ch_end - ch_start;
 
-	// Pass 1: the loudest block's mean square, and the content peak.
-	double loudest = 0;
-	float  peak    = 0;
+	// One pass over the samples: each block's mean square plus the content
+	// peak, then the gate reads from the cached blocks.
+	uint64_t block_count = (frames + block_size - 1) / block_size;
+	double*  block_ms    = sk_malloc_t(double, (size_t)block_count);
+	uint64_t block       = 0;
+	double   loudest     = 0;
+	float    peak        = 0;
 	for (uint64_t at = 0; at < frames; at += block_size) {
 		uint64_t end = mini(at + block_size, frames);
 		double   ms  = 0;
@@ -130,22 +134,17 @@ static float sound_norm_gain(const float* samples, uint64_t frames, int32_t chan
 		}
 		ms /= (double)((end - at) * ch_count);
 		if (ms > loudest) loudest = ms;
+		block_ms[block++] = ms;
 	}
-	if (loudest <= 0) return 1;
+	if (loudest <= 0) { sk_free(block_ms); return 1; }
 
-	// Pass 2: average the blocks within 30dB of the loudest.
+	// Average the blocks within 30dB of the loudest.
 	double   gate = loudest * 0.001;
 	double   sum  = 0;
 	uint64_t n    = 0;
-	for (uint64_t at = 0; at < frames; at += block_size) {
-		uint64_t end = mini(at + block_size, frames);
-		double   ms  = 0;
-		for (uint64_t i = at; i < end; i++)
-			for (int32_t c = ch_start; c < ch_end; c++)
-				ms += (double)samples[i*channels + c] * samples[i*channels + c];
-		ms /= (double)((end - at) * ch_count);
-		if (ms >= gate) { sum += ms; n += 1; }
-	}
+	for (uint64_t b = 0; b < block_count; b++)
+		if (block_ms[b] >= gate) { sum += block_ms[b]; n += 1; }
+	sk_free(block_ms);
 
 	float norm = 1.0f / (float)sqrt(sum / (double)n);
 	if (peak * norm > 8.0f) norm = 8.0f / peak;

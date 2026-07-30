@@ -1851,13 +1851,9 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		if (atomic_load_i32(&voice->params.paused) != 0)
 			continue;
 
-		// Dormant voices ranked out of the mix budget freeze in place:
-		// no read, no cursor movement, ready to resume.
-		if (atomic_load_i32(&voice->audible) == 0)
-			continue;
-
 		// Onset delay is sample accurate: a partial delay starts the voice
-		// mid-block at a frame offset.
+		// mid-block at a frame offset. It ticks even for dormant voices, a
+		// sound in flight arrives on time whether or not it won mix budget.
 		ma_uint32 offset = 0;
 		ma_uint32 block  = frame_count;
 		if (voice->delay_left >= block) {
@@ -1869,6 +1865,11 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 			block -= offset;
 			voice->delay_left = 0;
 		}
+
+		// Dormant voices ranked out of the mix budget freeze in place:
+		// no read, no cursor movement, ready to resume.
+		if (atomic_load_i32(&voice->audible) == 0)
+			continue;
 
 		if (voice_is_direct(voice, head.position)) {
 			direct       [direct_count] = voice;
