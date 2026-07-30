@@ -1012,15 +1012,16 @@ static void at_test_shapes() {
 	shaped.shape_points = line; shaped.shape_point_count = 2; shaped.shape_radius = 0.5f;
 	sound_inst_t inst = sound_play(sound, vec3{0,0,0}, &shaped);
 
+	// The emitter sits on the shape's surface, radius shy of the core.
 	vec3 pos = sound_inst_get_pos(inst);
-	AT_CHECK(fabsf(pos.x) < 0.01f && fabsf(pos.z + 3) < 0.01f, "shaped play resolves its emit point immediately");
+	AT_CHECK(fabsf(pos.x) < 0.01f && fabsf(pos.z + 2.5f) < 0.01f, "shaped play resolves its emit point immediately");
 
 	// Walking along the bank, the emit point follows.
 	pose_t walk = {{5, 0, 0}, {0,0,0,1}};
 	audio_set_listener(&walk);
 	for (int32_t i = 0; i < 60; i++) audio_test_step();
 	pos = sound_inst_get_pos(inst);
-	AT_CHECK(fabsf(pos.x - 5) < 0.1f && fabsf(pos.z + 3) < 0.1f, "the emit point follows the listener along the polyline");
+	AT_CHECK(fabsf(pos.x - 5) < 0.1f && fabsf(pos.z + 2.5f) < 0.1f, "the emit point follows the listener along the polyline");
 
 	// Far away the stream is narrow, close up it fills the view.
 	pose_t far_p = {{5, 0, 17}, {0,0,0,1}};
@@ -1032,6 +1033,11 @@ static void at_test_shapes() {
 	for (int32_t i = 0; i < 60; i++) audio_test_step();
 	float spread_near = sound_inst_get_spread(inst);
 	AT_CHECK(spread_near > spread_far + 0.3f, "spread grows approaching the shape");
+
+	// 0.1m outside the surface the emitter is 0.1m from the head, so the
+	// step inside (emitter at the head) is continuous, not a volume pop.
+	pos = sound_inst_get_pos(inst);
+	AT_CHECK(vec3_magnitude(pos - near_p.position) < 0.15f, "just outside, the emitter sits on the surface by the listener");
 
 	// Standing in the stream it surrounds you completely.
 	pose_t inside = {{5, 0, -3}, {0,0,0,1}};

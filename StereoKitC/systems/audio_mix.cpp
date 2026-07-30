@@ -1994,9 +1994,9 @@ static vec3 shape_closest(const vec3* points, int32_t count, vec3 from) {
 	return best;
 }
 
-// Emit position is the closest point on the shape, apparent size how much of
-// the view it fills - fully diffuse inside. Both are smoothed so polyline
-// corners and equidistant flips glide instead of popping.
+// Emit position is the closest point on the shape's surface, apparent size
+// how much of the view it fills - fully diffuse inside. Both are smoothed so
+// polyline corners and equidistant flips glide instead of popping.
 static void voice_shape_eval(au_voice_t* voice, vec3 listener_pos, float dt) {
 	vec3  closest = shape_closest(voice->shape_points, voice->shape_count, listener_pos);
 	float dist    = vec3_magnitude(listener_pos - closest);
@@ -2018,12 +2018,17 @@ static void voice_shape_eval(au_voice_t* voice, vec3 listener_pos, float dt) {
 	}
 	spread = fmaxf(spread, voice->base_spread);
 
-	// Inside the tube: emit from the head, fully diffuse. The asin hits 1
-	// exactly at the boundary, continuing the outside curve without a jump.
+	// Emit from the surface, not the core: attenuation then tracks distance
+	// to the surface, so growing a shape's radius never reads as the sound
+	// backing away. At the boundary the surface point reaches the listener,
+	// meeting the fully diffuse inside state without a jump in volume,
+	// position, or spread (the asin hits 1 exactly there).
 	vec3 emit = closest;
 	if (dist < voice->shape_radius) {
 		emit   = listener_pos;
 		spread = 1;
+	} else if (voice->shape_radius > 0) {
+		emit = closest + (listener_pos - closest) * (voice->shape_radius / dist);
 	}
 
 	// Smoothing runs on the listener-relative offset, not the world point:
