@@ -702,9 +702,10 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_set_id(IntPtr sound, [MarshalAs(UnmanagedType.LPUTF8Str)] string id);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_get_id(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create([MarshalAs(UnmanagedType.LPUTF8Str)] string filename_utf8);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_stream(float buffer_duration);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_samples([In] float[] in_arr_samples_at_48000s, ulong sample_count);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_generate([MarshalAs(UnmanagedType.FunctionPtr)] AudioGenerator audio_generator, float duration);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_stream(float buffer_duration, SoundChannels channels, SoundSampleRate sample_rate);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       sound_create_samples([In] float[] in_arr_samples_at_48000s, ulong sample_count, SoundChannels channels);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern SoundChannels sound_get_channels(IntPtr sound);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AssetState   sound_asset_state(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_write_samples(IntPtr sound, [In] float[] in_arr_samples, ulong sample_count);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern ulong        sound_read_samples(IntPtr sound, [Out] float[] out_arr_samples, ulong sample_count);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern ulong        sound_unread_samples(IntPtr sound);
@@ -712,7 +713,7 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern ulong        sound_cursor_samples(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_get_decibels(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_set_decibels(IntPtr sound, float decibels);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern SoundInst    sound_play(IntPtr sound, Vec3 at, float volume);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern SoundInst    sound_play(IntPtr sound, Vec3 at, IntPtr opt_settings);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_duration(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_addref(IntPtr sound);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_release(IntPtr sound);
@@ -721,16 +722,38 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         sound_inst_is_playing(SoundInst sound_inst);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_pos(SoundInst sound_inst, Vec3 pos);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern Vec3         sound_inst_get_pos(SoundInst sound_inst);
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_volume(SoundInst sound_inst, float volume);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_volume(SoundInst sound_inst, float volume_pct);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_inst_get_volume(SoundInst sound_inst);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_pitch(SoundInst sound_inst, float pitch_mult);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_inst_get_pitch(SoundInst sound_inst);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_spread(SoundInst sound_inst, float spread_pct);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_inst_get_spread(SoundInst sound_inst);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_cutoff(SoundInst sound_inst, float cutoff_hz);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_paused(SoundInst sound_inst, [MarshalAs(UnmanagedType.Bool)] bool paused);
+		[return: MarshalAs(UnmanagedType.Bool)]
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         sound_inst_get_paused(SoundInst sound_inst);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_seek(SoundInst sound_inst, ulong sample);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern ulong        sound_inst_get_cursor(SoundInst sound_inst);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sound_inst_set_shape(SoundInst sound_inst, [In] Vec3[] in_arr_points, int point_count, float radius);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        sound_inst_get_intensity(SoundInst sound_inst);
+
+		///////////////////////////////////////////
+
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_volume(float volume);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_volume();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_bus_volume(SoundBus bus, float volume);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_bus_volume(SoundBus bus);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_listener(IntPtr opt_pose);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_output_decibels();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_env(AudioEnvironment environment);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AudioEnvironment audio_get_env();
 
 		///////////////////////////////////////////
 
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern int          mic_device_count();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       mic_device_name(int index);
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mic_start([MarshalAs(UnmanagedType.LPUTF8Str)] string device_name);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         mic_start([MarshalAs(UnmanagedType.LPUTF8Str)] string device_name, SoundSampleRate sample_rate);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         mic_stop();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       mic_get_stream();
 		[return: MarshalAs(UnmanagedType.Bool)]

@@ -1348,6 +1348,87 @@ namespace StereoKit
 		Ignore,
 	}
 
+	/// <summary>Option flags for playing a sound, see sound_play_t.</summary>
+	[Flags]
+	public enum SoundFlags {
+		/// <summary>No special behavior, the default.</summary>
+		None         = 0,
+		/// <summary>The sound restarts from the beginning when it reaches the end of its
+		/// data, and plays until stopped. Live streams ignore this, they already
+		/// wait for data forever.</summary>
+		Loop         = 1 << 0,
+		/// <summary>Skip spatialization entirely: no distance attenuation, panning, or
+		/// filtering. The sound follows the head, good for music, UI, or
+		/// pre-rendered binaural content.</summary>
+		HeadLocked   = 1 << 1,
+		/// <summary>Delay the sound's onset by its distance from the listener divided by
+		/// the speed of sound (343m/s), computed once when playback starts. Great
+		/// for thunder, explosions, and other far away events.</summary>
+		PropagationDelay = 1 << 2,
+	}
+
+	/// <summary>A category a playing sound belongs to. Each bus is just a volume control
+	/// that affects every sound tagged with it, handy for separate sfx/music/ui
+	/// volume sliders, or ducking categories wholesale.</summary>
+	public enum SoundBus {
+		/// <summary>General sound effects, the default bus.</summary>
+		Sfx          = 0,
+		/// <summary>Background music and ambience.</summary>
+		Music,
+		/// <summary>Interface feedback sounds. StereoKit's own UI sounds use this bus.</summary>
+		Ui,
+		/// <summary>Dialogue, voice-over, and voice comms.</summary>
+		Voice,
+	}
+
+	/// <summary>The channel format of a Sound's data. Only mono sounds spatialize -
+	/// playing a non-mono sound ignores its position entirely.</summary>
+	public enum SoundChannels {
+		/// <summary>One channel. Spatializes as a point or shaped source, the default
+		/// and by far the most common format for game audio.</summary>
+		Mono         = 0,
+		/// <summary>Two interleaved channels, played back head-locked and untouched.
+		/// Music, and pre-rendered binaural content.</summary>
+		Stereo,
+		/// <summary>Four interleaved first order (1) ambisonic channels in the ambiX
+		/// convention (ACN order W,Y,Z,X with SN3D normalization). The sound
+		/// field stays world-fixed, counter-rotating against the head - the
+		/// head-tracked generalization of a binaural render. Great for
+		/// recorded or simulated environmental beds.</summary>
+		Ambisonic1,
+	}
+
+	/// <summary>Common audio sample rates, in Hz, for sound streams and microphone capture.
+	/// The enum value _is_ the rate in Hz, so you can cast any integer rate to this
+	/// type - these are just the well-supported ones, tagged with where each is
+	/// typically used. StereoKit mixes everything at 48kHz and resamples to and from
+	/// other rates as needed, so any positive rate works, but a rate a device
+	/// captures or plays natively avoids an extra resample.</summary>
+	public enum SoundSampleRate {
+		/// <summary>Use StereoKit's native mix rate, 48kHz. No resampling in the mixer, and
+		/// the best default unless you have a specific reason otherwise.</summary>
+		Default      = 0,
+		/// <summary>8kHz narrowband telephony, classic Bluetooth headset (HFP/SCO) quality.
+		/// Tiny data rate, intelligible speech only.</summary>
+		Telephony    = 8000,
+		/// <summary>16kHz wideband speech - the rate that speech-to-text, wake-word, and
+		/// VoIP pipelines typically expect. A good low-bandwidth choice for voice.</summary>
+		Speech       = 16000,
+		/// <summary>32kHz, seen in some broadcast audio and Bluetooth wideband (mSBC).</summary>
+		Broadcast    = 32000,
+		/// <summary>44.1kHz, the CD-audio standard and a common consumer device default.</summary>
+		Cd           = 44100,
+		/// <summary>48kHz, the AV/pro standard and StereoKit's native mix rate. The modern
+		/// default for most capture hardware.</summary>
+		Standard     = 48000,
+		/// <summary>96kHz high-resolution pro audio. Rare for a microphone, and resampled
+		/// down to 48kHz for mixing anyway.</summary>
+		Studio       = 96000,
+		/// <summary>192kHz, the extreme end of pro audio interfaces. Almost never a real
+		/// microphone rate, and heavily oversampled for StereoKit's purposes.</summary>
+		Ultra        = 192000,
+	}
+
 	/// <summary>When opening the Platform.FilePicker, this enum describes
 	/// how the picker should look and behave.</summary>
 	public enum PickerMode {
