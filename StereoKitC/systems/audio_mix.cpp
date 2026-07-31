@@ -684,9 +684,13 @@ static void au_er_write(au_voice_t* voice, const au_er_taps_t* taps, const float
 	for (int32_t t = 0; t < taps->count; t++) {
 		int32_t  slot = taps->slot[t];
 		float    cur  = voice->er_delay[slot];
+		// Tap gains ramp from the previous block like the direct path's - a
+		// fresh tap (delay sentinel < 0) snaps to target instead.
+		XMVECTOR enc      = taps->enc[t];
+		XMVECTOR enc_cur  = cur < 0 ? enc : XMLoadFloat4((XMFLOAT4*)voice->er_enc_prev[slot]);
+		XMVECTOR enc_step = XMVectorScale(XMVectorSubtract(enc, enc_cur), 1.0f / (float)count);
 		if (cur < 0) cur = taps->tgt[t];
 		float    step = (taps->tgt[t] - cur) / (float)count;
-		XMVECTOR enc  = taps->enc[t];
 		for (ma_uint32 i = 0; i < count; i++) {
 			float    v    = au_env.er_temp[i];
 			float    fi   = (float)i + cur;
@@ -694,11 +698,13 @@ static void au_er_write(au_voice_t* voice, const au_er_taps_t* taps, const float
 			float    frac = fi - (float)(uint32_t)fi;
 			float*   tap0 = au_foa_ring + (( at0      & au_foa_mask) * 4);
 			float*   tap1 = au_foa_ring + (((at0 + 1) & au_foa_mask) * 4);
-			XMStoreFloat4((XMFLOAT4*)tap0, XMVectorMultiplyAdd(XMVectorReplicate(v * (1.0f - frac)), enc, XMLoadFloat4((XMFLOAT4*)tap0)));
-			XMStoreFloat4((XMFLOAT4*)tap1, XMVectorMultiplyAdd(XMVectorReplicate(v * frac),          enc, XMLoadFloat4((XMFLOAT4*)tap1)));
-			cur += step;
+			XMStoreFloat4((XMFLOAT4*)tap0, XMVectorMultiplyAdd(XMVectorReplicate(v * (1.0f - frac)), enc_cur, XMLoadFloat4((XMFLOAT4*)tap0)));
+			XMStoreFloat4((XMFLOAT4*)tap1, XMVectorMultiplyAdd(XMVectorReplicate(v * frac),          enc_cur, XMLoadFloat4((XMFLOAT4*)tap1)));
+			cur     += step;
+			enc_cur  = XMVectorAdd(enc_cur, enc_step);
 		}
 		voice->er_delay[slot] = taps->tgt[t];
+		XMStoreFloat4((XMFLOAT4*)voice->er_enc_prev[slot], enc);
 	}
 }
 
@@ -720,6 +726,18 @@ static inline float au_biquad_apply(const au_biquad_t* c, float* st, float x) {
 	st[1] = st[0]; st[0] = x;
 	st[3] = st[2]; st[2] = y;
 	return y;
+}
+
+// A coefficient step with live filter state is an output step, so voicing
+// coefficients approach their targets per sample, like the delays and gains.
+static inline au_biquad_t au_biquad_ramp(const au_biquad_t* from, const au_biquad_t* to, float inv) {
+	return au_biquad_t{ (to->b0 - from->b0) * inv, (to->b1 - from->b1) * inv,
+	                    (to->b2 - from->b2) * inv, (to->a1 - from->a1) * inv,
+	                    (to->a2 - from->a2) * inv };
+}
+static inline void au_biquad_advance(au_biquad_t* c, const au_biquad_t* s) {
+	c->b0 += s->b0; c->b1 += s->b1; c->b2 += s->b2;
+	c->a1 += s->a1; c->a2 += s->a2;
 }
 
 // Soft clip limiter, transparent below the -1dBFS knee.
@@ -1064,6 +1082,8 @@ static void voice_activate(au_voice_t* voice) {
 	voice->bus              = voice->pending_bus;
 	voice->fade_gain        = voice->pending_fade ? 0.0f : 1.0f;
 	voice->fade_out         = false;
+	voice->gain_snap        = true;
+	voice->pos_smooth_init  = false;
 	voice->resample_frac    = 0;
 	memset(voice->resample_last, 0, sizeof(voice->resample_last));
 	memset(voice->lpf_state,     0, sizeof(voice->lpf_state));
@@ -1191,6 +1211,21 @@ static inline void voice_fade_apply(au_voice_t* voice, float* dest, ma_uint64 fr
 	voice->fade_gain = fminf(1.0f, g);
 }
 
+// Audio thread. A short one-pole rounds off the block-rate position steps of
+// a fast-moving source. Smoothing the listener-relative offset lets a
+// listener teleport carry the source along, not drag it behind the head.
+static vec3 voice_pos_smooth(au_voice_t* voice, vec3 target, vec3 head_pos, ma_uint32 frames) {
+	vec3 offset = target - head_pos;
+	if (!voice->pos_smooth_init) {
+		voice->pos_smooth_init = true;
+		voice->pos_smooth      = offset;
+	} else {
+		float blend = 1.0f - expf(-((float)frames / AU_SAMPLE_RATE) / AU_POS_SMOOTH_TIME);
+		voice->pos_smooth = vec3_lerp(voice->pos_smooth, offset, blend);
+	}
+	return head_pos + voice->pos_smooth;
+}
+
 // Audio thread. voice_read_source plus Catmull-Rom resampling for both pitch
 // and source rate. resample_last carries three frames across blocks so the
 // 4-point window stays continuous. `rate` is source frames per output frame.
@@ -1314,13 +1349,19 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		ma_uint64 read = voice_read(voice, au_mix_temp, frame_count, rate, loop);
 		float     peak = 0;
 		float*    out  = output + frame_offset * 2;
+		float     g    = voice->gain_snap ? gain : voice->gain_prev[0];
+		float     step = read > 0 ? (gain - g) / (float)read : 0;
 		for (ma_uint64 i = 0; i < read; i++) {
 			float l = au_mix_temp[i*2], r = au_mix_temp[i*2+1];
 			if (peak < fabsf(l)) peak = fabsf(l);
 			if (peak < fabsf(r)) peak = fabsf(r);
-			out[i*2  ] += l*gain;
-			out[i*2+1] += r*gain;
+			out[i*2  ] += l*g;
+			out[i*2+1] += r*g;
+			g += step;
 		}
+		voice->gain_snap    = false;
+		voice->gain_prev[0] = gain;
+		voice->gain_prev[1] = gain;
 		if (peak > atomic_load_f32(&voice->intensity))
 			atomic_store_f32(&voice->intensity, peak);
 		return (ma_uint32)read;
@@ -1335,14 +1376,19 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		ma_uint64 read      = voice_read(voice, au_mix_temp, frame_count, rate, loop);
 		float     peak      = 0;
 		XMVECTOR  enc       = XMVectorSet(gain, dir_scale, dir_scale, dir_scale);
+		XMVECTOR  enc_cur   = voice->gain_snap ? enc : XMLoadFloat4((XMFLOAT4*)voice->enc_prev);
+		XMVECTOR  enc_step  = read > 0 ? XMVectorScale(XMVectorSubtract(enc, enc_cur), 1.0f / (float)read) : XMVectorZero();
 		for (ma_uint64 i = 0; i < read; i++) {
 			float w = au_mix_temp[i*4];
 			if (peak < fabsf(w)) peak = fabsf(w);
 			float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
 			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(
-				XMLoadFloat4((XMFLOAT4*)(au_mix_temp + i*4)), enc,
+				XMLoadFloat4((XMFLOAT4*)(au_mix_temp + i*4)), enc_cur,
 				XMLoadFloat4((XMFLOAT4*)bus)));
+			enc_cur = XMVectorAdd(enc_cur, enc_step);
 		}
+		voice->gain_snap = false;
+		XMStoreFloat4((XMFLOAT4*)voice->enc_prev, enc);
 		if (read > 0) au_foa_touched = true;
 		if (peak > atomic_load_f32(&voice->intensity))
 			atomic_store_f32(&voice->intensity, peak);
@@ -1356,12 +1402,18 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		ma_uint64 read = voice_read(voice, au_mix_temp, frame_count, rate, loop);
 		float     peak = 0;
 		float*    out  = output + frame_offset * 2;
+		float     g    = voice->gain_snap ? gain : voice->gain_prev[0];
+		float     step = read > 0 ? (gain - g) / (float)read : 0;
 		for (ma_uint64 i = 0; i < read; i++) {
 			float s = au_mix_temp[i];
 			if (peak < fabsf(s)) peak = fabsf(s);
-			out[i*2  ] += s*gain;
-			out[i*2+1] += s*gain;
+			out[i*2  ] += s*g;
+			out[i*2+1] += s*g;
+			g += step;
 		}
+		voice->gain_snap    = false;
+		voice->gain_prev[0] = gain;
+		voice->gain_prev[1] = gain;
 		if (peak > atomic_load_f32(&voice->intensity))
 			atomic_store_f32(&voice->intensity, peak);
 		return (ma_uint32)read;
@@ -1371,6 +1423,7 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		atomic_load_f32(&voice->params.pos_x),
 		atomic_load_f32(&voice->params.pos_y),
 		atomic_load_f32(&voice->params.pos_z) };
+	position = voice_pos_smooth(voice, position, head.position, (ma_uint32)frame_count);
 
 	// Distance falloff is amplitude's 1/d, not intensity's 1/d^2 - loudness
 	// tracks pressure. The min clamp stands in for "inside your head".
@@ -1429,6 +1482,22 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 	XMVECTOR enc       = XMVectorSet(gain * k_bus, gain * -u.x * dir_scale,
 	                                 gain * u.y * dir_scale, gain * -u.z * dir_scale);
 
+	// Applied gains ramp from the previous block's values, the same declick
+	// the ear delays get. Zero endpoints cover the direct<->bus handoff.
+	float    inv_read  = read > 0 ? 1.0f / (float)read : 0;
+	bool     bus_on    = k_bus > 0 || (!voice->gain_snap &&
+		(voice->enc_prev[0] != 0 || voice->enc_prev[1] != 0 ||
+		 voice->enc_prev[2] != 0 || voice->enc_prev[3] != 0));
+	XMVECTOR enc_cur   = voice->gain_snap ? enc : XMLoadFloat4((XMFLOAT4*)voice->enc_prev);
+	XMVECTOR enc_step  = XMVectorScale(XMVectorSubtract(enc, enc_cur), inv_read);
+	float    send_cur  = voice->gain_snap ? send_gain : voice->send_prev;
+	float    send_step = (send_gain - send_cur) * inv_read;
+	bool     send_on   = au_env.on && (send_gain > 0 || send_cur > 0);
+	float    alpha_tgt = alpha, lpfw_tgt = lpf_wet;
+	if (!voice->gain_snap) { alpha = voice->alpha_prev; lpf_wet = voice->lpfw_prev; }
+	float    alpha_stp = (alpha_tgt - alpha  ) * inv_read;
+	float    lpfw_stp  = (lpfw_tgt  - lpf_wet) * inv_read;
+
 	if (k_bus >= 1.0f) {
 		for (ma_uint64 i = 0; i < read; i++) {
 			float s = au_mix_temp[i];
@@ -1438,14 +1507,18 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
 			s += lpf_wet * (lp3 - s);
-			if (send_gain > 0) au_env.send[frame_offset+i] += s * send_gain;
+			if (send_on) { au_env.send[frame_offset+i] += s * send_cur; send_cur += send_step; }
 			au_mix_temp[i] = s;
 
 			float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
-			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc, XMLoadFloat4((XMFLOAT4*)bus)));
+			XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc_cur, XMLoadFloat4((XMFLOAT4*)bus)));
+			enc_cur  = XMVectorAdd(enc_cur, enc_step);
+			alpha   += alpha_stp;
+			lpf_wet += lpfw_stp;
 		}
 		voice->lpf_state[0] = lp0; voice->lpf_state[1] = lp1;
 		voice->lpf_state[2] = lp2; voice->lpf_state[3] = lp3;
+		voice->gain_prev[0] = 0;   voice->gain_prev[1] = 0;
 		if (read > 0) au_foa_touched = true;
 		// Direct state is stale after bus-only rendering, snap on return.
 		voice->dir_delay[0] = -1;
@@ -1454,6 +1527,10 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		vec3  uh   = quat_inverse(head.orientation) * u;
 		float cosL = -uh.x;
 		float cosR =  uh.x;
+
+		// The per-block voicing, shadow wet, and shoulder gain ramp like the
+		// gains; snap when direct state is fresh (activation, bus return).
+		bool dsp_snap = voice->gain_snap || voice->dir_delay[0] < 0;
 
 		// Delays slew across the block so a moving source's ITD sweeps, not
 		// steps. The near ear normalizes to zero - onsets stay sample exact.
@@ -1467,28 +1544,46 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		float delay_r = voice->dir_delay[1], step_r = (tgt_r - delay_r) / (float)read;
 
 		// Head shadow on the far side, scaled by how far around it sits.
-		float wet_l = AU_SHADOW_WET * fmaxf(0, -cosL);
-		float wet_r = AU_SHADOW_WET * fmaxf(0, -cosR);
+		float wet_tgt_l = AU_SHADOW_WET * fmaxf(0, -cosL);
+		float wet_tgt_r = AU_SHADOW_WET * fmaxf(0, -cosR);
+		float wet_l     = dsp_snap ? wet_tgt_l : voice->wet_prev[0];
+		float wet_r     = dsp_snap ? wet_tgt_r : voice->wet_prev[1];
+		float wet_stp_l = (wet_tgt_l - wet_l) * inv_read;
+		float wet_stp_r = (wet_tgt_r - wet_r) * inv_read;
 
 		// Elevation/back voicing, shared mono before the ear split - the same
-		// voicing the decode's speakers carry. Rebuilt each block.
+		// voicing the decode's speakers carry. Rebuilt each block, coefficients
+		// interpolated across it.
 		au_biquad_t vc[AU_VOICING_STAGES];
 		au_voicing(uh, vc);
+		au_biquad_t vc_cur[AU_VOICING_STAGES], vc_stp[AU_VOICING_STAGES];
+		for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+			if (dsp_snap) vc_cur[f] = vc[f];
+			else          memcpy(&vc_cur[f], voice->voicing_prev[f], sizeof(au_biquad_t));
+			vc_stp[f] = au_biquad_ramp(&vc_cur[f], &vc[f], inv_read);
+			memcpy(voice->voicing_prev[f], &vc[f], sizeof(au_biquad_t));
+		}
 
 		// Shoulder bounce for sources above the horizon, slewed like the
 		// ear delays so a rising source's comb glides.
-		float sh_g    = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
-		float sh_tgt  = (2.0f * AU_SHOULDER_M / 343.0f) * AU_SAMPLE_RATE * fmaxf(0, uh.y);
-		float sh_del  = voice->dir_shoulder < 0 ? sh_tgt : voice->dir_shoulder;
-		float sh_step = (sh_tgt - sh_del) / (float)read;
+		float sh_g_tgt = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
+		float sh_g     = dsp_snap ? sh_g_tgt : voice->shg_prev;
+		float sh_g_stp = (sh_g_tgt - sh_g) * inv_read;
+		float sh_tgt   = (2.0f * AU_SHOULDER_M / 343.0f) * AU_SAMPLE_RATE * fmaxf(0, uh.y);
+		float sh_del   = voice->dir_shoulder < 0 ? sh_tgt : voice->dir_shoulder;
+		float sh_step  = (sh_tgt - sh_del) / (float)read;
 
 		// Inside ~1m the ears' own path lengths diverge audibly: per-ear gain
 		// follows true distance, the broadband near-field ILD a head-centered
 		// gain misses - about +-3dB per ear at the minimum distance.
 		float    d_l      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosL);
 		float    d_r      = sqrtf(dist*dist + AU_HEAD_RADIUS*AU_HEAD_RADIUS - 2.0f*dist*AU_HEAD_RADIUS*cosR);
-		float    g_dir_l  = gain * (1.0f - k_bus) * (dist / d_l);
-		float    g_dir_r  = gain * (1.0f - k_bus) * (dist / d_r);
+		float    g_tgt_l  = gain * (1.0f - k_bus) * (dist / d_l);
+		float    g_tgt_r  = gain * (1.0f - k_bus) * (dist / d_r);
+		float    g_dir_l  = voice->gain_snap ? g_tgt_l : voice->gain_prev[0];
+		float    g_dir_r  = voice->gain_snap ? g_tgt_r : voice->gain_prev[1];
+		float    g_step_l = (g_tgt_l - g_dir_l) * inv_read;
+		float    g_step_r = (g_tgt_r - g_dir_r) * inv_read;
 		float    shadow_l = voice->dir_shadow[0];
 		float    shadow_r = voice->dir_shadow[1];
 		float*   ring     = voice->dir_ring;
@@ -1502,16 +1597,19 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			lp2 += alpha * (lp1 - lp2);
 			lp3 += alpha * (lp2 - lp3);
 			s += lpf_wet * (lp3 - s);
-			if (send_gain > 0) au_env.send[frame_offset+i] += s * send_gain;
+			if (send_on) { au_env.send[frame_offset+i] += s * send_cur; send_cur += send_step; }
 			au_mix_temp[i] = s;
 
-			if (k_bus > 0) {
+			if (bus_on) {
 				float* bus = au_foa_ring + (((uint32_t)(au_foa_head + frame_offset + i) & au_foa_mask) * 4);
-				XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc, XMLoadFloat4((XMFLOAT4*)bus)));
+				XMStoreFloat4((XMFLOAT4*)bus, XMVectorMultiplyAdd(XMVectorReplicate(s), enc_cur, XMLoadFloat4((XMFLOAT4*)bus)));
+				enc_cur = XMVectorAdd(enc_cur, enc_step);
 			}
 
-			for (int32_t f = 0; f < AU_VOICING_STAGES; f++)
-				s = au_biquad_apply(&vc[f], voice->dir_filter[f], s);
+			for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+				s = au_biquad_apply(&vc_cur[f], voice->dir_filter[f], s);
+				au_biquad_advance(&vc_cur[f], &vc_stp[f]);
+			}
 			ring[ring_at] = s;
 
 			// Fractional ear taps - positive-offset masked wrap, matching
@@ -1537,6 +1635,13 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 			out[i*2  ] += vl * g_dir_l;
 			out[i*2+1] += vr * g_dir_r;
 
+			g_dir_l += g_step_l;
+			g_dir_r += g_step_r;
+			wet_l   += wet_stp_l;
+			wet_r   += wet_stp_r;
+			sh_g    += sh_g_stp;
+			alpha   += alpha_stp;
+			lpf_wet += lpfw_stp;
 			delay_l += step_l;
 			delay_r += step_r;
 			ring_at  = (ring_at + 1) & (AU_ITD_MAX-1);
@@ -1549,10 +1654,20 @@ static ma_uint32 voice_mix(au_voice_t* voice, pose_t head, float* output, ma_uin
 		voice->dir_shadow[0] = shadow_l;
 		voice->dir_shadow[1] = shadow_r;
 		voice->dir_ring_at   = ring_at;
-		if (k_bus > 0) au_foa_touched = true;
+		voice->gain_prev[0]  = g_tgt_l;
+		voice->gain_prev[1]  = g_tgt_r;
+		voice->wet_prev[0]   = wet_tgt_l;
+		voice->wet_prev[1]   = wet_tgt_r;
+		voice->shg_prev      = sh_g_tgt;
+		if (bus_on) au_foa_touched = true;
 	}
+	voice->gain_snap  = false;
+	voice->send_prev  = send_gain;
+	voice->alpha_prev = alpha_tgt;
+	voice->lpfw_prev  = lpfw_tgt;
+	XMStoreFloat4((XMFLOAT4*)voice->enc_prev, enc);
 	au_er_write(voice, &er_taps, au_mix_temp, frame_offset, (ma_uint32)read);
-	if (send_gain > 0 && read > 0) au_env.sent = true;
+	if (send_on && read > 0) au_env.sent = true;
 
 	// Track the block's peak for the intensity getter. Main zeroes this
 	// each frame, a lost reset here just makes the meter sticky one frame.
@@ -1586,9 +1701,10 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	quat qinv = quat_inverse(head.orientation);
 
 	float        gains_l[4], gains_r[4], sends[4], lpws[4], alphas[4], wets_l[4], wets_r[4];
+	float        gprv_l[4], gprv_r[4], sprv[4], aprv[4], lprv[4], wprv_l[4], wprv_r[4];
 	float        dlys_l[4], dlys_r[4], stps_l[4], stps_r[4], tgts_l[4], tgts_r[4];
-	au_biquad_t  vcs[4][AU_VOICING_STAGES];
-	float        shg[4], shd[4], shstp[4], shtgt[4];
+	au_biquad_t  vcs[4][AU_VOICING_STAGES], vcp[4][AU_VOICING_STAGES];
+	float        shg[4], shgt[4], shgs[4], shd[4], shstp[4], shtgt[4];
 	au_er_taps_t ers[4];
 	float*       srcs[4];
 	int32_t      rats[4];
@@ -1610,6 +1726,7 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 			atomic_load_f32(&voice->params.pos_x),
 			atomic_load_f32(&voice->params.pos_y),
 			atomic_load_f32(&voice->params.pos_z) };
+		position = voice_pos_smooth(voice, position, head.position, frame_count);
 		vec3  dir   = position - head.position;
 		float dist2 = vec3_magnitude_sq(dir);
 		float dist  = fmaxf(AU_MIN_DISTANCE, sqrtf(dist2));
@@ -1633,6 +1750,22 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		gains_l[v] = gain * (dist / d_l);
 		gains_r[v] = gain * (dist / d_r);
 		sends  [v] = au_env.on ? gain * fminf(dist, au_env.send_ref) : 0; // Direct voices have spread 0
+		// Applied gains and direction-driven DSP params ramp from the
+		// previous block's values, see voice_mix.
+		bool dsp_snap = voice->gain_snap || voice->dir_delay[0] < 0;
+		gprv_l [v] = voice->gain_snap ? gains_l[v] : voice->gain_prev[0];
+		gprv_r [v] = voice->gain_snap ? gains_r[v] : voice->gain_prev[1];
+		sprv   [v] = voice->gain_snap ? sends  [v] : voice->send_prev;
+		aprv   [v] = voice->gain_snap ? alphas [v] : voice->alpha_prev;
+		lprv   [v] = voice->gain_snap ? lpws   [v] : voice->lpfw_prev;
+		voice->gain_snap    = false;
+		voice->gain_prev[0] = gains_l[v];
+		voice->gain_prev[1] = gains_r[v];
+		voice->send_prev    = sends[v];
+		voice->alpha_prev   = alphas[v];
+		voice->lpfw_prev    = lpws[v];
+		// This path never encodes the bus, a later handoff ramps in from 0.
+		memset(voice->enc_prev, 0, sizeof(voice->enc_prev));
 		au_er_setup(&ers[v], dir, dist, decibels, trim_gain, 0, atomic_load_i32(&voice->er_grant));
 		float tgt_l = au_ear_delay(-uh.x);
 		float tgt_r = au_ear_delay( uh.x);
@@ -1646,9 +1779,21 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		stps_r[v] = (tgt_r - dlys_r[v]) / (float)frame_count;
 		wets_l[v] = AU_SHADOW_WET * fmaxf(0,  uh.x);
 		wets_r[v] = AU_SHADOW_WET * fmaxf(0, -uh.x);
+		wprv_l[v] = dsp_snap ? wets_l[v] : voice->wet_prev[0];
+		wprv_r[v] = dsp_snap ? wets_r[v] : voice->wet_prev[1];
+		voice->wet_prev[0] = wets_l[v];
+		voice->wet_prev[1] = wets_r[v];
 
 		au_voicing(uh, vcs[v]);
-		shg  [v] = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
+		for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
+			if (dsp_snap) vcp[v][f] = vcs[v][f];
+			else          memcpy(&vcp[v][f], voice->voicing_prev[f], sizeof(au_biquad_t));
+			memcpy(voice->voicing_prev[f], &vcs[v][f], sizeof(au_biquad_t));
+		}
+		shgt [v] = AU_SHOULDER_GAIN * fmaxf(0, uh.y);
+		shg  [v] = dsp_snap ? shgt[v] : voice->shg_prev;
+		shgs [v] = (shgt[v] - shg[v]) / (float)frame_count;
+		voice->shg_prev = shgt[v];
 		shtgt[v] = (2.0f * AU_SHOULDER_M / 343.0f) * AU_SAMPLE_RATE * fmaxf(0, uh.y);
 		shd  [v] = voice->dir_shoulder < 0 ? shtgt[v] : voice->dir_shoulder;
 		shstp[v] = (shtgt[v] - shd[v]) / (float)frame_count;
@@ -1677,21 +1822,36 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMVECTOR shl = XMVectorSet(vs[0]->dir_shadow[0], vs[1]->dir_shadow[0], vs[2]->dir_shadow[0], vs[3]->dir_shadow[0]);
 	XMVECTOR shr = XMVectorSet(vs[0]->dir_shadow[1], vs[1]->dir_shadow[1], vs[2]->dir_shadow[1], vs[3]->dir_shadow[1]);
 
-	XMVECTOR alpha4 = XMVectorSet(alphas[0], alphas[1], alphas[2], alphas[3]);
-	XMVECTOR lpw4   = XMVectorSet(lpws  [0], lpws  [1], lpws  [2], lpws  [3]);
-	XMVECTOR gnl4   = XMVectorSet(gains_l[0], gains_l[1], gains_l[2], gains_l[3]);
-	XMVECTOR gnr4   = XMVectorSet(gains_r[0], gains_r[1], gains_r[2], gains_r[3]);
-	XMVECTOR sg4    = XMVectorSet(sends  [0], sends  [1], sends  [2], sends  [3]);
-	XMVECTOR wetl4  = XMVectorSet(wets_l[0], wets_l[1], wets_l[2], wets_l[3]);
-	XMVECTOR wetr4  = XMVectorSet(wets_r[0], wets_r[1], wets_r[2], wets_r[3]);
+	float    inv    = frame_count > 0 ? 1.0f / (float)frame_count : 0;
+	XMVECTOR alpha4 = XMVectorSet(aprv  [0], aprv  [1], aprv  [2], aprv  [3]);
+	XMVECTOR lpw4   = XMVectorSet(lprv  [0], lprv  [1], lprv  [2], lprv  [3]);
+	XMVECTOR gnl4   = XMVectorSet(gprv_l[0], gprv_l[1], gprv_l[2], gprv_l[3]);
+	XMVECTOR gnr4   = XMVectorSet(gprv_r[0], gprv_r[1], gprv_r[2], gprv_r[3]);
+	XMVECTOR sg4    = XMVectorSet(sprv  [0], sprv  [1], sprv  [2], sprv  [3]);
+	XMVECTOR wetl4  = XMVectorSet(wprv_l[0], wprv_l[1], wprv_l[2], wprv_l[3]);
+	XMVECTOR wetr4  = XMVectorSet(wprv_r[0], wprv_r[1], wprv_r[2], wprv_r[3]);
+	XMVECTOR alpha4s= XMVectorScale(XMVectorSubtract(XMVectorSet(alphas [0], alphas [1], alphas [2], alphas [3]), alpha4), inv);
+	XMVECTOR lpw4s  = XMVectorScale(XMVectorSubtract(XMVectorSet(lpws   [0], lpws   [1], lpws   [2], lpws   [3]), lpw4  ), inv);
+	XMVECTOR gnl4s  = XMVectorScale(XMVectorSubtract(XMVectorSet(gains_l[0], gains_l[1], gains_l[2], gains_l[3]), gnl4  ), inv);
+	XMVECTOR gnr4s  = XMVectorScale(XMVectorSubtract(XMVectorSet(gains_r[0], gains_r[1], gains_r[2], gains_r[3]), gnr4  ), inv);
+	XMVECTOR sg4s   = XMVectorScale(XMVectorSubtract(XMVectorSet(sends  [0], sends  [1], sends  [2], sends  [3]), sg4   ), inv);
+	XMVECTOR wetl4s = XMVectorScale(XMVectorSubtract(XMVectorSet(wets_l [0], wets_l [1], wets_l [2], wets_l [3]), wetl4 ), inv);
+	XMVECTOR wetr4s = XMVectorScale(XMVectorSubtract(XMVectorSet(wets_r [0], wets_r [1], wets_r [2], wets_r [3]), wetr4 ), inv);
 	XMVECTOR vb0[AU_VOICING_STAGES], vb1[AU_VOICING_STAGES], vb2[AU_VOICING_STAGES];
 	XMVECTOR va1[AU_VOICING_STAGES], va2[AU_VOICING_STAGES];
+	XMVECTOR vb0s[AU_VOICING_STAGES], vb1s[AU_VOICING_STAGES], vb2s[AU_VOICING_STAGES];
+	XMVECTOR va1s[AU_VOICING_STAGES], va2s[AU_VOICING_STAGES];
 	for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
-		vb0[f] = XMVectorSet(vcs[0][f].b0, vcs[1][f].b0, vcs[2][f].b0, vcs[3][f].b0);
-		vb1[f] = XMVectorSet(vcs[0][f].b1, vcs[1][f].b1, vcs[2][f].b1, vcs[3][f].b1);
-		vb2[f] = XMVectorSet(vcs[0][f].b2, vcs[1][f].b2, vcs[2][f].b2, vcs[3][f].b2);
-		va1[f] = XMVectorSet(vcs[0][f].a1, vcs[1][f].a1, vcs[2][f].a1, vcs[3][f].a1);
-		va2[f] = XMVectorSet(vcs[0][f].a2, vcs[1][f].a2, vcs[2][f].a2, vcs[3][f].a2);
+		vb0[f] = XMVectorSet(vcp[0][f].b0, vcp[1][f].b0, vcp[2][f].b0, vcp[3][f].b0);
+		vb1[f] = XMVectorSet(vcp[0][f].b1, vcp[1][f].b1, vcp[2][f].b1, vcp[3][f].b1);
+		vb2[f] = XMVectorSet(vcp[0][f].b2, vcp[1][f].b2, vcp[2][f].b2, vcp[3][f].b2);
+		va1[f] = XMVectorSet(vcp[0][f].a1, vcp[1][f].a1, vcp[2][f].a1, vcp[3][f].a1);
+		va2[f] = XMVectorSet(vcp[0][f].a2, vcp[1][f].a2, vcp[2][f].a2, vcp[3][f].a2);
+		vb0s[f] = XMVectorScale(XMVectorSubtract(XMVectorSet(vcs[0][f].b0, vcs[1][f].b0, vcs[2][f].b0, vcs[3][f].b0), vb0[f]), inv);
+		vb1s[f] = XMVectorScale(XMVectorSubtract(XMVectorSet(vcs[0][f].b1, vcs[1][f].b1, vcs[2][f].b1, vcs[3][f].b1), vb1[f]), inv);
+		vb2s[f] = XMVectorScale(XMVectorSubtract(XMVectorSet(vcs[0][f].b2, vcs[1][f].b2, vcs[2][f].b2, vcs[3][f].b2), vb2[f]), inv);
+		va1s[f] = XMVectorScale(XMVectorSubtract(XMVectorSet(vcs[0][f].a1, vcs[1][f].a1, vcs[2][f].a1, vcs[3][f].a1), va1[f]), inv);
+		va2s[f] = XMVectorScale(XMVectorSubtract(XMVectorSet(vcs[0][f].a2, vcs[1][f].a2, vcs[2][f].a2, vcs[3][f].a2), va2[f]), inv);
 	}
 	XMVECTOR shk   = XMVectorReplicate(0.178f);
 	XMVECTOR peak4 = XMVectorZero();
@@ -1719,6 +1879,7 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		}
 
 		// The voicing chain: N1/N2 notches, P1 peak, then the dull shelf.
+		// Coefficients interpolate across the block, matching the scalar path.
 		for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
 			XMVECTOR y = XMVectorMultiply(vb0[f], s);
 			y = XMVectorMultiplyAdd             (vb1[f], vx1[f], y);
@@ -1726,6 +1887,11 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 			y = XMVectorNegativeMultiplySubtract(va1[f], vy1[f], y);
 			y = XMVectorNegativeMultiplySubtract(va2[f], vy2[f], y);
 			vx2[f] = vx1[f]; vx1[f] = s; vy2[f] = vy1[f]; vy1[f] = y; s = y;
+			vb0[f] = XMVectorAdd(vb0[f], vb0s[f]);
+			vb1[f] = XMVectorAdd(vb1[f], vb1s[f]);
+			vb2[f] = XMVectorAdd(vb2[f], vb2s[f]);
+			va1[f] = XMVectorAdd(va1[f], va1s[f]);
+			va2[f] = XMVectorAdd(va2[f], va2s[f]);
 		}
 
 		// Per-voice fractional ear taps, the one scalar stage.
@@ -1755,6 +1921,7 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 			}
 			dlys_l[v] += stps_l[v];
 			dlys_r[v] += stps_r[v];
+			shg   [v] += shgs  [v];
 			rats[v] = (rat + 1) & (AU_ITD_MAX-1);
 		}
 
@@ -1767,6 +1934,13 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 		vr  = XMVectorMultiplyAdd(wetr4, XMVectorSubtract(shr, vr), vr);
 		output[i*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gnl4), ones));
 		output[i*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gnr4), ones));
+		gnl4   = XMVectorAdd(gnl4,   gnl4s);
+		gnr4   = XMVectorAdd(gnr4,   gnr4s);
+		sg4    = XMVectorAdd(sg4,    sg4s);
+		wetl4  = XMVectorAdd(wetl4,  wetl4s);
+		wetr4  = XMVectorAdd(wetr4,  wetr4s);
+		alpha4 = XMVectorAdd(alpha4, alpha4s);
+		lpw4   = XMVectorAdd(lpw4,   lpw4s);
 	}
 	if (env_on) {
 		// Zero-padded lane regions write silence through the taps, which
@@ -1840,10 +2014,9 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		if (atomic_load_i32_acq(&voice->state) != au_voice_playing)
 			continue;
 
-		// A stop ramps the voice out to declick, finishing once the ramp
-		// lands (voice_mix_done). Paused, dormant, and pre-onset voices are
-		// silent with nothing to declick, they finish immediately - checked
-		// every block so a voice that goes dormant mid-ramp can't leak.
+		// A stop ramps the voice out to declick, voice_mix_done finishes it.
+		// Paused, dormant, and pre-onset voices have nothing to declick and
+		// finish now - rechecked each block so a mid-ramp rank-out can't leak.
 		if (atomic_load_i32(&voice->params.stop_request) != 0) {
 			if (atomic_load_i32(&voice->params.paused) != 0 ||
 			    atomic_load_i32(&voice->audible)       == 0 ||

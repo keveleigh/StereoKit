@@ -35,6 +35,9 @@ namespace sk {
 // bounces are masked anyway, and the cap bounds cost under voice swarms.
 #define AU_ER_VOICES          16
 #define AU_SMOOTH_TIME        0.05f  // Emit point smoothing constant, sec
+// A fast-moving source's params step at block rate, audible zipper noise up
+// close. Position smooths through this one-pole, gains ramp across blocks.
+#define AU_POS_SMOOTH_TIME    0.015f // Audio-side position one-pole, sec
 
 // Voice lifecycle, the value is atomic. Main reserves free slots, audio
 // activates them on the play command, finished voices wait for a main drain.
@@ -103,6 +106,18 @@ struct au_voice_t {
 	sound_bus_        bus;
 	float             fade_gain;       // Onset/seek/stop ramp, 1 = no fade
 	bool              fade_out;        // Stop declick, fade_gain ramps to 0
+	bool              gain_snap;       // First block, gains start at target
+	float             gain_prev[2];    // Last block's applied L/R gain
+	float             enc_prev[4];     // Last block's FOA encode vector
+	float             send_prev;       // Last block's environment send gain
+	float             voicing_prev[AU_VOICING_STAGES][5]; // Voicing biquad coeffs
+	float             wet_prev[2];     // Head-shadow wet blend L/R
+	float             shg_prev;        // Shoulder bounce gain
+	float             alpha_prev;      // Air absorption pole coefficient
+	float             lpfw_prev;       // Air absorption wet blend
+	float             er_enc_prev[AU_ER_TAPS][4]; // Reflection tap encodes
+	bool              pos_smooth_init;
+	vec3              pos_smooth;      // Smoothed listener-relative offset
 	float             resample_frac;   // Pitch resampler phase, 0-1
 	float             resample_last[3][4]; // Last 3 consumed frames, per channel
 	ma_decoder*       stream_decoder;  // sound_data_stream_file voices only

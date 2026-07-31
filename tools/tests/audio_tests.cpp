@@ -196,6 +196,100 @@ static void at_test_stop_declick() {
 
 ///////////////////////////////////////////
 
+// Swings the voices through the near field with per-frame position jumps,
+// like a hand-held emitter, and reports the peak level and the largest
+// sample-to-sample step in the left ear across the whole run.
+static void at_zipper_measure(sound_inst_t* insts, int32_t count, float* out_level, float* out_delta) {
+	static float block[AT_BLOCK * 2];
+	float level = 0, max_delta = 0, prev = 0;
+	bool  first = true;
+	for (int32_t f = 0; f < 40; f++) {
+		// ~4.5m/s through the min-distance clamp region, side to side.
+		float ph = (float)f / 8.0f;
+		vec3  at = vec3{sinf(ph) * 0.3f, 0, -0.25f - 0.25f * fabsf(cosf(ph))};
+		for (int32_t v = 0; v < count; v++) sound_inst_set_pos(insts[v], at);
+		audio_render_block(block, AT_BLOCK);
+		audio_test_step();
+		for (int32_t i = 0; i < AT_BLOCK; i++) {
+			float s = block[i*2];
+			if (!first && fabsf(s - prev) > max_delta) max_delta = fabsf(s - prev);
+			if (fabsf(s) > level) level = fabsf(s);
+			prev = s; first = false;
+		}
+	}
+	*out_level = level;
+	*out_delta = max_delta;
+}
+
+// Voicing coefficients, shadow wet, and shoulder gain are direction-driven
+// and invisible to DC content - a sine orbiting fast through azimuth and
+// elevation exercises them, bounded by the sine's own per-sample delta.
+static void at_test_voicing_zipper_measure(float* out_level, float* out_delta) {
+	sound_t      sound = at_generate(at_sine, 2.0f);
+	sound_play_t loop  = {}; loop.flags = sound_flags_loop;
+	sound_inst_t inst  = sound_play(sound, vec3{0, 0, -0.3f}, &loop);
+	at_render(AT_BLOCK * 4, nullptr, nullptr);
+
+	static float block[AT_BLOCK * 2];
+	float level = 0, max_delta = 0, prev = 0;
+	bool  first = true;
+	for (int32_t f = 0; f < 60; f++) {
+		float az = (float)f * 0.35f;
+		float el = 0.9f * sinf((float)f * 0.55f);
+		vec3  at = vec3{sinf(az) * 0.3f * cosf(el), sinf(el) * 0.3f, -cosf(az) * 0.3f * cosf(el)};
+		sound_inst_set_pos(inst, at);
+		audio_render_block(block, AT_BLOCK);
+		audio_test_step();
+		for (int32_t i = 0; i < AT_BLOCK; i++) {
+			float s = block[i*2];
+			if (!first && fabsf(s - prev) > max_delta) max_delta = fabsf(s - prev);
+			if (fabsf(s) > level) level = fabsf(s);
+			prev = s; first = false;
+		}
+	}
+	sound_inst_stop(inst);
+	at_flush();
+	sound_release(sound);
+	*out_level = level;
+	*out_delta = max_delta;
+}
+
+// The mixer ramps applied gains across each block and smooths position, so
+// a loud source moving fast near the head can't step at block boundaries.
+// Flat DC content makes any step show as a sample-to-sample delta.
+static void at_test_gain_zipper() {
+	sound_t      sound = at_generate(at_dc, 2.0f);
+	sound_play_t loop  = {}; loop.flags = sound_flags_loop;
+	float        level, delta;
+
+	// One voice takes the scalar direct path.
+	sound_inst_t inst = sound_play(sound, vec3{0,0,-0.5f}, &loop);
+	at_render(AT_BLOCK * 4, nullptr, nullptr);
+	at_zipper_measure(&inst, 1, &level, &delta);
+	AT_CHECK(level > 0.05f,         "zipper voice reaches near-field level");
+	AT_CHECK(delta < level * 0.02f, "fast near-field movement stays step-free");
+	sound_inst_stop(inst);
+	at_flush();
+
+	// Four voices exercise the same ramps in the batched direct path.
+	sound_inst_t four[4];
+	for (int32_t i = 0; i < 4; i++) four[i] = sound_play(sound, vec3{0,0,-0.5f}, &loop);
+	at_render(AT_BLOCK * 4, nullptr, nullptr);
+	at_zipper_measure(four, 4, &level, &delta);
+	AT_CHECK(delta < level * 0.02f, "batched near-field movement stays step-free");
+	for (int32_t i = 0; i < 4; i++) sound_inst_stop(four[i]);
+	at_flush();
+
+	// 8% splits a 440Hz sine's natural ~5.8% per-sample delta from the
+	// ~11.5% that per-block parameter snapping produces on this orbit.
+	at_test_voicing_zipper_measure(&level, &delta);
+	AT_CHECK(delta < level * 0.08f, "direction-driven DSP params stay step-free");
+
+	sound_release(sound);
+}
+
+///////////////////////////////////////////
+
 static void at_gen_ambi_w(float* out, uint64_t start, uint64_t frames);
 
 static void at_test_steal() {
@@ -1795,6 +1889,7 @@ int audio_tests_run() {
 	at_test_polyphony();
 	at_test_stop();
 	at_test_stop_declick();
+	at_test_gain_zipper();
 	at_test_steal();
 	at_test_virtual_voices();
 	at_test_cmd_overflow();
