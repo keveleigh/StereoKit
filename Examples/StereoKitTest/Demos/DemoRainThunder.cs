@@ -93,6 +93,7 @@ class DemoRainThunder : ITest
 	bool  autoThunder  = true;
 	SphericalHarmonics skyBase;
 	SphericalHarmonics skyOriginal;
+	AudioEnvironment   envOriginal;
 	bool  skyFlashOn  = false;
 	float flashLevel  = 0;       // Current stroke brightness, decaying
 	float glowLevel   = 0;       // Continuing-current floor
@@ -354,7 +355,9 @@ class DemoRainThunder : ITest
 	{
 		// -- Storm light --
 		// Half the default skylight: overcast mood, and the lightning
-		// flashes read far better against it. Restored at shutdown.
+		// flashes read far better against it. Restored at shutdown, as is
+		// whatever acoustic environment the scene arrived with.
+		envOriginal = Audio.Environment;
 		skyOriginal = Renderer.SkyLight;
 		SphericalHarmonics sky = skyOriginal;
 		sky.coefficient1 *= 0.5f; sky.coefficient2 *= 0.5f; sky.coefficient3 *= 0.5f;
@@ -554,7 +557,7 @@ class DemoRainThunder : ITest
 
 	public void Shutdown()
 	{
-		Audio.SetEnvironment(AudioEnv.Off);
+		Audio.Environment = envOriginal;
 		Renderer.SkyLight = skyOriginal;
 		skyFlashOn        = false;
 		washBrightInst.Stop();

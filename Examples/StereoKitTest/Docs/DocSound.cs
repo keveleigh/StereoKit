@@ -47,22 +47,22 @@ class DocSound : ITest
 		sampleSound.Play(Vec3.Zero);
 		/// :End:
 
-		/// :CodeSample: Audio.SetEnvironment Audio.Environment AudioEnvironment.Preset
+		/// :CodeSample: Audio.Environment AudioEnvironment
 		/// ### Acoustic environments
 		/// Spatial sounds can play inside an acoustic environment - a
 		/// shared reverb and early reflections that carry a sense of space
 		/// and absolute distance! The default is entirely off, which costs
-		/// nothing, and is the right resting state for AR. Presets cover
-		/// common spaces:
-		Audio.SetEnvironment(AudioEnv.Forest);
+		/// nothing, and is the right resting state for AR. Preset constants
+		/// cover common spaces:
+		Audio.Environment = AudioEnvironment.Forest;
 
 		// Or start from a preset and adjust it to taste:
-		AudioEnvironment env = AudioEnvironment.Preset(AudioEnv.Room);
+		AudioEnvironment env = AudioEnvironment.Room;
 		env.decay   = 0.6f;
 		env.reflect = 0.7f;
 		Audio.Environment = env;
 		/// :End:
-		Audio.SetEnvironment(AudioEnv.Off);
+		Audio.Environment = AudioEnvironment.Off;
 	}
 
 	public void Step    () { }

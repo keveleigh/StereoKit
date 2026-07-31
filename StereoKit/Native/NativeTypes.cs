@@ -74,8 +74,9 @@ namespace StereoKit
 	/// environment rather than a literal room, so it covers halls through
 	/// forests. Spatial sounds feed a shared reverb whose level stays constant
 	/// with distance, so the direct-to-reverb balance naturally carries how far
-	/// away a sound is. A wet of 0 disables the system entirely at zero cost.
-	/// Start from audio_env_preset and adjust, or build values directly.</summary>
+	/// away a sound is. A wet of 0 disables the system entirely at zero cost,
+	/// and a zeroed struct is the off state. Language bindings provide preset
+	/// values for common spaces as starting points.</summary>
 	[StructLayout(LayoutKind.Sequential)]
 	public partial struct AudioEnvironment
 	{

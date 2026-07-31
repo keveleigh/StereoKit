@@ -109,15 +109,23 @@ static void ar_render_orbit(const char* path, sound_t sound, float radius, bool 
 	log_infof("[audio_render] wrote %s", path);
 }
 
+// Environment values mirroring the C# AudioEnvironment preset constants.
+//                                       wet    decay  damp  size scatter reflect
+static const audio_env_t ar_env_off    = {};
+static const audio_env_t ar_env_room   = { 0.17f, 0.4f,  0.55f,  7, 0.6f, 0.55f };
+static const audio_env_t ar_env_hall   = { 0.22f, 1.4f,  0.45f, 16, 0.7f, 0.55f };
+static const audio_env_t ar_env_forest = { 0.11f, 0.5f,  0.9f,  12, 0.9f, 0.12f };
+static const audio_env_t ar_env_field  = { 0.05f, 0.25f, 0.9f,   8, 0.7f, 0.06f };
+
 // Bursts orbiting at 3m for 4s, then spiraling out to 12m. Listen for tail
 // character, and the direct/reverb balance carrying distance on the way out.
-static void ar_render_env(const char* path, sound_t sound, audio_env_ preset) {
+static void ar_render_env(const char* path, sound_t sound, audio_env_t env) {
 	const uint32_t total = AU_SAMPLE_RATE * 10;
 	const uint32_t hold  = AU_SAMPLE_RATE * 4;
 	FILE* file = ar_wav_open(path, total);
 	if (file == nullptr) return;
 
-	audio_set_env(audio_env_preset(preset));
+	audio_set_env(env);
 	sound_play_t settings = {}; settings.flags = sound_flags_loop;
 	sound_inst_t inst     = sound_play(sound, vec3{0, 0, -3}, &settings);
 
@@ -134,7 +142,7 @@ static void ar_render_env(const char* path, sound_t sound, audio_env_ preset) {
 	fclose(file);
 
 	sound_inst_stop(inst);
-	audio_set_env(audio_env_preset(audio_env_off));
+	audio_set_env(ar_env_off);
 	ar_flush();
 	log_infof("[audio_render] wrote %s", path);
 }
@@ -197,15 +205,15 @@ int audio_render_run(const char* out_dir, const char* ambi_file) {
 	snprintf(path, sizeof(path), "%s/orbit_near.wav", out_dir);
 	ar_render_orbit(path, bursts, 0.35f, false, false);
 	snprintf(path, sizeof(path), "%s/env_off.wav", out_dir);
-	ar_render_env(path, bursts, audio_env_off);
+	ar_render_env(path, bursts, ar_env_off);
 	snprintf(path, sizeof(path), "%s/env_room.wav", out_dir);
-	ar_render_env(path, bursts, audio_env_room);
+	ar_render_env(path, bursts, ar_env_room);
 	snprintf(path, sizeof(path), "%s/env_hall.wav", out_dir);
-	ar_render_env(path, bursts, audio_env_hall);
+	ar_render_env(path, bursts, ar_env_hall);
 	snprintf(path, sizeof(path), "%s/env_forest.wav", out_dir);
-	ar_render_env(path, bursts, audio_env_forest);
+	ar_render_env(path, bursts, ar_env_forest);
 	snprintf(path, sizeof(path), "%s/env_field.wav", out_dir);
-	ar_render_env(path, bursts, audio_env_field);
+	ar_render_env(path, bursts, ar_env_field);
 	sound_release(bursts);
 
 	if (ambi_file != nullptr) {

@@ -138,20 +138,26 @@ class DemoSound : ITest
 		wandTipPrev = wandTip;
 	}
 
-	static readonly string[] envNames = { "Off", "Room", "Hall", "Cave", "Forest", "Field" };
-	AudioEnv envActive = AudioEnv.Off;
+	static readonly (string name, AudioEnvironment env)[] envs = {
+		("Off",    AudioEnvironment.Off   ),
+		("Room",   AudioEnvironment.Room  ),
+		("Hall",   AudioEnvironment.Hall  ),
+		("Cave",   AudioEnvironment.Cave  ),
+		("Forest", AudioEnvironment.Forest),
+		("Field",  AudioEnvironment.Field ) };
+	int envActive = 0;
 
-	// The acoustic environment is global state, so the demo owns it only
-	// while it's up - Shutdown always hands back a dry mix.
+	// The acoustic environment is global state, and the choice here sticks
+	// around across scenes on purpose - hear it against the other demos.
 	void StepEnvironment()
 	{
-		for (int i = 0; i < envNames.Length; i++)
+		for (int i = 0; i < envs.Length; i++)
 		{
 			if (i % 3 != 0) UI.SameLine();
-			if (UI.Radio(envNames[i], envActive == (AudioEnv)i) && envActive != (AudioEnv)i)
+			if (UI.Radio(envs[i].name, envActive == i) && envActive != i)
 			{
-				envActive = (AudioEnv)i;
-				Audio.SetEnvironment(envActive);
+				envActive = i;
+				Audio.Environment = envs[i].env;
 			}
 		}
 	}
@@ -202,6 +208,14 @@ class DemoSound : ITest
 		sphereMat = Material.Unlit.Copy();
 		sphereMat.Transparency = Transparency.Blend;
 		sphereMat.DepthWrite   = false;
+
+		// The environment may have been set on a previous visit, keep the
+		// radio selection truthful. Wet 0 is always Off no matter the other
+		// fields; a custom value selects nothing.
+		AudioEnvironment current = Audio.Environment;
+		envActive = current.wet == 0
+			? 0
+			: Array.FindIndex(envs, e => e.env.Equals(current));
 	}
 
 	public void Shutdown()

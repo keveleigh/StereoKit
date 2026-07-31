@@ -111,7 +111,7 @@ ui_dir_ UIDir
 ui_corner_ UICorner
 ui_scroll_ UIScroll
 
-# The environment param struct, distinct from the AudioEnv preset enum
+# The acoustic environment parameter struct
 audio_env_t AudioEnvironment
 
 # Skip code generation for hand-written types (use @noimpl directive)

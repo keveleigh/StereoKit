@@ -199,14 +199,28 @@ namespace StereoKit
 
 	public partial struct AudioEnvironment
 	{
-		/// <summary>Fetches the parameter values behind one of the built-in
-		/// environment presets! These make good starting points for custom
-		/// spaces - grab one, tweak a field or two, and assign it to
-		/// Audio.Environment.</summary>
-		/// <param name="preset">The preset to fetch values for.</param>
-		/// <returns>The preset's parameter values.</returns>
-		public static AudioEnvironment Preset(AudioEnv preset)
-			=> NativeAPI.audio_env_preset(preset);
+		// Built-in presets: starting points in the environment parameter
+		// space, from enclosed halls to open outdoor spaces. Grab one, tweak
+		// a field or two, and assign it to Audio.Environment.
+
+		/// <summary>No environmental acoustics at all, sounds play dry. This
+		/// is the default, and costs nothing - the right choice for AR, where
+		/// synthetic reverb would fight the real room's acoustics.</summary>
+		public static readonly AudioEnvironment Off    = new AudioEnvironment { wet = 0,     decay = 0.4f,  damp = 0.55f, size = 7,  scatter = 0.6f, reflect = 0.55f };
+		/// <summary>A small furnished room: a short, balanced tail.</summary>
+		public static readonly AudioEnvironment Room   = new AudioEnvironment { wet = 0.17f, decay = 0.4f,  damp = 0.55f, size = 7,  scatter = 0.6f, reflect = 0.55f };
+		/// <summary>A large hall: a long, bright, spacious tail.</summary>
+		public static readonly AudioEnvironment Hall   = new AudioEnvironment { wet = 0.22f, decay = 1.4f,  damp = 0.45f, size = 16, scatter = 0.7f, reflect = 0.55f };
+		/// <summary>A cavern: a very long, dense tail with hard
+		/// surfaces.</summary>
+		public static readonly AudioEnvironment Cave   = new AudioEnvironment { wet = 0.3f,  decay = 2.6f,  damp = 0.2f,  size = 22, scatter = 0.8f, reflect = 0.7f  };
+		/// <summary>A forest: no walls, just a short dark scatter off trunks
+		/// and foliage - quiet, but unmistakably
+		/// outdoors-with-presence.</summary>
+		public static readonly AudioEnvironment Forest = new AudioEnvironment { wet = 0.11f, decay = 0.5f,  damp = 0.9f,  size = 12, scatter = 0.9f, reflect = 0.12f };
+		/// <summary>An open field: nearly dry, the faintest hint of ground
+		/// scatter. Openness itself is the cue.</summary>
+		public static readonly AudioEnvironment Field  = new AudioEnvironment { wet = 0.05f, decay = 0.25f, damp = 0.9f,  size = 8,  scatter = 0.7f, reflect = 0.06f };
 	}
 
 	// Hand-written mirror of the C header's vert_t (@noimpl in APIGen) so

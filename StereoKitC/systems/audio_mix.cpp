@@ -469,17 +469,6 @@ static float au_env_size    = 5;
 static float au_env_scatter = 0.5f;
 static float au_env_reflect = 0.5f;
 
-audio_env_t audio_env_preset(audio_env_ preset) {
-	switch (preset) {          //  wet  decay damp  size scatter reflect
-	case audio_env_room:   return { 0.17f, 0.4f,  0.55f,  7, 0.6f, 0.55f };
-	case audio_env_hall:   return { 0.22f, 1.4f,  0.45f, 16, 0.7f, 0.55f };
-	case audio_env_cave:   return { 0.3f,  2.6f,  0.2f,  22, 0.8f, 0.7f  };
-	case audio_env_forest: return { 0.11f, 0.5f,  0.9f,  12, 0.9f, 0.12f };
-	case audio_env_field:  return { 0.05f, 0.25f, 0.9f,   8, 0.7f, 0.06f };
-	default:               return { 0,     0.4f,  0.55f,  7, 0.6f, 0.55f };
-	}
-}
-
 void audio_set_env(audio_env_t env) {
 	atomic_store_f32(&au_env_wet,     fmaxf(0,     fminf(1,  env.wet)));
 	atomic_store_f32(&au_env_decay,   fmaxf(0.05f, fminf(10, env.decay)));

@@ -745,7 +745,6 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_bus_volume(SoundBus bus);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_listener(IntPtr opt_pose);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern float        audio_get_output_decibels();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AudioEnvironment audio_env_preset(AudioEnv preset);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         audio_set_env(AudioEnvironment environment);
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AudioEnvironment audio_get_env();
 

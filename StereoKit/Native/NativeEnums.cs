@@ -1429,28 +1429,6 @@ namespace StereoKit
 		Ultra        = 192000,
 	}
 
-	/// <summary>Acoustic environment presets for audio_env_preset - starting points in
-	/// the environment parameter space, from enclosed halls to open outdoor
-	/// spaces.</summary>
-	public enum AudioEnv {
-		/// <summary>No environmental acoustics at all, sounds play dry. This is the
-		/// default, and costs nothing - the right choice for AR, where synthetic
-		/// reverb would fight the real room's acoustics.</summary>
-		Off          = 0,
-		/// <summary>A small furnished room: a short, balanced tail.</summary>
-		Room,
-		/// <summary>A large hall: a long, bright, spacious tail.</summary>
-		Hall,
-		/// <summary>A cavern: a very long, dense tail with hard surfaces.</summary>
-		Cave,
-		/// <summary>A forest: no walls, just a short dark scatter off trunks and
-		/// foliage - quiet, but unmistakably outdoors-with-presence.</summary>
-		Forest,
-		/// <summary>An open field: nearly dry, the faintest hint of ground scatter.
-		/// Openness itself is the cue.</summary>
-		Field,
-	}
-
 	/// <summary>When opening the Platform.FilePicker, this enum describes
 	/// how the picker should look and behave.</summary>
 	public enum PickerMode {

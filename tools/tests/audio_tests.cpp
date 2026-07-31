@@ -33,6 +33,11 @@ static int at_failures = 0;
 
 #define AT_BLOCK 1024
 
+// The C API takes raw environment parameters; these values mirror the C#
+// AudioEnvironment.Room preset.       wet   decay damp  size scatter reflect
+static const audio_env_t at_env_room = { 0.17f, 0.4f, 0.55f, 7, 0.6f, 0.55f };
+static const audio_env_t at_env_off  = {};
+
 ///////////////////////////////////////////
 
 // Renders `frames` of audio in blocks, running the main-thread step between
@@ -1431,7 +1436,7 @@ static void at_test_environment() {
 	AT_CHECK(dry_tail < 1e-7, "no environment leaves no tail");
 
 	// A room leaves a decaying tail behind the same burst.
-	audio_set_env(audio_env_preset(audio_env_room));
+	audio_set_env(at_env_room);
 	sound_play(burst, vec3{0, 0, -2});
 	at_render(AU_SAMPLE_RATE / 4, nullptr, nullptr);
 	double tail_a = at_render_energy(AU_SAMPLE_RATE / 4);
@@ -1477,7 +1482,7 @@ static void at_test_environment() {
 	AT_CHECK(er_e > flat_e * 2, "reflections add early bounce copies");
 	sound_release(imp);
 
-	audio_set_env(audio_env_preset(audio_env_off));
+	audio_set_env(at_env_off);
 	at_render(AU_SAMPLE_RATE, nullptr, nullptr);
 	sound_release(burst);
 }
@@ -1603,11 +1608,11 @@ int audio_bench_run() {
 
 	// The full environment: per-voice sends and reflection taps, plus the
 	// shared FDN. The delta against plain 64-voice is the env's price.
-	audio_set_env(audio_env_preset(audio_env_room));
+	audio_set_env(at_env_room);
 	for (int32_t i = 0; i < 64; i++) insts[i] = sound_play(mono, at_bench_pos(i), &loop);
 	at_bench("64 spatial voices, environment");
 	at_bench_stop(insts, 64);
-	audio_set_env(audio_env_preset(audio_env_off));
+	audio_set_env(at_env_off);
 	at_bench_stop(insts, 0); // Just settles the wet ramp-down
 
 	// A demo-shaped blend: beds and music alongside the transient swarm.
