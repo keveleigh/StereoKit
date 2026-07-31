@@ -1063,6 +1063,7 @@ static void voice_activate(au_voice_t* voice) {
 	voice->delay_left       = voice->pending_delay;
 	voice->bus              = voice->pending_bus;
 	voice->fade_gain        = voice->pending_fade ? 0.0f : 1.0f;
+	voice->fade_out         = false;
 	voice->resample_frac    = 0;
 	memset(voice->resample_last, 0, sizeof(voice->resample_last));
 	memset(voice->lpf_state,     0, sizeof(voice->lpf_state));
@@ -1166,14 +1167,23 @@ static inline float au_catmull(float p0, float p1, float p2, float p3, float t) 
 	return p1 + 0.5f*t*(p2 - p0 + t*(2*p0 - 5*p1 + 4*p2 - p3 + t*(3*(p1 - p2) + p3 - p0)));
 }
 
-// Mid-waveform starts (deferred play catch-up, seeks) are a step function
-// otherwise, an audible click. Applied to the raw source read, so every
-// render path inherits the ramp.
+// Mid-waveform starts (deferred play catch-up, seeks) and stops are a step
+// function otherwise, an audible click. Applied to the raw source read, so
+// every render path inherits the ramp.
 static inline void voice_fade_apply(au_voice_t* voice, float* dest, ma_uint64 frames, int32_t ch) {
-	float g = voice->fade_gain;
+	const float step = 1.0f / AU_FADE_FRAMES;
+	float       g    = voice->fade_gain;
+	if (voice->fade_out) {
+		// No early-out at zero, the frames past the ramp must be silenced.
+		for (ma_uint64 i = 0; i < frames; i++) {
+			for (int32_t c = 0; c < ch; c++) dest[i*ch + c] *= g;
+			g = fmaxf(0.0f, g - step);
+		}
+		voice->fade_gain = g;
+		return;
+	}
 	if (g >= 1.0f) return;
 
-	const float step = 1.0f / AU_FADE_FRAMES;
 	for (ma_uint64 i = 0; i < frames && g < 1.0f; i++) {
 		for (int32_t c = 0; c < ch; c++) dest[i*ch + c] *= g;
 		g += step;
@@ -1792,6 +1802,13 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	}
 }
 
+// A voice leaves the mix when its source runs dry (live rings idle instead)
+// or its stop declick ramp has fully faded out.
+static inline bool voice_mix_done(const au_voice_t* voice, ma_uint32 read, ma_uint32 block) {
+	return (read < block && voice->sound->data_type != sound_data_ring)
+	    || (voice->fade_out && voice->fade_gain <= 0.0f);
+}
+
 static void audio_mix_block(float* output, ma_uint32 frame_count) {
 	audio_drain_commands();
 
@@ -1823,9 +1840,18 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		if (atomic_load_i32_acq(&voice->state) != au_voice_playing)
 			continue;
 
+		// A stop ramps the voice out to declick, finishing once the ramp
+		// lands (voice_mix_done). Paused, dormant, and pre-onset voices are
+		// silent with nothing to declick, they finish immediately - checked
+		// every block so a voice that goes dormant mid-ramp can't leak.
 		if (atomic_load_i32(&voice->params.stop_request) != 0) {
-			voice_finish(voice, i);
-			continue;
+			if (atomic_load_i32(&voice->params.paused) != 0 ||
+			    atomic_load_i32(&voice->audible)       == 0 ||
+			    voice->delay_left > 0) {
+				voice_finish(voice, i);
+				continue;
+			}
+			voice->fade_out = true;
 		}
 
 		// Seeks only make sense for in-memory sounds, streams read forward.
@@ -1870,7 +1896,7 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		}
 
 		ma_uint32 mixed = voice_mix(voice, head, output, offset, block);
-		if (mixed < block && voice->sound->data_type != sound_data_ring)
+		if (voice_mix_done(voice, mixed, block))
 			voice_finish(voice, i);
 	}
 
@@ -1880,13 +1906,13 @@ static void audio_mix_block(float* output, ma_uint32 frame_count) {
 		ma_uint32 reads[4];
 		voice_mix_direct4(&direct[b], head, &direct_offset[b], &direct_block[b], reads, output, frame_count);
 		for (int32_t v = 0; v < 4; v++) {
-			if (reads[v] < direct_block[b+v] && direct[b+v]->sound->data_type != sound_data_ring)
+			if (voice_mix_done(direct[b+v], reads[v], direct_block[b+v]))
 				voice_finish(direct[b+v], direct_slot[b+v]);
 		}
 	}
 	for (; b < direct_count; b++) {
 		ma_uint32 mixed = voice_mix(direct[b], head, output, direct_offset[b], direct_block[b]);
-		if (mixed < direct_block[b] && direct[b]->sound->data_type != sound_data_ring)
+		if (voice_mix_done(direct[b], mixed, direct_block[b]))
 			voice_finish(direct[b], direct_slot[b]);
 	}
 
@@ -1938,6 +1964,10 @@ void audio_test_offline(bool32_t enable) {
 
 void audio_test_advance(float seconds) {
 	au_main_clock += seconds;
+}
+
+int32_t audio_test_voice_state(int16_t slot) {
+	return atomic_load_i32(&au_voices[slot].state);
 }
 
 // The main-thread half of a frame for offline tests. The listener stays at

@@ -27,8 +27,8 @@ namespace sk {
 // Plays made while the sound was still decoding catch up to real time on
 // load; loads faster than the grace start from the top instead.
 #define AU_PLAY_GRACE         0.1f
-// A mid-waveform start or seek is a step function, an audible click, so
-// those onsets ramp in over this many frames (~5ms).
+// A mid-waveform start, seek, or stop is a step function, an audible click,
+// so onsets ramp in and stops ramp out over this many frames (~5ms).
 #define AU_FADE_FRAMES        240
 #define AU_ER_TAPS            6      // Environment reflection images per voice
 // Reflection taps go to the most audible spatial voices only - quiet voices'
@@ -101,7 +101,8 @@ struct au_voice_t {
 	uint64_t          cursor;          // Frames, in *source* samples
 	uint64_t          delay_left;      // Onset frames remaining
 	sound_bus_        bus;
-	float             fade_gain;       // Onset/seek ramp, 1 = no fade
+	float             fade_gain;       // Onset/seek/stop ramp, 1 = no fade
+	bool              fade_out;        // Stop declick, fade_gain ramps to 0
 	float             resample_frac;   // Pitch resampler phase, 0-1
 	float             resample_last[3][4]; // Last 3 consumed frames, per channel
 	ma_decoder*       stream_decoder;  // sound_data_stream_file voices only
@@ -167,6 +168,9 @@ SK_API void audio_test_advance(float seconds);
 // A/B hook: force point sources through the FOA bus (the pre-direct-
 // binaural render path), switchable live for listening comparisons.
 SK_API void audio_test_force_bus(bool32_t enable);
+// A slot's au_voice_state_, so tests can watch voices free without linking
+// the voice pool data directly.
+SK_API int32_t audio_test_voice_state(int16_t slot);
 extern bool32_t   au_offline;
 extern au_voice_t au_voices[AU_VOICE_COUNT];
 
