@@ -51,6 +51,9 @@ static pose_t au_listener_pose = {{0,0,0}, {0,0,0,1}};
 
 static uint64_t au_mix_temp_size = 0;
 static float*   au_mix_temp      = nullptr;
+// Batched direct path scratch: a frame-major [frame][lane] region, then two
+// lane-major regions for the per-ear tap results.
+static float*   au_mix_vec       = nullptr;
 static bool     au_mix_truncate_warned = false;
 
 // Pitch resampling reads sources at up to AU_PITCH_MAX rate.
@@ -805,6 +808,8 @@ void audio_mix_init(int32_t period_frames) {
 	au_mix_temp_size = (uint64_t)period_frames + AU_SAMPLE_BUFFER_SIZE * 2;
 	au_mix_temp      = sk_malloc_t(float, au_mix_temp_size * 4);
 	memset(au_mix_temp, 0, sizeof(float) * au_mix_temp_size * 4);
+	au_mix_vec       = sk_malloc_t(float, au_mix_temp_size * 12);
+	memset(au_mix_vec, 0, sizeof(float) * au_mix_temp_size * 12);
 
 	au_resample_temp_size = ((uint64_t)(period_frames * AU_PITCH_MAX) + AU_SAMPLE_BUFFER_SIZE * 2 + 8) * 4;
 	au_resample_temp      = sk_malloc_t(float, au_resample_temp_size);
@@ -1858,89 +1863,197 @@ static void voice_mix_direct4(au_voice_t** vs, pose_t head, const ma_uint32* off
 	XMVECTOR ones  = XMVectorSplatOne();
 	bool     env_on = au_env.on;
 
-	for (ma_uint32 i = 0; i < frame_count; i++) {
+	// One loop with everything live spills constantly - the whole point of
+	// the batch is register-width math, so it runs as three passes over a
+	// frame-major scratch instead, each with a live set that fits.
+
+	// Pass 1: transpose lanes into the scratch in 4x4 chunks, air absorption
+	// and the env send on the way through.
+	ma_uint32 i4 = frame_count & ~3u;
+	for (ma_uint32 i = 0; i < i4; i += 4) {
+		XMMATRIX m;
+		m.r[0] = XMLoadFloat4((XMFLOAT4*)(srcs[0] + i));
+		m.r[1] = XMLoadFloat4((XMFLOAT4*)(srcs[1] + i));
+		m.r[2] = XMLoadFloat4((XMFLOAT4*)(srcs[2] + i));
+		m.r[3] = XMLoadFloat4((XMFLOAT4*)(srcs[3] + i));
+		m = XMMatrixTranspose(m);
+		for (int32_t k = 0; k < 4; k++) {
+			XMVECTOR s = m.r[k];
+			peak4 = XMVectorMax(peak4, XMVectorAbs(s));
+			lp0 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(s,   lp0), lp0);
+			lp1 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp0, lp1), lp1);
+			lp2 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp1, lp2), lp2);
+			lp3 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp2, lp3), lp3);
+			s   = XMVectorMultiplyAdd(lpw4, XMVectorSubtract(lp3, s), s);
+			m.r[k] = s;
+			XMStoreFloat4((XMFLOAT4*)(au_mix_vec + (i+k)*4), s);
+			if (env_on) {
+				au_env.send[i+k] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(s, sg4), ones));
+				sg4 = XMVectorAdd(sg4, sg4s);
+			}
+			alpha4 = XMVectorAdd(alpha4, alpha4s);
+			lpw4   = XMVectorAdd(lpw4,   lpw4s);
+		}
+		if (env_on) {
+			// The reflection post-pass reads the filtered mono back out of
+			// the lane slices, transpose the processed chunk back.
+			m = XMMatrixTranspose(m);
+			XMStoreFloat4((XMFLOAT4*)(srcs[0] + i), m.r[0]);
+			XMStoreFloat4((XMFLOAT4*)(srcs[1] + i), m.r[1]);
+			XMStoreFloat4((XMFLOAT4*)(srcs[2] + i), m.r[2]);
+			XMStoreFloat4((XMFLOAT4*)(srcs[3] + i), m.r[3]);
+		}
+	}
+	for (ma_uint32 i = i4; i < frame_count; i++) {
 		XMVECTOR s = XMVectorSet(srcs[0][i], srcs[1][i], srcs[2][i], srcs[3][i]);
 		peak4 = XMVectorMax(peak4, XMVectorAbs(s));
-
-		// Air absorption cascade, 4 voices per op.
 		lp0 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(s,   lp0), lp0);
 		lp1 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp0, lp1), lp1);
 		lp2 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp1, lp2), lp2);
 		lp3 = XMVectorMultiplyAdd(alpha4, XMVectorSubtract(lp2, lp3), lp3);
 		s   = XMVectorMultiplyAdd(lpw4, XMVectorSubtract(lp3, s), s);
+		XMStoreFloat4((XMFLOAT4*)(au_mix_vec + i*4), s);
 		if (env_on) {
 			au_env.send[i] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(s, sg4), ones));
-			// The reflection post-pass reads the filtered mono back out of
-			// the lane slices, scatter it as we go.
+			sg4 = XMVectorAdd(sg4, sg4s);
 			XMFLOAT4A sfe;
 			XMStoreFloat4A(&sfe, s);
 			srcs[0][i] = sfe.x; srcs[1][i] = sfe.y;
 			srcs[2][i] = sfe.z; srcs[3][i] = sfe.w;
 		}
+		alpha4 = XMVectorAdd(alpha4, alpha4s);
+		lpw4   = XMVectorAdd(lpw4,   lpw4s);
+	}
 
-		// The voicing chain: N1/N2 notches, P1 peak, then the dull shelf.
-		// Coefficients interpolate across the block, matching the scalar path.
-		for (int32_t f = 0; f < AU_VOICING_STAGES; f++) {
-			XMVECTOR y = XMVectorMultiply(vb0[f], s);
-			y = XMVectorMultiplyAdd             (vb1[f], vx1[f], y);
-			y = XMVectorMultiplyAdd             (vb2[f], vx2[f], y);
-			y = XMVectorNegativeMultiplySubtract(va1[f], vy1[f], y);
-			y = XMVectorNegativeMultiplySubtract(va2[f], vy2[f], y);
-			vx2[f] = vx1[f]; vx1[f] = s; vy2[f] = vy1[f]; vy1[f] = y; s = y;
-			vb0[f] = XMVectorAdd(vb0[f], vb0s[f]);
-			vb1[f] = XMVectorAdd(vb1[f], vb1s[f]);
-			vb2[f] = XMVectorAdd(vb2[f], vb2s[f]);
-			va1[f] = XMVectorAdd(va1[f], va1s[f]);
-			va2[f] = XMVectorAdd(va2[f], va2s[f]);
+	// Pass 2: the voicing chain - N1/N2 notches, P1 peak, then the dull
+	// shelf. Two cascaded stages per loop: one stage per loop serializes on
+	// its own recurrence, all four together spill the register file.
+	// Coefficients interpolate per chunk so they stay loop constants; a
+	// chunk quantum of the block ramp is far below audibility.
+	const ma_uint32 chunk = 32;
+	for (int32_t f = 0; f < AU_VOICING_STAGES; f += 2) {
+		XMVECTOR b0a = vb0[f  ], b1a = vb1[f  ], b2a = vb2[f  ];
+		XMVECTOR a1a = va1[f  ], a2a = va2[f  ];
+		XMVECTOR b0b = vb0[f+1], b1b = vb1[f+1], b2b = vb2[f+1];
+		XMVECTOR a1b = va1[f+1], a2b = va2[f+1];
+		XMVECTOR x1a = vx1[f  ], x2a = vx2[f  ], y1a = vy1[f  ], y2a = vy2[f  ];
+		XMVECTOR x1b = vx1[f+1], x2b = vx2[f+1], y1b = vy1[f+1], y2b = vy2[f+1];
+		for (ma_uint32 c = 0; c < frame_count; c += chunk) {
+			ma_uint32 end = c + chunk < frame_count ? c + chunk : frame_count;
+			for (ma_uint32 i = c; i < end; i++) {
+				XMVECTOR s = XMLoadFloat4((XMFLOAT4*)(au_mix_vec + i*4));
+				XMVECTOR y = XMVectorMultiply(b0a, s);
+				y = XMVectorMultiplyAdd             (b1a, x1a, y);
+				y = XMVectorMultiplyAdd             (b2a, x2a, y);
+				y = XMVectorNegativeMultiplySubtract(a1a, y1a, y);
+				y = XMVectorNegativeMultiplySubtract(a2a, y2a, y);
+				x2a = x1a; x1a = s; y2a = y1a; y1a = y; s = y;
+				y = XMVectorMultiply(b0b, s);
+				y = XMVectorMultiplyAdd             (b1b, x1b, y);
+				y = XMVectorMultiplyAdd             (b2b, x2b, y);
+				y = XMVectorNegativeMultiplySubtract(a1b, y1b, y);
+				y = XMVectorNegativeMultiplySubtract(a2b, y2b, y);
+				x2b = x1b; x1b = s; y2b = y1b; y1b = y;
+				XMStoreFloat4((XMFLOAT4*)(au_mix_vec + i*4), y);
+			}
+			XMVECTOR n = XMVectorReplicate((float)(end - c));
+			b0a = XMVectorMultiplyAdd(vb0s[f  ], n, b0a);
+			b1a = XMVectorMultiplyAdd(vb1s[f  ], n, b1a);
+			b2a = XMVectorMultiplyAdd(vb2s[f  ], n, b2a);
+			a1a = XMVectorMultiplyAdd(va1s[f  ], n, a1a);
+			a2a = XMVectorMultiplyAdd(va2s[f  ], n, a2a);
+			b0b = XMVectorMultiplyAdd(vb0s[f+1], n, b0b);
+			b1b = XMVectorMultiplyAdd(vb1s[f+1], n, b1b);
+			b2b = XMVectorMultiplyAdd(vb2s[f+1], n, b2b);
+			a1b = XMVectorMultiplyAdd(va1s[f+1], n, a1b);
+			a2b = XMVectorMultiplyAdd(va2s[f+1], n, a2b);
 		}
+		vx1[f  ] = x1a; vx2[f  ] = x2a; vy1[f  ] = y1a; vy2[f  ] = y2a;
+		vx1[f+1] = x1b; vx2[f+1] = x2b; vy1[f+1] = y1b; vy2[f+1] = y2b;
+	}
 
-		// Per-voice fractional ear taps, the one scalar stage.
-		XMFLOAT4A sf, vlf, vrf;
-		XMStoreFloat4A(&sf, s);
-		float* sfp = (float*)&sf;
-		float* vlp = (float*)&vlf;
-		float* vrp = (float*)&vrf;
-		for (int32_t v = 0; v < 4; v++) {
-			float* ring = vs[v]->dir_ring;
-			int32_t rat = rats[v];
-			ring[rat] = sfp[v];
+	// Pass 3: per-voice fractional ear taps, one lane at a time over the
+	// whole block. Scalar on purpose: the ring reads don't vectorize, and
+	// gathering scalar results into a vector every sample blocks
+	// store-forwarding - that stall was a third of the mixer's cycles.
+	float* vl_buf = au_mix_vec + au_mix_temp_size * 4;
+	float* vr_buf = vl_buf     + au_mix_temp_size * 4;
+	for (int32_t v = 0; v < 4; v++) {
+		float*  ring = vs[v]->dir_ring;
+		int32_t rat  = rats[v];
+		float   dl   = dlys_l[v], dr = dlys_r[v];
+		float   sg   = shg[v],    sd = shd[v];
+		float*  vlb  = vl_buf + (uint64_t)v * au_mix_temp_size;
+		float*  vrb  = vr_buf + (uint64_t)v * au_mix_temp_size;
+		for (ma_uint32 i = 0; i < frame_count; i++) {
+			ring[rat] = au_mix_vec[i*4 + v];
 			// Offset by a full ring so the reads stay positive, wrap by
 			// mask - branches here were the mixer's hottest instructions.
-			float rp_l = (float)(rat + AU_ITD_MAX) - dlys_l[v];
-			float rp_r = (float)(rat + AU_ITD_MAX) - dlys_r[v];
+			float rp_l = (float)(rat + AU_ITD_MAX) - dl;
+			float rp_r = (float)(rat + AU_ITD_MAX) - dr;
 			int32_t l0 = (int32_t)rp_l, r0 = (int32_t)rp_r;
-			vlp[v] = math_lerp(ring[l0 & (AU_ITD_MAX-1)], ring[(l0+1) & (AU_ITD_MAX-1)], rp_l - (float)l0);
-			vrp[v] = math_lerp(ring[r0 & (AU_ITD_MAX-1)], ring[(r0+1) & (AU_ITD_MAX-1)], rp_r - (float)r0);
-			if (shg[v] > 0.01f) {
-				float   rp_s = (float)(rat + AU_ITD_MAX) - shd[v];
+			float   vl = math_lerp(ring[l0 & (AU_ITD_MAX-1)], ring[(l0+1) & (AU_ITD_MAX-1)], rp_l - (float)l0);
+			float   vr = math_lerp(ring[r0 & (AU_ITD_MAX-1)], ring[(r0+1) & (AU_ITD_MAX-1)], rp_r - (float)r0);
+			if (sg > 0.01f) {
+				float   rp_s = (float)(rat + AU_ITD_MAX) - sd;
 				int32_t s0   = (int32_t)rp_s;
 				float   vb   = math_lerp(ring[s0 & (AU_ITD_MAX-1)], ring[(s0+1) & (AU_ITD_MAX-1)], rp_s - (float)s0);
-				vlp[v] += shg[v] * vb;
-				vrp[v] += shg[v] * vb;
-				shd[v] += shstp[v];
+				vl += sg * vb;
+				vr += sg * vb;
+				sd += shstp[v];
 			}
-			dlys_l[v] += stps_l[v];
-			dlys_r[v] += stps_r[v];
-			shg   [v] += shgs  [v];
-			rats[v] = (rat + 1) & (AU_ITD_MAX-1);
+			vlb[i] = vl;
+			vrb[i] = vr;
+			dl += stps_l[v];
+			dr += stps_r[v];
+			sg += shgs  [v];
+			rat = (rat + 1) & (AU_ITD_MAX-1);
 		}
+		rats[v] = rat;
+	}
 
-		// Far-side shadow one-pole and gain, then one sum into the output.
-		XMVECTOR vl = XMLoadFloat4A(&vlf);
-		XMVECTOR vr = XMLoadFloat4A(&vrf);
+	// Pass 4: far-side shadow one-pole and gain, transposing the ear buffers
+	// back to lane vectors in 4x4 chunks, then one sum into the output.
+	for (ma_uint32 i = 0; i < i4; i += 4) {
+		XMMATRIX ml, mr;
+		ml.r[0] = XMLoadFloat4((XMFLOAT4*)(vl_buf + 0*au_mix_temp_size + i));
+		ml.r[1] = XMLoadFloat4((XMFLOAT4*)(vl_buf + 1*au_mix_temp_size + i));
+		ml.r[2] = XMLoadFloat4((XMFLOAT4*)(vl_buf + 2*au_mix_temp_size + i));
+		ml.r[3] = XMLoadFloat4((XMFLOAT4*)(vl_buf + 3*au_mix_temp_size + i));
+		mr.r[0] = XMLoadFloat4((XMFLOAT4*)(vr_buf + 0*au_mix_temp_size + i));
+		mr.r[1] = XMLoadFloat4((XMFLOAT4*)(vr_buf + 1*au_mix_temp_size + i));
+		mr.r[2] = XMLoadFloat4((XMFLOAT4*)(vr_buf + 2*au_mix_temp_size + i));
+		mr.r[3] = XMLoadFloat4((XMFLOAT4*)(vr_buf + 3*au_mix_temp_size + i));
+		ml = XMMatrixTranspose(ml);
+		mr = XMMatrixTranspose(mr);
+		for (int32_t k = 0; k < 4; k++) {
+			XMVECTOR vl = ml.r[k];
+			XMVECTOR vr = mr.r[k];
+			shl = XMVectorMultiplyAdd(shk, XMVectorSubtract(vl, shl), shl);
+			shr = XMVectorMultiplyAdd(shk, XMVectorSubtract(vr, shr), shr);
+			vl  = XMVectorMultiplyAdd(wetl4, XMVectorSubtract(shl, vl), vl);
+			vr  = XMVectorMultiplyAdd(wetr4, XMVectorSubtract(shr, vr), vr);
+			output[(i+k)*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gnl4), ones));
+			output[(i+k)*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gnr4), ones));
+			gnl4  = XMVectorAdd(gnl4,  gnl4s);
+			gnr4  = XMVectorAdd(gnr4,  gnr4s);
+			wetl4 = XMVectorAdd(wetl4, wetl4s);
+			wetr4 = XMVectorAdd(wetr4, wetr4s);
+		}
+	}
+	for (ma_uint32 i = i4; i < frame_count; i++) {
+		XMVECTOR vl = XMVectorSet(vl_buf[0*au_mix_temp_size + i], vl_buf[1*au_mix_temp_size + i], vl_buf[2*au_mix_temp_size + i], vl_buf[3*au_mix_temp_size + i]);
+		XMVECTOR vr = XMVectorSet(vr_buf[0*au_mix_temp_size + i], vr_buf[1*au_mix_temp_size + i], vr_buf[2*au_mix_temp_size + i], vr_buf[3*au_mix_temp_size + i]);
 		shl = XMVectorMultiplyAdd(shk, XMVectorSubtract(vl, shl), shl);
 		shr = XMVectorMultiplyAdd(shk, XMVectorSubtract(vr, shr), shr);
 		vl  = XMVectorMultiplyAdd(wetl4, XMVectorSubtract(shl, vl), vl);
 		vr  = XMVectorMultiplyAdd(wetr4, XMVectorSubtract(shr, vr), vr);
 		output[i*2  ] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vl, gnl4), ones));
 		output[i*2+1] += XMVectorGetX(XMVector4Dot(XMVectorMultiply(vr, gnr4), ones));
-		gnl4   = XMVectorAdd(gnl4,   gnl4s);
-		gnr4   = XMVectorAdd(gnr4,   gnr4s);
-		sg4    = XMVectorAdd(sg4,    sg4s);
-		wetl4  = XMVectorAdd(wetl4,  wetl4s);
-		wetr4  = XMVectorAdd(wetr4,  wetr4s);
-		alpha4 = XMVectorAdd(alpha4, alpha4s);
-		lpw4   = XMVectorAdd(lpw4,   lpw4s);
+		gnl4  = XMVectorAdd(gnl4,  gnl4s);
+		gnr4  = XMVectorAdd(gnr4,  gnr4s);
+		wetl4 = XMVectorAdd(wetl4, wetl4s);
+		wetr4 = XMVectorAdd(wetr4, wetr4s);
 	}
 	if (env_on) {
 		// Zero-padded lane regions write silence through the taps, which
@@ -2324,6 +2437,7 @@ void audio_mix_shutdown() {
 	au_cmd_head = au_cmd_tail = 0;
 	au_ret_head = au_ret_tail = 0;
 	sk_free(au_mix_temp);
+	sk_free(au_mix_vec);
 	au_mix_temp      = nullptr;
 	au_mix_temp_size = 0;
 	sk_free(au_resample_temp);
