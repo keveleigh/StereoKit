@@ -25,6 +25,7 @@ struct lighting_state_t {
 	material_t              sky_mat;
 	material_t              sky_mat_default;
 	bool32_t                sky_show;
+	bool32_t                sky_drawn; // Sky was added to this frame's list
 	tex_t                   sky_pending_tex;
 	vec4                    lighting[7];
 	spherical_harmonics_t   lighting_src;
@@ -70,9 +71,25 @@ bool lighting_init() {
 void lighting_step() {
 	render_check_pending_skytex();
 
-	if (local.sky_show && device_display_get_blend() == display_blend_opaque) {
-		render_add_mesh(local.sky_mesh, local.sky_mat, matrix_identity, {1,1,1,1}, render_layer_vfx);
+	bool32_t show = local.sky_show && device_display_get_blend() == display_blend_opaque;
+	if (show) {
+		render_add_mesh(local.sky_mesh, local.sky_mat, matrix_identity, {1,1,1,1}, render_sky_layer);
 	}
+
+	// The mesh is a clip space quad at z=1, so it covers every pixel, but only
+	// if the material is opaque and its depth test passes against that same 1.
+	depth_test_ depth   = material_get_depth_test(local.sky_mat);
+	bool32_t    covers  = depth == depth_test_less_or_eq
+	                   || depth == depth_test_greater_or_eq
+	                   || depth == depth_test_equal
+	                   || depth == depth_test_always;
+	local.sky_drawn = show && covers && material_get_transparency(local.sky_mat) == transparency_none;
+}
+
+///////////////////////////////////////////
+
+bool32_t render_sky_covers(render_layer_ filter) {
+	return local.sky_drawn && (filter & render_sky_layer) != 0;
 }
 
 ///////////////////////////////////////////

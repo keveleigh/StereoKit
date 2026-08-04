@@ -89,8 +89,11 @@ skr_tex_flags_ tex_type_to_skr_flags(tex_type_ type) {
 		return (skr_tex_flags_)(skr_tex_flags_writeable | skr_tex_flags_input_attachment);
 	}
 
-	// Most textures are sampled
-	skr_tex_flags_ flags = skr_tex_flags_readable;
+	// Most textures are sampled, transient attachments never are. Both halves
+	// matter here, sk_renderer tests in_tile_msaa && !readable.
+	skr_tex_flags_ flags = (type & tex_type_transient_internal)
+		? skr_tex_flags_in_tile_msaa
+		: skr_tex_flags_readable;
 	if (type & tex_type_cubemap)      flags = (skr_tex_flags_)(flags | skr_tex_flags_cubemap);
 	if (type & tex_type_dynamic)      flags = (skr_tex_flags_)(flags | skr_tex_flags_dynamic);
 	if (type & tex_type_mips)         flags = (skr_tex_flags_)(flags | skr_tex_flags_gen_mips);

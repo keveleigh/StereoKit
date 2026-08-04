@@ -769,20 +769,20 @@ void assets_return_task(asset_task_t *task) {
 void assets_complete_task(asset_task_t* task) {
 	// Skip putting it back if it's complete :)
 
+	// Notify on_load, skipping assets removed by a load issue. Queued before
+	// the task count drops, so a blocking caller can't miss the event.
+	if (task->asset->state >= asset_state_loaded) {
+		ft_mutex_lock(assets_load_event_lock);
+		assets_load_events.add(task->asset);
+		ft_mutex_unlock(assets_load_event_lock);
+	}
+
 	ft_mutex_lock(asset_thread_task_mtx);
 	asset_active_tasks.remove(asset_active_tasks.index_of(task));
 	asset_tasks_finished   += 1;
 	asset_tasks_processing -= 1;
 	asset_tasks_priority    = assets_calculate_current_priority();
 	ft_mutex_unlock(asset_thread_task_mtx);
-
-	// If it was successfully loaded, we'll want to notify on_load, but we do
-	// want to skip this if it was removed because of an issue during load.
-	if (task->asset->state >= asset_state_loaded) {
-		ft_mutex_lock(assets_load_event_lock);
-		assets_load_events.add(task->asset);
-		ft_mutex_unlock(assets_load_event_lock);
-	}
 
 	if (task->free_data != nullptr) task->free_data(task->asset, task->load_data);
 	assets_releaseref_threadsafe(task->asset);
@@ -960,6 +960,10 @@ void assets_block_for_priority(int32_t priority) {
 		assets_step();
 		curr_priority = assets_current_task_priority();
 	}
+
+	// The last task queues its on_load event after the final step above, so
+	// without this, blocking returns with the callback still pending.
+	assets_step();
 }
 
 } // namespace sk
