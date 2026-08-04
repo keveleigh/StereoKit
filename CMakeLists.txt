@@ -305,7 +305,7 @@ if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
     NAME sk_renderer
     GITHUB_REPOSITORY StereoKit/sk_renderer
-    GIT_TAG v2026.7.30
+    GIT_TAG v2026.8.3
   )
 else()
   # For building directly with in-progress sk_renderer changes, point this to your
@@ -324,7 +324,7 @@ if (NOT SK_LOCAL_SK_APP)
   CPMAddPackage(
     NAME sk_app
     GITHUB_REPOSITORY StereoKit/sk_app
-    GIT_TAG v2026.7.28
+    GIT_TAG v2026.8.3
   )
 else()
   # For building directly with in-progress sk_app changes, point this to your
