@@ -220,13 +220,13 @@ bool32_t render_pipeline_surface_resize(pipeline_surface_id surface_id, int32_t 
 
 ///////////////////////////////////////////
 
-skr_acquire_ render_pipeline_surface_acquire_swapchain(pipeline_surface_id surface_id, skr_surface_t* skr_surface) {
+skr_acquire_ render_pipeline_surface_acquire_swapchain(pipeline_surface_id surface_id, skr_surface_t* skr_surface, skr_vec2i_t size) {
 	profiler_zone();
 	pipeline_surface_t* surface = &local.surfaces[surface_id];
 
 	// Acquire the next swapchain image
 	skr_tex_t*   target         = nullptr;
-	skr_acquire_ acquire_result = skr_surface_next_tex(skr_surface, &target);
+	skr_acquire_ acquire_result = skr_surface_next_tex(skr_surface, size, &target);
 
 	if (acquire_result == skr_acquire_success && target) {
 		// Set the swapchain image as the MSAA resolve target

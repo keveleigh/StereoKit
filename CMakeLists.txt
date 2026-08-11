@@ -48,7 +48,6 @@ set(SK_MULTITHREAD_BUILD_BY_DEFAULT ON  CACHE BOOL "MSVC only, on by default. Th
 set(SK_BUILD_TESTS                  ON  CACHE BOOL "Build the StereoKitCTest project in addition to the StereoKitC library.")
 set(SK_BUILD_SHARED_LIBS            ON  CACHE BOOL "Should StereoKit build as a shared, or static library?")
 set(SK_DYNAMIC_OPENXR               OFF CACHE BOOL "Dynamic link with the standard OpenXR Loader. Not what you want on desktop, but on Android you may need to dynamic link with other loaders.")
-set(SK_WINDOWS_GL                   OFF CACHE BOOL "Build Windows version using OpenGL as the renderer. This is primarily for debugging GL code while developing on Windows.")
 set(SK_LOCAL_SK_RENDERER            OFF CACHE BOOL "Build using a local version of sk_renderer, instead of the latest release. This is useful for testing in-progress changes to sk_renderer.")
 set(SK_LOCAL_SK_APP                 OFF CACHE BOOL "Build using a local version of sk_app, instead of the latest release. This is useful for testing in-progress changes to sk_app.")
 set(SK_PROFILE                      OFF CACHE BOOL "Build with Tracy profiler enabled.")
@@ -305,7 +304,7 @@ if (NOT SK_LOCAL_SK_RENDERER)
   CPMAddPackage(
     NAME sk_renderer
     GITHUB_REPOSITORY StereoKit/sk_renderer
-    GIT_TAG v2026.8.3
+    GIT_TAG v2026.8.10
   )
 else()
   # For building directly with in-progress sk_renderer changes, point this to your
@@ -324,7 +323,7 @@ if (NOT SK_LOCAL_SK_APP)
   CPMAddPackage(
     NAME sk_app
     GITHUB_REPOSITORY StereoKit/sk_app
-    GIT_TAG v2026.8.3
+    GIT_TAG v2026.8.10
   )
 else()
   # For building directly with in-progress sk_app changes, point this to your

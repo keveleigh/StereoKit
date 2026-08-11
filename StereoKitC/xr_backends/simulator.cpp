@@ -49,9 +49,10 @@ const vec2     sim_rot_speed  = { 10.f, 5.f }; // converting mouse pixel movemen
 
 ///////////////////////////////////////////
 
-void sim_physical_key_interact();
-void sim_surface_resize        (pipeline_surface_id surface, int32_t width, int32_t height);
-bool sim_skr_surface_create    (const ska_window_t* window, skr_surface_t* out_surface);
+void        sim_physical_key_interact();
+void        sim_surface_resize     (pipeline_surface_id surface, int32_t width, int32_t height);
+bool        sim_skr_surface_create (ska_window_t* window, skr_surface_t* out_surface);
+skr_vec2i_t sim_drawable_size      (ska_window_t* window);
 
 ///////////////////////////////////////////
 
@@ -117,8 +118,9 @@ bool simulator_init() {
 
 	// Use BGRA to match typical swapchain format
 	sim_surface = render_pipeline_surface_create(tex_format_bgra32, render_preferred_depth_fmt(), 1);
-	if (sim_skr_surface.size.x > 0 && sim_skr_surface.size.y > 0)
-		sim_surface_resize(sim_surface, sim_skr_surface.size.x, sim_skr_surface.size.y);
+	skr_vec2i_t surface_size = skr_surface_get_size(&sim_skr_surface);
+	if (surface_size.x > 0 && surface_size.y > 0)
+		sim_surface_resize(sim_surface, surface_size.x, surface_size.y);
 
 	interactor_modes_set_default(default_interactors_mouse);
 	input_mouse_set_window(ska_win);
@@ -138,13 +140,23 @@ void sim_surface_resize(pipeline_surface_id surface, int32_t width, int32_t heig
 
 ///////////////////////////////////////////
 
-bool sim_skr_surface_create(const ska_window_t* window, skr_surface_t* out_surface) {
+skr_vec2i_t sim_drawable_size(ska_window_t* window) {
+	skr_vec2i_t size = {};
+	ska_window_get_drawable_size(window, &size.x, &size.y);
+	return size;
+}
+
+///////////////////////////////////////////
+
+bool sim_skr_surface_create(ska_window_t* window, skr_surface_t* out_surface) {
 	VkSurfaceKHR vk_surface = VK_NULL_HANDLE;
 	if (!ska_vk_create_surface(window, skr_get_vk_instance(), &vk_surface)) {
 		log_errf("Failed to create Vulkan surface: %s", ska_error_get());
 		return false;
 	}
-	if (skr_surface_create(vk_surface, out_surface) != skr_err_success) {
+	// Wayland surfaces report no extent of their own, so the swapchain is sized
+	// from this. Ignored where the surface reports a real one.
+	if (skr_surface_create(vk_surface, sim_drawable_size(window), out_surface) != skr_err_success) {
 		log_err("Failed to create renderer surface");
 		vkDestroySurfaceKHR(skr_get_vk_instance(), vk_surface, nullptr);
 		return false;
@@ -196,13 +208,15 @@ void simulator_step_begin() {
 			skr_surface_destroy(&sim_skr_surface);
 			break;
 		// New native window available — recreate Vulkan surface
-		case ska_event_window_shown:
+		case ska_event_window_shown: {
 			// Skip the initial shown event: the surface was already created during startup
 			if (skr_surface_is_valid(&sim_skr_surface)) break;
 			if (!sim_skr_surface_create(ska_win, &sim_skr_surface)) break;
-			if (sim_skr_surface.size.x > 0 && sim_skr_surface.size.y > 0)
-				sim_surface_resize(sim_surface, sim_skr_surface.size.x, sim_skr_surface.size.y);
+			skr_vec2i_t size = skr_surface_get_size(&sim_skr_surface);
+			if (size.x > 0 && size.y > 0)
+				sim_surface_resize(sim_surface, size.x, size.y);
 			break;
+		}
 		// All other events use common handling
 		default:
 			ska_handle_event(&evt);
@@ -272,6 +286,20 @@ void simulator_step_begin() {
 	render_set_sim_head  (pose_t{ sim_head_pos, quat_from_angles(sim_head_rot.x, sim_head_rot.y, sim_head_rot.z) });
 	anchors_step_begin(NULL);
 
+	// Reconcile the swapchain with the drawable between frames, where resizing
+	// is safe. Waiting for acquire's needs_resize skips that frame's present,
+	// and a Wayland window only takes a new size when a buffer commits, so
+	// skipping through a drag freezes the window at its grabbed size.
+	if (skr_surface_is_valid(&sim_skr_surface)) {
+		skr_vec2i_t drawable = sim_drawable_size(ska_win);
+		skr_vec2i_t current  = skr_surface_get_size(&sim_skr_surface);
+		if (drawable.x > 0 && drawable.y > 0 && (drawable.x != current.x || drawable.y != current.y)) {
+			skr_surface_resize(&sim_skr_surface, drawable);
+			skr_vec2i_t settled = skr_surface_get_size(&sim_skr_surface);
+			sim_surface_resize(sim_surface, settled.x, settled.y);
+		}
+	}
+
 	// Begin the render frame early so that any graphics operations the
 	// application performs during step are captured.
 	render_pipeline_begin_frame();
@@ -293,7 +321,8 @@ void simulator_step_end() {
 	// Acquire swapchain image before rendering - it becomes the MSAA resolve target
 	skr_acquire_ acquire = skr_acquire_success;
 	if (skr_surface_is_valid(&sim_skr_surface)) {
-		acquire = render_pipeline_surface_acquire_swapchain(sim_surface, &sim_skr_surface);
+		skr_vec2i_t drawable = sim_drawable_size(ska_win);
+		acquire = render_pipeline_surface_acquire_swapchain(sim_surface, &sim_skr_surface, drawable);
 		render_pipeline_surface_set_enabled(sim_surface, acquire == skr_acquire_success);
 	}
 
@@ -312,10 +341,11 @@ void simulator_step_end() {
 		skr_surface_destroy(&sim_skr_surface);
 	} else if (skr_surface_is_valid(&sim_skr_surface)) {
 		if (acquire == skr_acquire_needs_resize)
-			skr_surface_resize(&sim_skr_surface);
+			skr_surface_resize(&sim_skr_surface, sim_drawable_size(ska_win));
 		// Also picks up multisample changes, and no-ops when nothing changed.
-		if (sim_skr_surface.size.x > 0 && sim_skr_surface.size.y > 0)
-			sim_surface_resize(sim_surface, sim_skr_surface.size.x, sim_skr_surface.size.y);
+		skr_vec2i_t size = skr_surface_get_size(&sim_skr_surface);
+		if (size.x > 0 && size.y > 0)
+			sim_surface_resize(sim_surface, size.x, size.y);
 	}
 }
 
