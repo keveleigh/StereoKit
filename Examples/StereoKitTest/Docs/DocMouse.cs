@@ -15,10 +15,7 @@ class DocMouse : ITest
 
 	public void Step()
 	{
-		// The Simulator has its own right-drag mouse look, and the two would
-		// stack up. This is meant to be seen on the flatscreen Window backend.
-		if (Backend.XRType != BackendXRType.Simulator)
-			MouseLook();
+		MouseLook();
 
 		for (int i = 0; i < 8; i++)
 		{
@@ -44,6 +41,11 @@ class DocMouse : ITest
 	float lookPitch;
 	void MouseLook()
 	{
+		// The Simulator mode already provides a mouselook, and XR doesn't need
+		// one, so this is only really useful in Window mode.
+		if (SK.Settings.mode != AppMode.Window)
+			return;
+
 		if (Input.Key(Key.MouseRight).IsJustActive  ()) Input.MouseMode = MouseMode.Relative;
 		if (Input.Key(Key.MouseRight).IsJustInactive()) Input.MouseMode = MouseMode.Normal;
 		if (Input.MouseMode != MouseMode.Relative) return;
