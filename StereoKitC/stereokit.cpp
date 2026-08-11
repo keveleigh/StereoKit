@@ -400,8 +400,20 @@ app_focus_ sk_app_focus() { return local.focus; }
 
 ///////////////////////////////////////////
 
-quit_reason_ sk_get_quit_reason() { 
+quit_reason_ sk_get_quit_reason() {
 	return local.quit_reason;
+}
+
+///////////////////////////////////////////
+
+void sk_request_fullscreen(bool32_t fullscreen) {
+	platform_request_fullscreen(fullscreen);
+}
+
+///////////////////////////////////////////
+
+bool32_t sk_get_fullscreen() {
+	return platform_get_fullscreen();
 }
 
 ///////////////////////////////////////////

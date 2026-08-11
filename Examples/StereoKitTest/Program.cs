@@ -108,11 +108,16 @@ class Program
 		if (Input.Key(Key.Esc).IsJustActive())
 			SK.Quit();
 
+		// Alt+Enter is the customary desktop fullscreen chord.
+		if (Device.DisplayType == DisplayType.Flatscreen &&
+			Input.Key(Key.Alt).IsActive() && Input.Key(Key.Return).IsJustActive())
+			SK.RequestFullscreen(!SK.Fullscreen);
+
 		/// :CodeSample: Projection Renderer.Projection
 		/// ### Toggling the projection mode
 		/// Only in flatscreen apps, there is the option to change the main
 		/// camera's projection mode between perspective and orthographic.
-		if (SK.ActiveDisplayMode == DisplayMode.Flatscreen &&
+		if (Device.DisplayType == DisplayType.Flatscreen &&
 			Input.Key(Key.P).IsJustActive())
 		{
 			Renderer.Projection = Renderer.Projection == Projection.Perspective

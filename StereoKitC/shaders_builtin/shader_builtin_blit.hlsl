@@ -2,6 +2,10 @@
 //--name = sk/blit
 //--source = white
 
+// Shrinks the sampled region of the source, so a blit can read just the
+// upper-left corner of a render target that's only partially drawn.
+float2 uv_scale = {1,1};
+
 Texture2D    source   : register(t0);
 SamplerState source_s : register(s0);
 
@@ -18,5 +22,5 @@ psIn vs(uint id : SV_VertexID) {
 }
 
 float4 ps(psIn input) : SV_TARGET {
-	return source.Sample(source_s, input.uv);
+	return source.Sample(source_s, input.uv * uv_scale);
 }

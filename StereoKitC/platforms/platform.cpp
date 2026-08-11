@@ -52,8 +52,9 @@
 using namespace sk;
 
 struct platform_state_t {
-	app_mode_ mode;
-	bool32_t  force_fallback_keyboard;
+	app_mode_     mode;
+	bool32_t      force_fallback_keyboard;
+	ska_window_t* window; // Null outside the windowed backends
 };
 static platform_state_t* local = {};
 
@@ -311,6 +312,30 @@ void platform_set_window_xam(void *window) {
 
 ///////////////////////////////////////////
 
+void platform_set_active_window(ska_window_t *window) {
+	local->window = window;
+}
+
+///////////////////////////////////////////
+
+// Fullscreen is only ever a request. X11 asks the window manager, web waits
+// for a user gesture, and Windows/macOS don't implement it yet, so
+// platform_get_fullscreen reports what actually happened.
+void platform_request_fullscreen(bool32_t fullscreen) {
+	if (local->window == nullptr) {
+		log_warn("Fullscreen is only available in Simulator or Window app modes");
+		return;
+	}
+	ska_window_set_fullscreen(local->window, fullscreen);
+}
+
+///////////////////////////////////////////
+
+bool32_t platform_get_fullscreen() {
+	return local->window != nullptr && ska_window_get_fullscreen(local->window);
+}
+
+///////////////////////////////////////////
 
 bool32_t platform_keyboard_get_force_fallback() {
 	return local->force_fallback_keyboard;

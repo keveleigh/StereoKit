@@ -123,6 +123,7 @@ bool simulator_init() {
 		sim_surface_resize(sim_surface, surface_size.x, surface_size.y);
 
 	interactor_modes_set_default(default_interactors_mouse);
+	platform_set_active_window(ska_win);
 	input_mouse_set_window(ska_win);
 	input_hand_visible(handed_max, false);
 	input_set_finger_glow(false);
@@ -132,10 +133,16 @@ bool simulator_init() {
 
 ///////////////////////////////////////////
 
+// The display size stays in window pixels, since that's the space mouse
+// coordinates arrive in. Only the render target follows the scale, capped at
+// 1 because a window is already at the display's real resolution.
 void sim_surface_resize(pipeline_surface_id surface, int32_t width, int32_t height) {
 	device_data.display_width  = width;
 	device_data.display_height = height;
-	render_pipeline_surface_resize(surface, width, height, render_get_multisample());
+
+	int32_t render_width, render_height;
+	render_scaled_size(width, height, 1, &render_width, &render_height);
+	render_pipeline_surface_resize(surface, render_width, render_height, render_get_multisample());
 }
 
 ///////////////////////////////////////////
@@ -167,8 +174,9 @@ bool sim_skr_surface_create(ska_window_t* window, skr_surface_t* out_surface) {
 ///////////////////////////////////////////
 
 void simulator_shutdown() {
-	// Save window position to persistent storage
-	if (ska_win) {
+	// Save window position to persistent storage. A fullscreen window would
+	// save the size of the whole output, so leave the stored spot alone.
+	if (ska_win && !platform_get_fullscreen()) {
 		ska_rect_t r;
 		ska_window_get_frame_position(ska_win, &r.x, &r.y);
 		ska_window_get_frame_size(ska_win, &r.w, &r.h);
@@ -183,6 +191,7 @@ void simulator_shutdown() {
 	sim_skr_surface = {};
 
 	input_mouse_set_window(nullptr);
+	platform_set_active_window(nullptr);
 	ska_window_destroy(ska_win);
 	ska_win = nullptr;
 	anchors_shutdown(NULL);
@@ -314,9 +323,10 @@ void simulator_step_end() {
 
 	matrix view = matrix_invert(render_get_cam_final());
 	matrix proj = render_get_projection_matrix();
-	render_pipeline_surface_set_clear      (sim_surface, render_get_clear_color_ln(), render_sky_covers(render_get_filter()));
-	render_pipeline_surface_set_layer      (sim_surface, render_get_filter());
-	render_pipeline_surface_set_perspective(sim_surface, &view, &proj, 1);
+	render_pipeline_surface_set_clear         (sim_surface, render_get_clear_color_ln(), render_sky_covers(render_get_filter()));
+	render_pipeline_surface_set_layer         (sim_surface, render_get_filter());
+	render_pipeline_surface_set_perspective   (sim_surface, &view, &proj, 1);
+	render_pipeline_surface_set_viewport_scale(sim_surface, render_get_viewport_scaling());
 
 	// Acquire swapchain image before rendering - it becomes the MSAA resolve target
 	skr_acquire_ acquire = skr_acquire_success;

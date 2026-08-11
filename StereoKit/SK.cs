@@ -26,9 +26,10 @@ namespace StereoKit
 		/// initialization was attempted and failed, this value will be 
 		/// false.</summary>
 		public static bool IsInitialized { get; private set; }
-		/// <summary>Since we can fallback to a different DisplayMode, this 
+		/// <summary>Since we can fallback to a different DisplayMode, this
 		/// lets you check to see which Runtime was successfully initialized.
 		/// </summary>
+		[Obsolete("Use Device.DisplayType instead.")]
 		public static DisplayMode ActiveDisplayMode => NativeAPI.sk_active_display_mode();
 		/// <summary>This structure contains information about the current 
 		/// system and its capabilities. There's a lot of different MR devices,
@@ -51,9 +52,30 @@ namespace StereoKit
 		/// visible behind the app that _does_ have focus. </summary>
 		public static AppFocus AppFocus => NativeAPI.sk_app_focus();
 
-		/// <summary> This tells the reason why StereoKit has quit and 
+		/// <summary> This tells the reason why StereoKit has quit and
 		/// developer can take appropriate action to debug.</summary>
 		public static QuitReason QuitReason => NativeAPI.sk_get_quit_reason();
+
+		/// <summary>Is the app's window currently covering its whole display?
+		/// This is always the window's real state, so it also picks up
+		/// fullscreen changes the user made through the window manager. Only
+		/// the Simulator and Window app modes have a window to speak of,
+		/// everywhere else this is false. Use RequestFullscreen to change
+		/// it.</summary>
+		public static bool Fullscreen => NativeAPI.sk_get_fullscreen();
+
+		/// <summary>Asks for the app's window to cover its whole display, or
+		/// to go back to a normal window. This is only ever a request, and
+		/// it's never immediate: window managers can refuse it, browsers wait
+		/// for a user gesture, and some platforms don't implement it at all.
+		/// None of those report back a refusal, so watch the Fullscreen
+		/// property to see if and when it takes effect. Going fullscreen
+		/// resizes the window, so expect the render surface to follow along.
+		/// Outside the Simulator and Window app modes this does nothing, and
+		/// logs a warning.</summary>
+		/// <param name="fullscreen">True to ask for fullscreen, false to ask
+		/// for a normal window.</param>
+		public static void RequestFullscreen(bool fullscreen) => NativeAPI.sk_request_fullscreen(fullscreen);
 
 		/// <summary>On Android systems, this must be assigned right away,
 		/// before _any_ access to SK methods. When using Xamarin.Essentials or

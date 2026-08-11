@@ -904,6 +904,8 @@ SK_API const char   *sk_version_name       (void);
 SK_API uint64_t      sk_version_id         (void);
 SK_API app_focus_    sk_app_focus          (void);
 SK_API quit_reason_  sk_get_quit_reason    (void);
+SK_API void          sk_request_fullscreen (bool32_t fullscreen);
+SK_API bool32_t      sk_get_fullscreen     (void);
 
 ///////////////////////////////////////////
 
