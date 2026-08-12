@@ -82,11 +82,13 @@ bool window_init() {
 	win_size.h = maxi(1, win_size.h);
 
 	// Create window with sk_app
+	uint32_t win_flags = ska_window_resizable;
+	if (settings->fullscreen) win_flags |= ska_window_fullscreen;
 	local->ska_win = ska_window_create(
 		settings->app_name,
 		win_size.x, win_size.y,
 		win_size.w, win_size.h,
-		ska_window_resizable
+		win_flags
 	);
 	if (local->ska_win == nullptr) {
 		log_errf("Failed to create window: %s", ska_error_get() ? ska_error_get() : "unknown error");
@@ -171,7 +173,7 @@ bool window_skr_surface_create(ska_window_t* window, skr_surface_t* out_surface)
 void window_shutdown() {
 	// Save window position to persistent storage. A fullscreen window would
 	// save the size of the whole output, so leave the stored spot alone.
-	if (local->ska_win && !platform_get_fullscreen()) {
+	if (local->ska_win && !window_get_fullscreen(window_get_main())) {
 		ska_rect_t r;
 		ska_window_get_frame_position(local->ska_win, &r.x, &r.y);
 		ska_window_get_frame_size    (local->ska_win, &r.w, &r.h);

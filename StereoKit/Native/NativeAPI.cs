@@ -35,9 +35,14 @@ namespace StereoKit
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern ulong        sk_version_id();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern AppFocus     sk_app_focus();
 		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern QuitReason   sk_get_quit_reason();
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         sk_request_fullscreen([MarshalAs(UnmanagedType.Bool)] bool fullscreen);
+
+		///////////////////////////////////////////
+
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern IntPtr       window_get_main();
 		[return: MarshalAs(UnmanagedType.Bool)]
-		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         sk_get_fullscreen();
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern bool         window_get_fullscreen(IntPtr window);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         window_request_fullscreen(IntPtr window, [MarshalAs(UnmanagedType.Bool)] bool fullscreen);
+		[DllImport(dll, CharSet = cSet, CallingConvention = call)] public static extern void         window_get_size(IntPtr window, out int out_width_px, out int out_height_px);
 
 		///////////////////////////////////////////
 

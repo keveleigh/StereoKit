@@ -406,18 +406,6 @@ quit_reason_ sk_get_quit_reason() {
 
 ///////////////////////////////////////////
 
-void sk_request_fullscreen(bool32_t fullscreen) {
-	platform_request_fullscreen(fullscreen);
-}
-
-///////////////////////////////////////////
-
-bool32_t sk_get_fullscreen() {
-	return platform_get_fullscreen();
-}
-
-///////////////////////////////////////////
-
 void sk_set_app_focus(app_focus_ focus_state) { local.focus = focus_state; }
 
 ///////////////////////////////////////////

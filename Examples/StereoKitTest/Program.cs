@@ -44,6 +44,7 @@ class Program
 		Tests.GltfScreenshotRoot =  ParamVal    (args, "-gltfscreenfolder", null);
 		Tests.TestSingle         =  ParamPresent(args, "-start");
 		startTest                =  ParamVal    (args, "-start",            startTest);
+		settings.fullscreen      =  ParamPresent(args, "-fullscreen");
 
 		if (Tests.IsTesting)
 		{
@@ -109,9 +110,10 @@ class Program
 			SK.Quit();
 
 		// Alt+Enter is the customary desktop fullscreen chord.
-		if (Device.DisplayType == DisplayType.Flatscreen &&
+		AppWindow window = AppWindow.Main;
+		if (window != null &&
 			Input.Key(Key.Alt).IsActive() && Input.Key(Key.Return).IsJustActive())
-			SK.RequestFullscreen(!SK.Fullscreen);
+			window.RequestFullscreen(!window.Fullscreen);
 
 		/// :CodeSample: Projection Renderer.Projection
 		/// ### Toggling the projection mode

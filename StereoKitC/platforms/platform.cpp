@@ -318,21 +318,35 @@ void platform_set_active_window(ska_window_t *window) {
 
 ///////////////////////////////////////////
 
-// Fullscreen is only ever a request. X11 asks the window manager, web waits
-// for a user gesture, and Windows/macOS don't implement it yet, so
-// platform_get_fullscreen reports what actually happened.
-void platform_request_fullscreen(bool32_t fullscreen) {
-	if (local->window == nullptr) {
-		log_warn("Fullscreen is only available in Simulator or Window app modes");
-		return;
-	}
-	ska_window_set_fullscreen(local->window, fullscreen);
+// window_t is a borrowed ska_window_t*, and sk_app's functions tolerate null,
+// so a null handle from window_get_main flows through as a no-op.
+
+window_t window_get_main() {
+	return (window_t)local->window;
 }
 
 ///////////////////////////////////////////
 
-bool32_t platform_get_fullscreen() {
-	return local->window != nullptr && ska_window_get_fullscreen(local->window);
+// Only ever a request. X11 asks the window manager, web waits for a user
+// gesture, and Windows/macOS don't implement it yet, so window_get_fullscreen
+// reports what actually happened.
+void window_request_fullscreen(window_t window, bool32_t fullscreen) {
+	ska_window_set_fullscreen((ska_window_t*)window, fullscreen);
+}
+
+///////////////////////////////////////////
+
+bool32_t window_get_fullscreen(const window_t window) {
+	return window != nullptr && ska_window_get_fullscreen((ska_window_t*)window);
+}
+
+///////////////////////////////////////////
+
+void window_get_size(const window_t window, int32_t* out_width_px, int32_t* out_height_px) {
+	// sk_app skips the outputs on a null window, so zero them first.
+	*out_width_px  = 0;
+	*out_height_px = 0;
+	ska_window_get_drawable_size((ska_window_t*)window, out_width_px, out_height_px);
 }
 
 ///////////////////////////////////////////

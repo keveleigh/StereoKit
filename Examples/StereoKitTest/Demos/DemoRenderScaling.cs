@@ -9,7 +9,7 @@ using System;
 class DemoRenderScaling : ITest
 {
 	string title       = "Render Scaling";
-	string description = "Sometimes you need to boost the number of pixels your app renders, to reduce jaggies! Renderer.Scaling and Renderer.Multisample let you increase the size of the draw surface, and multisample each pixel. Renderer.ViewportScaling shrinks the drawn area instead, without reallocating anything. SK.Fullscreen changes the window's size, and the render surface follows it.\n\nThis is powerful stuff, so use it sparingly!";
+	string description = "Sometimes you need to boost the number of pixels your app renders, to reduce jaggies! Renderer.Scaling and Renderer.Multisample let you increase the size of the draw surface, and multisample each pixel. Renderer.ViewportScaling shrinks the drawn area instead, without reallocating anything. AppWindow.Main.RequestFullscreen changes the window's size, and the render surface follows it.\n\nThis is powerful stuff, so use it sparingly!";
 
 	Pose windowPose = Demo.contentPose.Pose;
 
@@ -65,15 +65,15 @@ class DemoRenderScaling : ITest
 
 		UI.HSeparator();
 
-		// Fullscreen only means something for the flatscreen backends, and
+		// Fullscreen only means something when there's a desktop window, and
 		// even there the window manager gets the final say. Reading the state
 		// back every frame means the toggle shows what actually happened,
 		// rather than what we asked for.
-		bool windowed   = Device.DisplayType == DisplayType.Flatscreen;
-		bool fullscreen = SK.Fullscreen;
-		UI.PushEnabled(windowed);
+		AppWindow window     = AppWindow.Main;
+		bool      fullscreen = window != null && window.Fullscreen;
+		UI.PushEnabled(window != null);
 		if (UI.Toggle("Fullscreen", ref fullscreen))
-			SK.RequestFullscreen(fullscreen);
+			window.RequestFullscreen(fullscreen);
 		UI.PopEnabled();
 
 		UI.WindowEnd();

@@ -823,6 +823,7 @@ typedef struct sk_settings_t {
 	int32_t        flatscreen_pos_y;
 	int32_t        flatscreen_width;
 	int32_t        flatscreen_height;
+	bool32_t       fullscreen;
 	bool32_t       disable_desktop_input_window;
 	bool32_t       disable_unfocused_sleep;
 	float          render_scaling;
@@ -904,8 +905,15 @@ SK_API const char   *sk_version_name       (void);
 SK_API uint64_t      sk_version_id         (void);
 SK_API app_focus_    sk_app_focus          (void);
 SK_API quit_reason_  sk_get_quit_reason    (void);
-SK_API void          sk_request_fullscreen (bool32_t fullscreen);
-SK_API bool32_t      sk_get_fullscreen     (void);
+
+///////////////////////////////////////////
+
+SK_DeclarePrivateType(window_t);
+
+SK_API window_t      window_get_main          (void);
+SK_API bool32_t      window_get_fullscreen    (const window_t window);
+SK_API void          window_request_fullscreen(window_t window, bool32_t fullscreen);
+SK_API void          window_get_size          (const window_t window, int32_t* out_width_px, int32_t* out_height_px);
 
 ///////////////////////////////////////////
 

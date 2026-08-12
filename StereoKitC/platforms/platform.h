@@ -76,11 +76,9 @@ font_t platform_default_font      ();
 void   platform_set_window        (void *window);
 void   platform_set_window_xam    (void *window);
 
-// The windowed backends hand their window over here so window state can be
-// driven from the public API without knowing which backend is running.
-void     platform_set_active_window (ska_window_t *window);
-void     platform_request_fullscreen(bool32_t fullscreen);
-bool32_t platform_get_fullscreen    ();
+// The windowed backends hand their window over here, and the public window_*
+// API drives it without knowing which backend is running.
+void   platform_set_active_window (ska_window_t *window);
 
 bool   platform_file_delete       (const char* filename);
 bool   platform_asset_exists      (const char* filename);
