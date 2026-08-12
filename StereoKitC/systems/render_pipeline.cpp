@@ -100,15 +100,13 @@ void render_pipeline_draw() {
 		// Only the viewport corner of present_tex was drawn, and it stretches
 		// to fill the swapchain image.
 		if (s->present_active && s->resolve_target) {
-			// A linear sample reaches half a texel past where it lands. Where
-			// the viewport stops short of the surface, that half texel is
-			// undrawn, so pull the region in to the last drawn texel's center.
-			// A full-width region needs no inset, clamp addressing covers it.
-			float inset_x = width  < s->width  ? 0.5f : 0;
-			float inset_y = height < s->height ? 0.5f : 0;
-
+			// uv_clamp pins far-edge samples to the last drawn texel's center,
+			// so linear filtering can't read the undrawn region past the
+			// viewport. At full size it matches the sampler's own edge clamp,
+			// so it needs no special case.
 			skr_vec3i_t dst = skr_tex_get_size(s->resolve_target);
-			material_set_vector2(s->present_mat, "uv_scale", vec2{ (width - inset_x) / s->width, (height - inset_y) / s->height });
+			material_set_vector2(s->present_mat, "uv_scale", vec2{ (float)width /  s->width, (float)height /  s->height });
+			material_set_vector2(s->present_mat, "uv_clamp", vec2{ (width-0.5f) / s->width, (height-0.5f) / s->height });
 			material_check_dirty(s->present_mat);
 			skr_renderer_blit(&s->present_mat->gpu_mat, s->resolve_target, skr_recti_t{ 0, 0, dst.x, dst.y });
 		}
