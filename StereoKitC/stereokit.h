@@ -502,6 +502,10 @@ typedef enum tex_format_ {
 	  diffuse color but it's been superseded - prefer Etc2 or Astc
 	  on newer hardware!*/
 	tex_format_etc1_rgb,
+	/*ETC1 sRGB RGB, no alpha, 4 bpp. The sRGB counterpart to
+	  Etc1Rgb - the GPU converts to linear on sample, so this is
+	  the correct choice for color textures.*/
+	tex_format_etc1_rgb_srgb,
 	/*ETC2 sRGB color with full alpha, 8 bpp. The standard
 	  compressed RGBA format on OpenGL ES 3.0+ mobile devices, and
 	  mandatory in the spec - so it's widely available. A great
@@ -550,6 +554,18 @@ typedef enum tex_format_ {
 	/*ASTC 4x4 linear color with full alpha, 8 bpp. High-quality
 	  compressed format for data textures on modern mobile GPUs.*/
 	tex_format_astc4x4_rgba,
+	/*ASTC 6x6 sRGB color with full alpha, ~3.56 bpp. Larger blocks
+	  than Astc4x4 for less than half the memory, at some cost to
+	  quality - a good trade for large or low-frequency textures.*/
+	tex_format_astc6x6_rgba_srgb,
+	/*ASTC 6x6 linear color with full alpha, ~3.56 bpp. The linear
+	  counterpart to Astc6x6RgbaSrgb, for data textures.*/
+	tex_format_astc6x6_rgba,
+	/*ASTC 8x8 HDR color with full alpha, 2 bpp. Compressed HDR on
+	  mobile GPUs, and much cheaper than an uncompressed float
+	  format. Requires the ASTC HDR extension, which is separate
+	  from baseline ASTC support!*/
+	tex_format_astc8x8_rgba_hdr,
 	/*ATC RGB on Qualcomm Adreno GPUs, 4 bpp. Historical
 	  Qualcomm-specific format - prefer Astc or Etc2 on newer
 	  Adreno hardware.*/
