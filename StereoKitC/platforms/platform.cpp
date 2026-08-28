@@ -172,6 +172,7 @@ bool platform_init() {
 	vk_extensions.free();
 	if (!skr_result) {
 		log_fail_reason(95, log_error, "Failed to initialize sk_renderer!");
+		ska_shutdown();
 		return false;
 	}
 
