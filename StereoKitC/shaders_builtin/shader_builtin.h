@@ -17,3 +17,4 @@
 #include "shader_builtin_ui_quadrant.hlsl.h"
 #include "shader_builtin_ui_aura.hlsl.h"
 #include "shader_builtin_depth_prepass.hlsl.h"
+#include "shader_builtin_visibility_mask.hlsl.h"

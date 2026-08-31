@@ -47,6 +47,7 @@ shader_t     sk_default_shader_sky;
 shader_t     sk_default_shader_lines;
 shader_t     sk_default_shader_sh_compute;
 shader_t     sk_default_shader_depth_prepass;
+shader_t     sk_default_shader_visibility_mask;
 material_t   sk_default_material;
 material_t   sk_default_material_pbr;
 material_t   sk_default_material_pbr_clip;
@@ -238,6 +239,7 @@ bool defaults_init() {
 	sk_default_shader_pbr_clip    = shader_default_load("pbr_clip",     sks_shader_builtin_pbr_clip_hlsl_zip,     sizeof(sks_shader_builtin_pbr_clip_hlsl_zip));
 	sk_default_shader_sh_compute  = shader_default_load("sh_compute",   sks_shader_builtin_sh_compute_hlsl_zip,   sizeof(sks_shader_builtin_sh_compute_hlsl_zip));
 	sk_default_shader_depth_prepass = shader_default_load("depth_prepass", sks_shader_builtin_depth_prepass_hlsl_zip, sizeof(sks_shader_builtin_depth_prepass_hlsl_zip));
+	sk_default_shader_visibility_mask = shader_default_load("visibility_mask", sks_shader_builtin_visibility_mask_hlsl_zip, sizeof(sks_shader_builtin_visibility_mask_hlsl_zip));
 	
 	// Android seems to give us a hard time about this one, so let's fall
 	// back at least somewhat gently.
@@ -269,23 +271,24 @@ bool defaults_init() {
 		return false;
 	}
 
-	shader_set_id(sk_default_shader,             default_id_shader);
-	shader_set_id(sk_default_shader_blit,        default_id_shader_blit);
-	shader_set_id(sk_default_shader_pbr,         default_id_shader_pbr);
-	shader_set_id(sk_default_shader_pbr_clip,    default_id_shader_pbr_clip);
-	shader_set_id(sk_default_shader_unlit,       default_id_shader_unlit);
-	shader_set_id(sk_default_shader_unlit_clip,  default_id_shader_unlit_clip);
-	shader_set_id(sk_default_shader_lightmap,    default_id_shader_lightmap);
-	shader_set_id(sk_default_shader_font,        default_id_shader_font);
-	shader_set_id(sk_default_shader_equirect,    default_id_shader_equirect);
-	shader_set_id(sk_default_shader_ui,          default_id_shader_ui);
-	shader_set_id(sk_default_shader_ui_box,      default_id_shader_ui_box);
-	shader_set_id(sk_default_shader_ui_quadrant, default_id_shader_ui_quadrant);
-	shader_set_id(sk_default_shader_ui_aura,     default_id_shader_ui_aura);
-	shader_set_id(sk_default_shader_sky,         default_id_shader_sky);
-	shader_set_id(sk_default_shader_lines,       default_id_shader_lines);
-	shader_set_id(sk_default_shader_sh_compute,  default_id_shader_sh_compute);
-	shader_set_id(sk_default_shader_depth_prepass, default_id_shader_depth_prepass);
+	shader_set_id(sk_default_shader,                 default_id_shader);
+	shader_set_id(sk_default_shader_blit,            default_id_shader_blit);
+	shader_set_id(sk_default_shader_pbr,             default_id_shader_pbr);
+	shader_set_id(sk_default_shader_pbr_clip,        default_id_shader_pbr_clip);
+	shader_set_id(sk_default_shader_unlit,           default_id_shader_unlit);
+	shader_set_id(sk_default_shader_unlit_clip,      default_id_shader_unlit_clip);
+	shader_set_id(sk_default_shader_lightmap,        default_id_shader_lightmap);
+	shader_set_id(sk_default_shader_font,            default_id_shader_font);
+	shader_set_id(sk_default_shader_equirect,        default_id_shader_equirect);
+	shader_set_id(sk_default_shader_ui,              default_id_shader_ui);
+	shader_set_id(sk_default_shader_ui_box,          default_id_shader_ui_box);
+	shader_set_id(sk_default_shader_ui_quadrant,     default_id_shader_ui_quadrant);
+	shader_set_id(sk_default_shader_ui_aura,         default_id_shader_ui_aura);
+	shader_set_id(sk_default_shader_sky,             default_id_shader_sky);
+	shader_set_id(sk_default_shader_lines,           default_id_shader_lines);
+	shader_set_id(sk_default_shader_sh_compute,      default_id_shader_sh_compute);
+	shader_set_id(sk_default_shader_depth_prepass,   default_id_shader_depth_prepass);
+	shader_set_id(sk_default_shader_visibility_mask, default_id_shader_visibility_mask);
 
 	// Materials
 	sk_default_material             = material_create(sk_default_shader);
@@ -457,6 +460,7 @@ void defaults_shutdown() {
 	shader_release  (sk_default_shader_pbr_clip);
 	shader_release  (sk_default_shader_sh_compute);
 	shader_release  (sk_default_shader_depth_prepass);
+	shader_release  (sk_default_shader_visibility_mask);
 	mesh_release    (sk_default_cube);
 	mesh_release    (sk_default_sphere);
 	mesh_release    (sk_default_quad);

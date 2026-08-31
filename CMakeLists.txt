@@ -632,6 +632,7 @@ skshaderc_compile_headers(StereoKitC
   StereoKitC/shaders_builtin/shader_builtin_unlit.hlsl
   StereoKitC/shaders_builtin/shader_builtin_unlit_clip.hlsl
   StereoKitC/shaders_builtin/shader_builtin_lightmap.hlsl
+  StereoKitC/shaders_builtin/shader_builtin_visibility_mask.hlsl
   StereoKitC/shaders_builtin/shader_builtin_depth_prepass.hlsl )
 
 if (NOT MSVC)
