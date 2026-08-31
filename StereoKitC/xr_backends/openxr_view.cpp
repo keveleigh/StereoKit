@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
  * Copyright (c) 2019-2024 Nick Klingensmith
- * Copyright (c) 2023-2024 Qualcomm Technologies, Inc.
+ * Copyright (c) 2023-2026 Qualcomm Technologies, Inc.
  * Copyright (c) 2023 Austin Hale
  */
 
@@ -14,6 +14,7 @@
 #include "extensions/composition_depth.h"
 #include "extensions/meta_environment_depth.h"
 #include "extensions/view_config_views_change.h"
+#include "extensions/visibility_mask.h"
 
 #include "../stereokit.h"
 #include "../_stereokit.h"
@@ -24,8 +25,10 @@
 #include "../asset_types/texture_.h"
 #include "../systems/render.h"
 #include "../systems/render_pipeline.h"
+#include "../systems/defaults.h"
 #include "../systems/input.h"
 #include "../systems/system.h"
+#include "../libraries/array.h"
 #include "../libraries/sokol_time.h"
 #include "../libraries/profiler.h"
 
@@ -96,6 +99,9 @@ struct device_display_t {
 	XrViewConfigurationView          *view_configs;
 	XrCompositionLayerProjectionView *view_layers;
 	XrCompositionLayerDepthInfoKHR   *view_depths;
+	mesh_t                            view_mask;       // Combined hidden-area mesh for all views, per-vertex color encodes the target view index.
+	array_t<vert_t>                  *view_mask_verts; // Per-view cached vertex data, kept around so the combined mesh can be rebuilt as views arrive.
+	array_t<vind_t>                  *view_mask_inds;  // Per-view cached index data.
 	matrix                           *view_transforms;
 	matrix                           *view_projections;
 };
@@ -108,6 +114,13 @@ void device_display_delete(device_display_t *display) {
 	sk_free(display->view_configs);
 	sk_free(display->view_layers);
 	sk_free(display->view_depths);
+	mesh_release(display->view_mask);
+	for (uint32_t i = 0; i < display->view_cap; i++) {
+		display->view_mask_verts[i].free();
+		display->view_mask_inds [i].free();
+	}
+	sk_free(display->view_mask_verts);
+	sk_free(display->view_mask_inds);
 	sk_free(display->view_transforms);
 	sk_free(display->view_projections);
 	*display = {};
@@ -381,6 +394,42 @@ bool32_t xr_view_type_valid(XrViewConfigurationType type) {
 
 ///////////////////////////////////////////
 
+bool32_t xr_set_visibility_mask(XrViewConfigurationType type, uint32_t view_index, const vert_t *vertices, int32_t vertex_count, const vind_t *indices, int32_t index_count) {
+	if (xr_display_primary_idx == -1) return false;
+	device_display_t* disp = &xr_displays[xr_display_primary_idx];
+	if (view_index >= disp->view_cap) return false;
+	if (type != disp->type) return false;
+
+	log_diagf("Visibility mask set for view <~grn>%d<~clr> of <~grn>%s<~clr>", view_index, openxr_view_name(type));
+
+	array_t<vert_t> *verts = &disp->view_mask_verts[view_index];
+	array_t<vind_t> *inds  = &disp->view_mask_inds [view_index];
+	verts->clear();
+	inds ->clear();
+	verts->add_range(vertices, vertex_count);
+	inds ->add_range(indices,  index_count);
+
+	// All views share a single mesh and draw call, discriminated in the
+	// shader by the view index encoded into each vertex's color, so the
+	// combined mesh needs to be rebuilt from every view's cached data
+	// whenever any one of them changes.
+	array_t<vert_t> combined_verts = {};
+	array_t<vind_t> combined_inds  = {};
+	for (uint32_t i = 0; i < disp->view_cap; i++) {
+		vind_t base = (vind_t)combined_verts.count;
+		combined_verts.add_range(disp->view_mask_verts[i].data, disp->view_mask_verts[i].count);
+		for (int32_t j = 0; j < disp->view_mask_inds[i].count; j++)
+			combined_inds.add(disp->view_mask_inds[i][j] + base);
+	}
+	mesh_set_data(disp->view_mask, combined_verts.data, combined_verts.count, combined_inds.data, combined_inds.count, mesh_data_calc_bounds);
+	combined_verts.free();
+	combined_inds .free();
+
+	return true;
+}
+
+///////////////////////////////////////////
+
 void openxr_views_destroy() {
 	// Wait for all GPU work to complete before destroying swapchain resources.
 	// The textures have ImageViews/Framebuffers that may still be referenced
@@ -438,13 +487,18 @@ bool openxr_display_create(XrViewConfigurationType view_type, device_display_t *
 	out_display->view_configs     = sk_malloc_t(XrViewConfigurationView,          out_display->view_cap);
 	out_display->view_layers      = sk_malloc_t(XrCompositionLayerProjectionView, out_display->view_cap);
 	out_display->view_depths      = sk_malloc_t(XrCompositionLayerDepthInfoKHR,   out_display->view_cap);
-	out_display->view_projections = sk_malloc_t(matrix,                           out_display->view_cap);
-	out_display->view_transforms  = sk_malloc_t(matrix,                           out_display->view_cap);
+	out_display->view_mask        = mesh_create();
+	out_display->view_mask_verts  = sk_malloc_zero_t(array_t<vert_t>,             out_display->view_cap);
+	out_display->view_mask_inds   = sk_malloc_zero_t(array_t<vind_t>,             out_display->view_cap);
+	out_display->view_projections = sk_malloc_t(matrix,                          out_display->view_cap);
+	out_display->view_transforms  = sk_malloc_t(matrix,                          out_display->view_cap);
+	mesh_set_id       (out_display->view_mask, "default/mesh_visibility_mask");
+	mesh_set_keep_data(out_display->view_mask, false);
 	for (uint32_t i = 0; i < out_display->view_cap; i++) {
 		out_display->view_xr         [i] = { XR_TYPE_VIEW };
 		out_display->view_configs    [i] = { XR_TYPE_VIEW_CONFIGURATION_VIEW };
-		out_display->view_depths     [i] = { XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR };
 		out_display->view_layers     [i] = { XR_TYPE_COMPOSITION_LAYER_PROJECTION_VIEW };
+		out_display->view_depths     [i] = { XR_TYPE_COMPOSITION_LAYER_DEPTH_INFO_KHR };
 		out_display->view_projections[i] = matrix_identity;
 		out_display->view_transforms [i] = matrix_identity;
 	}
@@ -1027,6 +1081,11 @@ bool openxr_display_locate(device_display_t* display, XrTime at_time) {
 			view->next = depth;
 		}
 
+		// Only update if the view mask is empty but supported.
+		if (xr_ext_visibility_mask_available() && display->view_mask_verts[i].count == 0) {
+			xr_ext_visibility_mask_update(display->type, i);
+		}
+
 		float xr_projection[16];
 		openxr_projection(view->fov, clip_planes.x, clip_planes.y, xr_projection);
 		memcpy(&display->view_projections[i], xr_projection, sizeof(float) * 16);
@@ -1034,6 +1093,18 @@ bool openxr_display_locate(device_display_t* display, XrTime at_time) {
 		view_tr = view_tr * render_get_cam_final();
 		matrix_inverse(view_tr, display->view_transforms[i]);
 	}
+
+	// All views' hidden-area meshes are combined into a single mesh, since
+	// they're already discriminated per-eye in the shader by the view index
+	// encoded into each vertex's color - this keeps it to a single draw
+	// call instead of one per view.
+	if (mesh_get_ind_count(display->view_mask) > 0) {
+		// The visibility mask vertices are 2D points on the view-space
+		// z=-1 plane, so the shader projects them itself - the world
+		// transform stays an identity.
+		render_add_mesh(display->view_mask, xr_ext_visibility_mask_material(), matrix_identity);
+	}
+
 	display->projection_layer = { XR_TYPE_COMPOSITION_LAYER_PROJECTION };
 	display->projection_layer.space      = xr_app_space;
 	display->projection_layer.viewCount  = view_count;

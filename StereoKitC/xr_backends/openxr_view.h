@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
  * Copyright (c) 2019-2023 Nick Klingensmith
- * Copyright (c) 2023 Qualcomm Technologies, Inc.
+ * Copyright (c) 2023-2026 Qualcomm Technologies, Inc.
  */
 
 #pragma once
@@ -23,6 +23,7 @@ void     xr_extension_structs_clear();
 bool32_t xr_set_blend              (display_blend_ blend);
 bool32_t xr_blend_valid            (display_blend_ blend);
 bool32_t xr_view_type_valid        (XrViewConfigurationType type);
+bool32_t xr_set_visibility_mask    (XrViewConfigurationType type, uint32_t view_index, const vert_t *vertices, int32_t vertex_count, const vind_t *indices, int32_t index_count);
 
 } // namespace sk
 
