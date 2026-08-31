@@ -19,7 +19,9 @@ jobs:
     - name: Get Cache
       uses: actions/cache@v3
       with:
-        key: DependencyCache
+        key: DependencyCache-win32-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          DependencyCache-win32-
         path: |
           .deps_cache
 
@@ -59,7 +61,9 @@ jobs:
     - name: Get Cache
       uses: actions/cache@v3
       with:
-        key: DependencyCache
+        key: DependencyCache-macos-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          DependencyCache-macos-
         path: |
           .deps_cache
 
@@ -88,7 +92,9 @@ jobs:
     - name: Get Cache
       uses: actions/cache@v4
       with:
-        key: DependencyCache
+        key: DependencyCache-linux-${{ hashFiles('CMakeLists.txt') }}
+        restore-keys: |
+          DependencyCache-linux-
         path: |
           .deps_cache
     
