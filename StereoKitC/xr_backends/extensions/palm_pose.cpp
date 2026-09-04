@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: MIT */
 /* The authors below grant copyright rights under the MIT license:
  * Copyright (c) 2025 Nick Klingensmith
- * Copyright (c) 2025 Qualcomm Technologies, Inc.
+ * Copyright (c) 2025-2026 Qualcomm Technologies, Inc.
  */
 
 // This implements XR_EXT_palm_pose and XR_KHR_maintenance1
@@ -32,11 +32,27 @@ void       xr_ext_palm_pose_on_profile(void*, xr_interaction_profile_t* ref_prof
 ///////////////////////////////////////////
 
 void xr_ext_palm_pose_register() {
+	bool has_maint1 = ext_management_ext_available(XR_KHR_MAINTENANCE1_EXTENSION_NAME) && !ext_management_is_excluded(XR_KHR_MAINTENANCE1_EXTENSION_NAME);
+	bool has_palm   = ext_management_ext_available(XR_EXT_PALM_POSE_EXTENSION_NAME)   && !ext_management_is_excluded(XR_EXT_PALM_POSE_EXTENSION_NAME);
+
+	if (!has_maint1 && !has_palm)
+		return;
+
+	bool user_wants_palm   = ext_management_is_user_requested(XR_EXT_PALM_POSE_EXTENSION_NAME);
+	bool user_wants_maint1 = ext_management_is_user_requested(XR_KHR_MAINTENANCE1_EXTENSION_NAME);
+
 	xr_system_t sys = {};
-	sys.request_exts[sys.request_ext_count++] = XR_KHR_MAINTENANCE1_EXTENSION_NAME;
-	sys.request_exts[sys.request_ext_count++] = XR_EXT_PALM_POSE_EXTENSION_NAME;
-	sys.evt_initialize  = { xr_ext_palm_pose_initialize };
-	sys.evt_profile     = { xr_ext_palm_pose_on_profile };
+	// Only force legacy palm_pose if the user specifically requested it and NOT maintenance1
+	if (user_wants_palm && !user_wants_maint1 && has_palm) {
+		sys.request_exts[sys.request_ext_count++] = XR_EXT_PALM_POSE_EXTENSION_NAME;
+	} else if (has_maint1) {
+		sys.request_exts[sys.request_ext_count++] = XR_KHR_MAINTENANCE1_EXTENSION_NAME;
+	} else {
+		sys.request_exts[sys.request_ext_count++] = XR_EXT_PALM_POSE_EXTENSION_NAME;
+	}
+
+	sys.evt_initialize = { xr_ext_palm_pose_initialize };
+	sys.evt_profile    = { xr_ext_palm_pose_on_profile };
 	ext_management_sys_register(sys);
 }
 
@@ -64,7 +80,7 @@ void xr_ext_palm_pose_on_profile(void*, xr_interaction_profile_t* ref_profile) {
 	// This function will only get called if the system was successfully
 	// initialized.
 
-	const char* path = local.khr_maintenance1_available ?  "grip_surface/pose" : "palm_ext/pose";
+	const char* path = local.khr_maintenance1_available ? "grip_surface/pose" : "palm_ext/pose";
 
 	// KHR_maintenance1 and EXT_palm_pose apply to all interaction profiles that use /user/hand/*
 	// paths, so we need to check if the top level path matches.
