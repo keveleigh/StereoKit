@@ -64,7 +64,10 @@ class Program
 		// This empty request enables vacuously, so TestBackendVulkan can verify
 		// the request round-trip after initialization.
 		if (Tests.IsTesting)
+		{
 			Backend.Vulkan.Request(new BackendVulkanRequest { name = "sk_test_request" });
+			TestBackendOpenXR.PreInit();
+		}
 
 		// Initialize StereoKit
 		if (!SK.Initialize(settings))
