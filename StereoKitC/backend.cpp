@@ -106,7 +106,7 @@ void backend_openxr_use_minimum_exts(bool32_t use_minimum_exts) {
 
 ///////////////////////////////////////////
 
-void backend_openxr_add_callback_pre_session_create(void (*on_pre_session_create)(void* context), void* context) {
+void backend_openxr_add_callback_pre_session_create(bool32_t (*on_pre_session_create)(void* context, void* XrSessionCreateInfo), void* context) {
 	if (sk_is_initialized()) {
 		log_err("backend_openxr_add_callback_pre_session_create must be called BEFORE StereoKit initialization!");
 		return;

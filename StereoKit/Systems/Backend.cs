@@ -180,11 +180,12 @@ namespace StereoKit
 
 			private static event Action _onPreCreateSession;
 			private static bool         _onPreCreateSessionRegistered = false;
-			private static void _OnPreCreateSession(IntPtr context)
+			private static bool _OnPreCreateSession(IntPtr context, IntPtr session_info)
 			{
-				_onPreCreateSession();
+				_onPreCreateSession?.Invoke();
 				_onPreCreateSession           = null;
 				_onPreCreateSessionRegistered = false;
+				return true;
 			}
 
 			/// <summary>This allows you to add callbacks that are invoked

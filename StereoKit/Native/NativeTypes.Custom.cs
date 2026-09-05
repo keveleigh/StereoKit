@@ -450,7 +450,8 @@ namespace StereoKit
 	internal delegate void LogCallbackData(IntPtr context, LogLevel level, string text);
 
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
-	internal delegate void XRPreSessionCreateCallback(IntPtr context);
+	[return: MarshalAs(UnmanagedType.Bool)]
+	internal delegate bool XRPreSessionCreateCallback(IntPtr context, IntPtr XrSessionCreateInfo);
 
 	[UnmanagedFunctionPointer(CallingConvention.Cdecl)]
 	internal delegate void XRPollEventCallback(IntPtr context, IntPtr XrEventDataBuffer);

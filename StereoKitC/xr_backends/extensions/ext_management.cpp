@@ -13,6 +13,11 @@
 #include "../../libraries/stref.h"
 #include "../../libraries/profiler.h"
 
+typedef struct session_create_callback_t {
+	sk::bool32_t (*callback)(void* context, void* XrSessionCreateInfo);
+	void*        context;
+} session_create_callback_t;
+
 typedef struct ext_management_state_t {
 	array_t<const char*>     exts_user;
 	array_t<const char*>     exts_sk;
@@ -29,6 +34,7 @@ typedef struct ext_management_state_t {
 
 	array_t<sk::create_info_callback_t> callbacks_pre_instance_create;
 	array_t<sk::create_info_callback_t> callbacks_pre_session_create;
+	array_t<session_create_callback_t>  callbacks_user_pre_session_create;
 	array_t<sk::create_info_callback_t> callbacks_begin_session;
 	array_t<sk::context_callback_t>     callbacks_step_begin;
 	array_t<sk::context_callback_t>     callbacks_step_end;
@@ -222,13 +228,26 @@ bool ext_management_evt_pre_instance_create(XrInstanceCreateInfo* ref_instance_i
 ///////////////////////////////////////////
 
 bool ext_management_evt_pre_session_create(XrSessionCreateInfo* ref_session_info) {
+	bool result = true;
 	for (int32_t i = 0; i < local.callbacks_pre_session_create.count; i++) {
 		create_info_callback_t* evt = &local.callbacks_pre_session_create[i];
-		if (evt->callback(evt->context, (XrBaseHeader*)ref_session_info) == xr_system_fail_critical)
-			return false;
+		if (evt->callback(evt->context, (XrBaseHeader*)ref_session_info) == xr_system_fail_critical) {
+			result = false;
+			break;
+		}
 	}
-	local.callbacks_pre_session_create.free();
-	return true;
+	if (result) {
+		for (int32_t i = 0; i < local.callbacks_user_pre_session_create.count; i++) {
+			session_create_callback_t* evt = &local.callbacks_user_pre_session_create[i];
+			if (evt->callback && evt->callback(evt->context, (void*)ref_session_info) == false) {
+				result = false;
+				break;
+			}
+		}
+	}
+	local.callbacks_pre_session_create     .free();
+	local.callbacks_user_pre_session_create.free();
+	return result;
 }
 
 ///////////////////////////////////////////
@@ -335,13 +354,14 @@ void ext_management_cleanup() {
 	local.exts_loaded   .free();
 	local.system_list   .free();
 
-	local.callbacks_step_begin         .free();
-	local.callbacks_step_end           .free();
-	local.callbacks_shutdown           .free();
-	local.callbacks_pre_session_create .free();
-	local.callbacks_pre_instance_create.free();
-	local.callbacks_poll_event         .free();
-	local.callbacks_profile            .free();
+	local.callbacks_step_begin             .free();
+	local.callbacks_step_end               .free();
+	local.callbacks_shutdown               .free();
+	local.callbacks_pre_session_create     .free();
+	local.callbacks_user_pre_session_create.free();
+	local.callbacks_pre_instance_create    .free();
+	local.callbacks_poll_event             .free();
+	local.callbacks_profile                .free();
 	local = {};
 }
 
@@ -390,32 +410,13 @@ void backend_openxr_use_minimum_exts(bool32_t use_minimum_exts) {
 
 ///////////////////////////////////////////
 
-// Adapter to convert the public API's callback into our newer internal
-// callback.
-// TODO: update the public API to use the newer format callback!
-typedef struct pre_session_create_callback_data_t{
-	void (*callback)(void* context);
-	void*  context;
-} pre_session_create_callback_data_t;
-xr_system_ invoke_pre_session_create_callback(void* context, XrBaseHeader*) {
-	pre_session_create_callback_data_t* callback_data = (pre_session_create_callback_data_t*)context;
-	if (callback_data->callback) {
-		callback_data->callback(callback_data->context);
-	}
-	sk_free(context);
-	return xr_system_succeed;
-}
-
-void backend_openxr_add_callback_pre_session_create(void (*on_pre_session_create)(void* context), void* context) {
+void backend_openxr_add_callback_pre_session_create(bool32_t (*on_pre_session_create)(void* context, void* XrSessionCreateInfo), void* context) {
 	if (local.exts_collected || sk_is_initialized()) {
 		log_err("backend_openxr_ pre_session must be called BEFORE StereoKit initialization!");
 		return;
 	}
 
-	pre_session_create_callback_data_t* callback_data = sk_malloc_t(pre_session_create_callback_data_t, 1);
-	callback_data->callback = on_pre_session_create;
-	callback_data->context  = context;
-	local.callbacks_pre_session_create.add({ invoke_pre_session_create_callback, callback_data });
+	local.callbacks_user_pre_session_create.add({ on_pre_session_create, context });
 }
 
 ///////////////////////////////////////////
