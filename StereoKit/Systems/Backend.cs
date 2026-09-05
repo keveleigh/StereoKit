@@ -178,12 +178,15 @@ namespace StereoKit
 				Marshal.FreeHGlobal(ptr);
 			}
 
-			private static event Action _onPreCreateSession;
-			private static bool         _onPreCreateSessionRegistered = false;
+			private static event Action         _onPreCreateSession;
+			private static event Action<IntPtr> _onPreCreateSessionInfo;
+			private static bool                 _onPreCreateSessionRegistered = false;
 			private static bool _OnPreCreateSession(IntPtr context, IntPtr session_info)
 			{
 				_onPreCreateSession?.Invoke();
+				_onPreCreateSessionInfo?.Invoke(session_info);
 				_onPreCreateSession           = null;
+				_onPreCreateSessionInfo       = null;
 				_onPreCreateSessionRegistered = false;
 				return true;
 			}
@@ -204,12 +207,30 @@ namespace StereoKit
 				remove => _onPreCreateSession -= value;
 			}
 
+			/// <summary>This allows you to add callbacks that are invoked
+			/// immediately before the OpenXR session is created, but after
+			/// OpenXR has been initialized! The callback receives the pointer
+			/// to XrSessionCreateInfo so you can inspect or chain structs into its next chain.
+			/// This is only helpful when filled out _before_ calling `SK.Initialize`.</summary>
+			public static event Action<IntPtr> OnPreCreateSessionInfo {
+				add {
+					if (_onPreCreateSessionRegistered == false)
+					{
+						_onPreCreateSessionRegistered = true;
+						NativeAPI.backend_openxr_add_callback_pre_session_create(_OnPreCreateSession, IntPtr.Zero);
+					}
+					_onPreCreateSessionInfo += value;
+				}
+				remove => _onPreCreateSessionInfo -= value;
+			}
+
 			internal static void CleanupInitialize()
 			{
 				// If OpenXR was not the backend, the callback events could
 				// still contain callbacks with capture data! So we want to
 				// free all those up.
 				_onPreCreateSession           = null;
+				_onPreCreateSessionInfo       = null;
 				_onPreCreateSessionRegistered = false;
 			}
 
