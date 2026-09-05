@@ -25,7 +25,7 @@ void ext_management_cleanup                ();
 
 // These are listed in order of execution
 bool ext_management_evt_pre_instance_create(XrInstanceCreateInfo*     ref_instance_info);
-bool ext_management_evt_pre_session_create (XrSessionCreateInfo*      ref_session_info);
+SK_API bool ext_management_evt_pre_session_create (XrSessionCreateInfo*      ref_session_info);
 void ext_management_evt_profile_suggest    (xr_interaction_profile_t* ref_profile);
 void ext_management_evt_session_begin      (XrSessionBeginInfo*       ref_session_info);
 bool ext_management_evt_session_ready      ();

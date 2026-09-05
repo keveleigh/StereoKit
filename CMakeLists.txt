@@ -963,6 +963,8 @@ if (SK_BUILD_TESTS AND NOT ANDROID)
     tools/tests/audio_render.cpp
     tools/tests/asset_tests.h
     tools/tests/asset_tests.cpp
+    tools/tests/oxr_tests.h
+    tools/tests/oxr_tests.cpp
   )
 
   # See the StereoKitCTest note: pin the standard so u8 literals stay char.
